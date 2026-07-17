@@ -1,0 +1,70 @@
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+
+[workspace]
+resolver = "2"
+members = [
+    "crates/forsl-trace",
+    "crates/forsl-core",
+    "crates/forsl",
+]
+
+[workspace.dependencies]
+forsl-trace = { path = "crates/forsl-trace" }
+forsl-core = { path = "crates/forsl-core" }
+forsl = { path = "crates/forsl" }
+
+# --- UI Stack (Slint & Windowing) ---
+slint = { version = "=1.14.1", features = ["renderer-skia"] }
+i-slint-backend-winit = "=1.14.1"
+i-slint-core = "=1.14.1"
+i-slint-backend-testing = "=1.14.1"
+window-vibrancy = "0.7.1"
+raw-window-handle = "0.6.2"
+
+# --- Async ---
+tokio = { version = "1.49.0", features = ["full"] }
+
+# --- Serialization & Data ---
+serde = { version = "1.0.228", features = ["derive"] }
+serde_json = "1.0.149"
+uuid = { version = "1.23.0", features = ["v4"] }
+amethystate = "0.9.1"
+
+# --- Logging & Diagnostics ---
+tracing = { version = "0.1.44", features = ["release_max_level_warn"] }
+tracing-subscriber = { version = "0.3.22", features = ["env-filter"] }
+
+# --- System & Platform ---
+windows = { version = "0.61.3", features = [
+    "Win32_UI_Controls", "Win32_Graphics_Dwm", "Win32_UI_Shell",
+    "Win32_Storage", "Win32_Storage_FileSystem", "Win32_System_Performance",
+    "Win32_NetworkManagement", "Win32_NetworkManagement_IpHelper", "Win32_NetworkManagement_Ndis",
+    "Win32_Networking_WinSock", "Win32_System_Threading", "UI",
+    "UI_ViewManagement", "Win32_System_Hypervisor", "Management", "Management_Deployment",
+    "ApplicationModel", "ApplicationModel_Core", "Win32_Storage_Packaging", "Win32_Storage_Packaging_Appx", "Win32_System_Services",
+] }
+
+# --- Utilities ---
+anyhow = "1.0.100"
+arc-swap = "1.7.1"
+derive_more = "2.1.1"
+
+[workspace.lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(coverage)'] }
+
+[profile.release]
+opt-level = "s"
+lto = true
+codegen-units = 1
+strip = true
+split-debuginfo = "packed"
+
+[profile.dev]
+debug = 1
+incremental = true
+codegen-units = 256
+
+[profile.dev.package."*"]
+debug = 0
