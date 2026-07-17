@@ -8,6 +8,7 @@ members = [
     "crates/forsl-trace",
     "crates/forsl-core",
     "crates/forsl",
+    "crates/forsl-test-kit",
 ]
 
 [workspace.dependencies]

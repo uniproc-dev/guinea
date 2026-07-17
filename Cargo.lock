@@ -1486,6 +1486,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "forsl-test-kit"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "forsl",
+ "forsl-core",
+ "i-slint-backend-testing",
+ "i-slint-core",
+ "slint",
+ "tracing-subscriber",
+]
+
+[[package]]
 name = "forsl-trace"
 version = "0.1.0"
 dependencies = [

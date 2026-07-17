@@ -145,6 +145,22 @@ pub trait IntoWindowFeature<TWindow: Window> {
     fn into_feature(self) -> Self::Feature;
 }
 
+// Lets `App::window_feature` also take a plain `Fn() -> F` builder (no port
+// arguments), not just the `fn(&mut WindowFeatureInitContext, ports...)`
+// form the macro below produces - test harnesses build features this way
+// since they construct them directly rather than pulling ports off a window.
+impl<TWindow, F, B> IntoWindowFeature<TWindow> for B
+where
+    TWindow: Window,
+    F: WindowFeature<TWindow> + 'static,
+    B: Fn() -> F + Clone + 'static,
+{
+    type Feature = F;
+    fn into_feature(self) -> Self::Feature {
+        self()
+    }
+}
+
 macro_rules! impl_window_feature_fn {
     ($($name:ident, $($port:ident),*);*) => {
         $(
