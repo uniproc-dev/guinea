@@ -9,7 +9,6 @@ use forsl_core::SharedState;
 use forsl_core::actor::{Addr, Handler, ManagedActor, Message, UiThreadToken};
 use forsl_core::lifecycle_tracker::LifecycleTracker;
 use forsl_core::signal::Signal;
-use std::sync::Arc;
 
 pub trait FeatureContext {
     type Tracker: LifecycleTracker;
@@ -133,10 +132,12 @@ pub trait ContextReactorExt: FeatureContext {
 impl<Ctx: FeatureContext> ContextReactorExt for Ctx {}
 
 pub trait ContextStoreExt: FeatureContext {
-    fn store(&self) -> Arc<DefaultStore> {
+    fn store(&self) -> DefaultStore {
         self.shared()
             .get::<DefaultStore>()
             .expect("DefaultStore must be registered in SharedState")
+            .as_ref()
+            .clone()
     }
 }
 
