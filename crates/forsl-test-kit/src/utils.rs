@@ -21,7 +21,7 @@ slint::slint! {
 }
 
 pub fn pump_ui(ms: u64) {
-    i_slint_core::tests::slint_mock_elapsed_time(ms);
+    i_slint_backend_testing::mock_elapsed_time(Duration::from_millis(ms));
     stabilize_ui();
     slint::platform::update_timers_and_animations();
 }
@@ -32,7 +32,7 @@ pub fn stabilize_ui() {
     loop {
         EventBus::process_queue();
 
-        i_slint_core::tests::slint_mock_elapsed_time(16);
+        i_slint_backend_testing::mock_elapsed_time(Duration::from_millis(16));
         slint::platform::update_timers_and_animations();
 
         let bg_tasks = EventBus::task_count();

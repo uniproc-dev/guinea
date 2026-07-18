@@ -74,7 +74,7 @@ mod tests {
     use std::sync::Arc;
 
     fn tick(ms: u64) {
-        i_slint_core::tests::slint_mock_elapsed_time(ms);
+        i_slint_backend_testing::mock_elapsed_time(Duration::from_millis(ms));
         slint::platform::update_timers_and_animations();
     }
 

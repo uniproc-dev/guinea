@@ -6,6 +6,7 @@ edition = "2024"
 resolver = "2"
 members = [
     "crates/forsl-trace",
+    "crates/forsl-trace-codegen",
     "crates/forsl-core",
     "crates/forsl",
     "crates/forsl-test-kit",
@@ -13,14 +14,15 @@ members = [
 
 [workspace.dependencies]
 forsl-trace = { path = "crates/forsl-trace" }
+forsl-trace-codegen = { path = "crates/forsl-trace-codegen" }
 forsl-core = { path = "crates/forsl-core" }
 forsl = { path = "crates/forsl" }
 
 # --- UI Stack (Slint & Windowing) ---
-slint = { version = "=1.14.1", features = ["renderer-skia"] }
-i-slint-backend-winit = "=1.14.1"
-i-slint-core = "=1.14.1"
-i-slint-backend-testing = "=1.14.1"
+slint = { version = "=1.17.1", features = ["renderer-skia"] }
+i-slint-backend-winit = "=1.17.1"
+i-slint-core = "=1.17.1"
+i-slint-backend-testing = "=1.17.1"
 window-vibrancy = "0.7.1"
 raw-window-handle = "0.6.2"
 
@@ -51,6 +53,7 @@ windows = { version = "0.61.3", features = [
 anyhow = "1.0.100"
 arc-swap = "1.7.1"
 derive_more = "2.1.1"
+toml = "0.9.8"
 
 [workspace.lints.rust]
 unexpected_cfgs = { level = "warn", check-cfg = ['cfg(coverage)'] }

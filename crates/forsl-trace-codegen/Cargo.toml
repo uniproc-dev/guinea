@@ -1,0 +1,10 @@
+[package]
+name = "forsl-trace-codegen"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+toml.workspace = true
+
+[lints]
+workspace = true
