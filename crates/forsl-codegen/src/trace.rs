@@ -1,6 +1,3 @@
-#![cfg_attr(coverage, feature(coverage_attribute))]
-#![cfg_attr(coverage, coverage(off))]
-
 use std::fs;
 use std::path::Path;
 use toml::{Table, Value};

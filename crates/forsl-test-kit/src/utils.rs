@@ -89,12 +89,20 @@ impl FeatureHarness {
     pub fn shared(&self) -> &SharedState {
         &self.0.as_ref().unwrap().shared()
     }
+
+    pub fn spawn_window(&mut self) -> anyhow::Result<()> {
+        use slint::ComponentHandle;
+
+        let app = self.0.as_ref().expect("App is missing");
+        let ui_handle = app.ui().clone_strong();
+        app.spawn_window(ui_handle)
+    }
 }
 
 impl Drop for FeatureHarness {
     fn drop(&mut self) {
         if let Some(app) = self.0.take() {
-            app.ui().window().hide();
+            let _ = app.ui().window().hide();
             stabilize_ui();
         }
     }

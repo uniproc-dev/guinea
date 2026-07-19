@@ -1,3 +1,4 @@
+#[cfg(feature = "native-windows")]
 use i_slint_backend_winit::WinitWindowAccessor;
 use slint::ComponentHandle;
 use std::any::{Any, TypeId};
@@ -126,21 +127,27 @@ impl<T: ComponentHandle + 'static> ManagedWindowHandle for NativeWindowManager<T
         self.component.hide()
     }
 
+    #[cfg(feature = "native-windows")]
     fn drag_window(&self) {
         self.component.window().with_winit_window(|window| {
             let _ = window.drag_window();
         });
     }
+    #[cfg(not(feature = "native-windows"))]
+    fn drag_window(&self) {}
 
     fn apply_effects(&self) {
         apply_to_component(self.component.as_weak(), self.config);
     }
 
+    #[cfg(feature = "native-windows")]
     fn focus(&self) {
         self.component
             .window()
             .with_winit_window(|w| w.focus_window());
     }
+    #[cfg(not(feature = "native-windows"))]
+    fn focus(&self) {}
 
     fn component_any(&self) -> Box<dyn Any> {
         Box::new(self.component.clone_strong())
@@ -162,10 +169,10 @@ pub fn apply_to_component<T: ComponentHandle + 'static>(
     platform::apply_to_component(component, config);
 }
 
-#[cfg(target_os = "windows")]
+#[cfg(all(target_os = "windows", feature = "native-windows"))]
 #[path = "windows.rs"]
 pub mod platform;
-#[cfg(not(target_os = "windows"))]
+#[cfg(not(all(target_os = "windows", feature = "native-windows")))]
 #[path = "stub.rs"]
 pub mod platform;
 pub mod platform_types;

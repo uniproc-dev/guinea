@@ -1416,6 +1416,7 @@ dependencies = [
  "amethystate",
  "anyhow",
  "derive_more",
+ "forsl-codegen",
  "forsl-core",
  "i-slint-backend-testing",
  "i-slint-backend-winit",
@@ -1432,18 +1433,40 @@ dependencies = [
 ]
 
 [[package]]
+name = "forsl-codegen"
+version = "0.1.0"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
+ "toml 0.9.12+spec-1.1.0",
+]
+
+[[package]]
 name = "forsl-core"
 version = "0.1.0"
 dependencies = [
  "amethystate",
  "anyhow",
  "arc-swap",
+ "derive_more",
  "forsl-trace",
+ "inventory",
  "once_cell",
  "parking_lot",
  "tokio",
  "tracing",
  "uuid",
+]
+
+[[package]]
+name = "forsl-macros"
+version = "0.1.0"
+dependencies = [
+ "forsl-codegen",
+ "proc-macro2",
+ "quote",
+ "syn",
 ]
 
 [[package]]
@@ -1469,13 +1492,6 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "uuid",
-]
-
-[[package]]
-name = "forsl-trace-codegen"
-version = "0.1.0"
-dependencies = [
- "toml 0.9.12+spec-1.1.0",
 ]
 
 [[package]]

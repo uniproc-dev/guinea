@@ -6,17 +6,20 @@ edition = "2024"
 resolver = "2"
 members = [
     "crates/forsl-trace",
-    "crates/forsl-trace-codegen",
+    "crates/forsl-codegen",
     "crates/forsl-core",
+    "crates/forsl-macros",
     "crates/forsl",
     "crates/forsl-test-kit",
 ]
 
 [workspace.dependencies]
 forsl-trace = { path = "crates/forsl-trace" }
-forsl-trace-codegen = { path = "crates/forsl-trace-codegen" }
+forsl-codegen = { path = "crates/forsl-codegen" }
 forsl-core = { path = "crates/forsl-core" }
+forsl-macros = { path = "crates/forsl-macros" }
 forsl = { path = "crates/forsl" }
+inventory = "0.3"
 
 # --- UI Stack (Slint & Windowing) ---
 slint = { version = "=1.17.1", features = ["renderer-skia"] }

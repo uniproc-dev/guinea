@@ -5,21 +5,30 @@ edition.workspace = true
 
 [dependencies]
 forsl-core.workspace = true
+forsl-codegen.workspace = true
 slint.workspace = true
 tracing.workspace = true
 anyhow.workspace = true
 derive_more.workspace = true
 serde.workspace = true
 serde_json.workspace = true
-i-slint-backend-winit.workspace = true
+i-slint-backend-winit = { workspace = true, optional = true }
 raw-window-handle.workspace = true
 tokio.workspace = true
 amethystate.workspace = true
 
 [target.'cfg(target_os = "windows")'.dependencies]
-window-vibrancy.workspace = true
+window-vibrancy = { workspace = true, optional = true }
 windows.workspace = true
 
+[features]
+default = ["native-windows"]
+# Real windowing backend (winit event loop + window-vibrancy effects) for
+# actual UI-hosting consumers. Off, `native_windows` still exposes its types
+# (e.g. `SlintWindowRegistry`) - just with no-op windowing behavior - so a
+# crate that only needs those types as function signatures (not to actually
+# drive a window) doesn't have to pull in the whole backend.
+native-windows = ["dep:i-slint-backend-winit", "dep:window-vibrancy"]
 
 [lints]
 workspace = true

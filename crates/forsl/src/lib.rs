@@ -7,4 +7,7 @@ pub mod native_windows;
 pub mod navigation;
 pub mod reactor;
 pub mod settings;
-pub mod uri;
+
+pub use forsl_codegen as codegen;
+pub use forsl_core as core;
+pub use forsl_core::uri;

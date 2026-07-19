@@ -100,6 +100,15 @@ impl SlintWindowRegistry {
     }
 }
 
+/// A feature adapter that can register one of its window templates with the
+/// app-wide [`SlintWindowRegistry`] (e.g. a "properties" dialog window shown
+/// on demand). Generic - not tied to any one feature - so features whose
+/// contracts live outside `forsl` (e.g. an app's own contracts crate) don't
+/// need a `forsl` dependency just to name this bound.
+pub trait RegistersSlintWindow {
+    fn register(&self, registry: &SlintWindowRegistry);
+}
+
 pub trait WindowRegistry: Send + Sync + 'static {
     fn get_window(&self, key: &str) -> Option<Box<dyn ManagedWindowHandle>>;
     fn register<T, F>(&self, template_name: &str, builder: F)
