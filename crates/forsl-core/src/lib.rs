@@ -1,5 +1,6 @@
 pub mod actor;
 pub mod contracts;
+pub mod l10n;
 pub mod lifecycle_tracker;
 pub mod page_status;
 pub mod ratelimit_tracing;

@@ -4,6 +4,7 @@
 pub mod actor_manifest;
 pub mod bindings_gen;
 pub mod contracts;
+pub mod l10n;
 pub mod slint_parser;
 pub mod stub_gen;
 pub mod trace;
