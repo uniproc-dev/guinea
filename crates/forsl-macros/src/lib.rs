@@ -1,11 +1,13 @@
 use proc_macro::TokenStream;
-use syn::{ItemImpl, ItemTrait, parse_macro_input};
+use syn::{ItemFn, ItemImpl, ItemTrait, parse_macro_input};
 
 mod adapter;
 mod binder_gen;
 mod capability;
 mod contract_macros;
 mod dto;
+mod features;
+mod handler;
 
 /// Backend-agnostic marker for a `UiXxxPort` trait: registers `(trait_name,
 /// msg_type_name)` in the `forsl_core::contracts` registry (via `inventory`)
@@ -62,4 +64,28 @@ pub fn capability(attr: TokenStream, item: TokenStream) -> TokenStream {
 #[proc_macro_attribute]
 pub fn slint_dto(_attr: TokenStream, item: TokenStream) -> TokenStream {
     dto::slint_dto_impl(item)
+}
+
+/// Turns a plain `fn(ctx: &mut WindowFeatureInitContext<TWindow>, ...ports)`
+/// into a `WindowFeature<TWindow>` struct - one closure-producing field per
+/// port argument, wired up in `install`.
+#[proc_macro_attribute]
+pub fn window_feature(args: TokenStream, input: TokenStream) -> TokenStream {
+    features::window_feature_impl(args, input)
+}
+
+/// Turns a plain `fn(ctx: &mut AppFeatureInitContext, params?)` into an
+/// `AppFeature` struct.
+#[proc_macro_attribute]
+pub fn app_feature(args: TokenStream, input: TokenStream) -> TokenStream {
+    features::app_feature_impl(args, input)
+}
+
+/// Turns a standalone `fn(actor: &mut A, msg: M, [ctx])` or
+/// `async fn(ctx: AsyncContext<A>, msg: M)` into a real
+/// `forsl_core::actor::Handler<M> for A` impl.
+#[proc_macro_attribute]
+pub fn handler(_attr: TokenStream, item: TokenStream) -> TokenStream {
+    let input = parse_macro_input!(item as ItemFn);
+    handler::generate_standalone_handler(input)
 }

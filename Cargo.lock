@@ -1437,6 +1437,7 @@ name = "forsl-codegen"
 version = "0.1.0"
 dependencies = [
  "forsl-core",
+ "heck",
  "i-slint-compiler",
  "proc-macro2",
  "quote",
@@ -1468,6 +1469,7 @@ name = "forsl-macros"
 version = "0.1.0"
 dependencies = [
  "forsl-codegen",
+ "heck",
  "proc-macro2",
  "quote",
  "syn",

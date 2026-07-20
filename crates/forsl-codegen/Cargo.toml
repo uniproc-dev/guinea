@@ -12,6 +12,7 @@ i-slint-compiler.workspace = true
 walkdir.workspace = true
 strsim.workspace = true
 forsl-core.workspace = true
+heck = "0.5"
 
 [lints]
 workspace = true
