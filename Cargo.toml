@@ -26,6 +26,7 @@ slint = { version = "=1.17.1", features = ["renderer-skia"] }
 i-slint-backend-winit = "=1.17.1"
 i-slint-core = "=1.17.1"
 i-slint-backend-testing = "=1.17.1"
+i-slint-compiler = "=1.17.1"
 window-vibrancy = "0.7.1"
 raw-window-handle = "0.6.2"
 
@@ -57,6 +58,8 @@ anyhow = "1.0.100"
 arc-swap = "1.7.1"
 derive_more = "2.1.1"
 toml = "0.9.8"
+walkdir = "2.5.0"
+strsim = "0.11"
 
 [workspace.lints.rust]
 unexpected_cfgs = { level = "warn", check-cfg = ['cfg(coverage)'] }

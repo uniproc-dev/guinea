@@ -81,8 +81,12 @@ struct PortExtraMethodInfo {
     output_ty: Option<String>,
 }
 
-/// Methods on a port trait other than `send` - e.g. `UiProcessesPort::
-/// get_selected_pid(&self) -> i32`. Rare (most ports are `send`-only).
+/// Methods on a port trait other than `send` - currently only
+/// `UiProcessesPort::get_selected_pid(&self) -> i32`.
+///
+/// TODO: see the matching TODO on `PortStubMeta::extra_methods` in
+/// `forsl_core::contracts` - this whole extraction step exists solely for
+/// that one non-conforming method.
 fn parse_port_extra_methods(item_trait: &ItemTrait) -> Vec<PortExtraMethodInfo> {
     let mut methods = Vec::new();
     for item in &item_trait.items {
@@ -333,7 +337,7 @@ fn feature_from_trait_name(trait_name: &str) -> String {
 
 const KNOWN_FEATURE_OVERRIDES: &[(&str, &str)] = &[("UiServiceDetailsPort", "services")];
 
-fn to_snake_case(s: &str) -> String {
+pub(crate) fn to_snake_case(s: &str) -> String {
     let mut out = String::new();
     for (i, c) in s.char_indices() {
         if c.is_uppercase() {

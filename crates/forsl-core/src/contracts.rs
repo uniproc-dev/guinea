@@ -6,10 +6,18 @@ pub struct PortStubMeta {
     pub trait_name: &'static str,
     pub msg_type_name: &'static str,
     pub feature: &'static str,
-    /// Methods on the trait other than `send(&self, msg: ...)` - e.g.
-    /// `UiProcessesPort::get_selected_pid(&self) -> i32`, a synchronous
+    /// Methods on the trait other than `send(&self, msg: ...)` - currently
+    /// only `UiProcessesPort::get_selected_pid(&self) -> i32`, a synchronous
     /// UI->domain query that doesn't fit the fire-and-forget message shape.
-    /// Rare - most ports have none of these.
+    ///
+    /// TODO: `get_selected_pid` is the only port method that breaks the
+    /// `send(msg)`-only convention, and this whole mechanism (here, the
+    /// parsing in `forsl-codegen::contracts::parse_port_extra_methods`, and
+    /// the stub-side handler+call-count codegen in
+    /// `forsl-codegen::stub_gen::generate_port_extra_method`) exists only to
+    /// accommodate it. Once selected-pid tracking is reworked to flow
+    /// through a message/signal instead of a synchronous query, delete
+    /// `extra_methods` and this whole side-channel.
     pub extra_methods: &'static [PortExtraMethod],
 }
 
