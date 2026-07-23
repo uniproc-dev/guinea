@@ -15,4 +15,4 @@ pub mod uri;
 
 pub use load::Load;
 pub use shared_state::SharedState;
-pub use store::{FeatureState, Store};
+pub use store::{FeatureBindings, FeatureState, StateHandle, Store};

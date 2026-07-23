@@ -1,5 +1,5 @@
 use std::any::{Any, TypeId};
-use std::cell::RefCell;
+use std::cell::{Ref, RefCell};
 use std::collections::HashMap;
 use std::rc::Rc;
 
@@ -7,10 +7,46 @@ use tokio::task::JoinHandle;
 
 use crate::actor::Addr;
 
+/// A read-only view of a cell's live `State` - exposes `.borrow()` (a
+/// `Ref`, read-only by construction) and nothing else. `Store::state`
+/// returns the bare `Rc<RefCell<F::State>>` because `push`/`reduce` (Store's
+/// own internals) genuinely need mutable access; anything handed to view
+/// code (`PageCx::use_feature`) must NOT carry `borrow_mut` along with it -
+/// `Rc<RefCell<T>>` alone doesn't stop a view from mutating state directly,
+/// bypassing `reduce` and the whole exclusive-write-in-the-cell invariant
+/// this design depends on. This wrapper is the difference between "a
+/// reactive read handle" and "a mutable hole with extra steps."
+pub struct StateHandle<T>(Rc<RefCell<T>>);
+
+impl<T> StateHandle<T> {
+    pub fn borrow(&self) -> Ref<'_, T> {
+        self.0.borrow()
+    }
+}
+
+impl<T> Clone for StateHandle<T> {
+    fn clone(&self) -> Self {
+        Self(self.0.clone())
+    }
+}
+
+impl<T> From<Rc<RefCell<T>>> for StateHandle<T> {
+    fn from(inner: Rc<RefCell<T>>) -> Self {
+        Self(inner)
+    }
+}
+
 /// The view-facing shape of a feature: what a `Store` cell folds its Port
 /// stream into, and how. Lives on the feature marker type produced by
 /// `#[feature(...)]` - the marker is the `Store` lookup key (`TypeId`), this
 /// trait is what tells the cell how to fold incoming pushes into `State`.
+///
+/// Deliberately knows nothing about `Bindings` (see `FeatureBindings`
+/// below): a reducer's only job is "mutate `State` from an incoming `Push`
+/// message" - that's a complete, self-contained concern. Dispatch (view ->
+/// domain) is a wholly separate flow that a reducer has no reason to be
+/// aware of, and not every feature has one (a purely read-only feature is
+/// State/Push/reduce and nothing else).
 pub trait FeatureState: 'static {
     /// The view-shaped snapshot a cell holds and `use_feature` reads. Default
     /// is what a freshly created cell starts with, before any push has
@@ -26,6 +62,17 @@ pub trait FeatureState: 'static {
     /// state survives a consumer's unmount/remount cycle and is available
     /// immediately to a late-arriving reader.
     fn reduce(state: &mut Self::State, msg: Self::Push);
+}
+
+/// The dispatch (view -> domain) side of a feature - separate from
+/// `FeatureState` on purpose, and not every feature implements it: a
+/// feature with no user-triggerable actions (pure display, fed only by
+/// Port pushes) has no bindings and no reason to name this trait at all.
+pub trait FeatureBindings: 'static {
+    /// The concrete `<Feature>Bindings` struct `generate_feature_bindings_adapter`
+    /// produces - one registration slot per bindings method plus `emit_*`
+    /// invoke methods.
+    type Bindings: Default + 'static;
 }
 
 /// One feature's slot inside a `Store`: its folded `State`, the concrete
@@ -111,21 +158,23 @@ impl Store {
 
     /// The feature's bindings-storage object - the concrete struct
     /// `#[bindings]` generates, holding one registration slot per bindings
-    /// method. Creates it with `B::default()` on first access (from whichever
-    /// side, actor install or view, happens to call this first) and returns
-    /// the same `Rc` afterwards, so both sides share one instance: the actor
-    /// registers handlers into it at install, a view's invoke-handle calls
-    /// into it whenever a binding method fires.
-    pub fn bindings<F: FeatureState, B: Default + 'static>(&self) -> Rc<B> {
+    /// method. Creates it with `F::Bindings::default()` on first access
+    /// (from whichever side, actor install or view, happens to call this
+    /// first) and returns the same `Rc` afterwards, so both sides share one
+    /// instance: the actor registers handlers into it at install, a view's
+    /// invoke-handle calls into it whenever a binding method fires. Only
+    /// callable for features that actually implement `FeatureBindings` -
+    /// a purely read-only feature never needs to.
+    pub fn bindings<F: FeatureState + FeatureBindings>(&self) -> Rc<F::Bindings> {
         let mut cells = self.cells.borrow_mut();
         let cell = cells.entry(TypeId::of::<F>()).or_insert_with(Cell::empty::<F>);
         let mut slot = cell.bindings.borrow_mut();
         if slot.is_none() {
-            *slot = Some(Rc::new(B::default()) as Rc<dyn Any>);
+            *slot = Some(Rc::new(F::Bindings::default()) as Rc<dyn Any>);
         }
         slot.clone()
             .unwrap()
-            .downcast::<B>()
+            .downcast::<F::Bindings>()
             .expect("Store cell bindings-storage type mismatch - unreachable, keyed by F")
     }
 

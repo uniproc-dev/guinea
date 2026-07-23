@@ -58,6 +58,7 @@ pub struct AppFeatureDeinitContext<'a> {
 /// depend on). No lifetime parameter: both fields are already owned handles
 /// (`Rc`/`Copy` guard), so the struct doesn't need to borrow anything itself
 /// - only `uri` in `RouteFeature::install` is borrowed, tied to that one call.
+#[derive(Clone)]
 pub struct FeatureInitContext {
     pub store: std::rc::Rc<guinea_core::store::Store>,
     pub token: UiThreadToken,

@@ -30,6 +30,10 @@ i-slint-compiler = "=1.17.1"
 window-vibrancy = "0.7.1"
 raw-window-handle = "0.6.2"
 
+# --- UI Stack (windows-reactor, replacing Slint) ---
+windows-reactor = { git = "https://github.com/microsoft/windows-rs" }
+windows-reactor-setup = { git = "https://github.com/microsoft/windows-rs" }
+
 # --- Async ---
 tokio = { version = "1.49.0", features = ["full"] }
 

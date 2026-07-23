@@ -6,6 +6,7 @@ pub mod lifecycle_tracker;
 pub mod native_windows;
 pub mod navigation;
 pub mod reactor;
+pub mod router;
 pub mod settings;
 
 pub use guinea_codegen as codegen;

@@ -6,8 +6,10 @@ mod binder_gen;
 mod capability;
 mod contract_macros;
 mod dto;
+mod feature;
 mod features;
 mod handler;
+mod routable;
 
 /// Backend-agnostic marker for a `UiXxxPort` trait: registers `(trait_name,
 /// msg_type_name)` in the `guinea_core::contracts` registry (via `inventory`)
@@ -81,12 +83,35 @@ pub fn app_feature(args: TokenStream, input: TokenStream) -> TokenStream {
     features::app_feature_impl(args, input)
 }
 
-/// `#[route_feature(MarkerType)]` on `async fn(ctx: FeatureInitContext, uri:
+/// `#[route_feature(MarkerType)]` on `fn(ctx: FeatureInitContext, uri:
 /// &AppUri) -> anyhow::Result<()>` - implements `RouteFeature` for the named
-/// (already-declared) marker type, boxing the async body.
+/// (already-declared) marker type. Never async - see `features::route_feature_impl`.
 #[proc_macro_attribute]
 pub fn route_feature(args: TokenStream, input: TokenStream) -> TokenStream {
     features::route_feature_impl(args, input)
+}
+
+/// `#[derive(Routable)]` on an enum whose variants carry `#[route("...")]`
+/// (literal segments plus `:name` captures bound to named fields) - generates
+/// `path(&self) -> String` and `parse(path: &str) -> Option<Self>`, so
+/// `navigate(AppRoute::Processes { context })` and deep-link parsing both go
+/// through the same typed value instead of a hand-maintained string match.
+#[proc_macro_derive(Routable, attributes(route))]
+pub fn derive_routable(input: TokenStream) -> TokenStream {
+    routable::derive_routable_impl(input)
+}
+
+/// `#[feature_bindings]` on `impl FeatureBindings for <Name>Feature {}` -
+/// fills in `type Bindings` for you (derived from the marker's own name,
+/// `<Name>Feature` -> `<Name>Bindings`, matching
+/// `generate_feature_bindings_adapter`'s naming convention), so nothing has
+/// to name the codegen-produced storage struct itself. Separate from
+/// `FeatureState` entirely - a feature with no dispatch never writes this
+/// impl at all. (Not named `#[feature]` - that collides with Rust's own
+/// built-in `#![feature(...)]` nightly-gate attribute.)
+#[proc_macro_attribute]
+pub fn feature_bindings(_attr: TokenStream, input: TokenStream) -> TokenStream {
+    feature::feature_impl(input)
 }
 
 /// Turns a standalone `fn(actor: &mut A, msg: M, [ctx])` or

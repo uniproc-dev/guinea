@@ -20,6 +20,7 @@ amethystate.workspace = true
 [target.'cfg(target_os = "windows")'.dependencies]
 window-vibrancy = { workspace = true, optional = true }
 windows.workspace = true
+windows-reactor.workspace = true
 
 [features]
 default = ["native-windows"]
@@ -37,3 +38,5 @@ workspace = true
 tempfile = "3.27.0"
 uuid.workspace = true
 i-slint-backend-testing.workspace = true
+guinea-macros.workspace = true
+inventory.workspace = true
