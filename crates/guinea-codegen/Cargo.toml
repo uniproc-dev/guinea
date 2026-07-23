@@ -15,5 +15,8 @@ guinea-core.workspace = true
 heck = "0.5"
 fluent-syntax.workspace = true
 
+[dev-dependencies]
+insta = "1"
+
 [lints]
 workspace = true

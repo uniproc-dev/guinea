@@ -1,0 +1,37 @@
+---
+source: crates/guinea-codegen/src/store_adapter_gen.rs
+expression: "crate::stub_gen::format_code(tokens.to_string())"
+---
+#[derive(Default)]
+pub struct ProcessesBindings {
+    on_terminate_handler: std::cell::RefCell<Option<Box<dyn Fn(u32)>>>,
+    on_sort_by_handler: std::cell::RefCell<Option<Box<dyn Fn(String)>>>,
+}
+impl ProcessesBindings {
+    pub fn emit_on_terminate(&self, arg0: u32) {
+        let handler = self.on_terminate_handler.borrow();
+        if let Some(handler) = handler.as_ref() {
+            handler(arg0);
+        }
+    }
+    pub fn emit_on_sort_by(&self, arg0: String) {
+        let handler = self.on_sort_by_handler.borrow();
+        if let Some(handler) = handler.as_ref() {
+            handler(arg0);
+        }
+    }
+}
+impl app_contracts::features::processes::ProcessBindings for ProcessesBindings {
+    fn on_terminate<F>(&self, handler: F)
+    where
+        F: Fn(u32) + 'static,
+    {
+        *self.on_terminate_handler.borrow_mut() = Some(Box::new(handler));
+    }
+    fn on_sort_by<F>(&self, handler: F)
+    where
+        F: Fn(String) + 'static,
+    {
+        *self.on_sort_by_handler.borrow_mut() = Some(Box::new(handler));
+    }
+}

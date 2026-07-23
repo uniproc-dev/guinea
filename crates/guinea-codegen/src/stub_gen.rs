@@ -250,7 +250,7 @@ pub fn format_code(code: String) -> String {
     }
 }
 
-fn qualify_ty(
+pub(crate) fn qualify_ty(
     feature: &str,
     ty_str: &str,
     contracts_crate: &str,
@@ -357,7 +357,7 @@ fn snake_case(name: &str) -> String {
     crate::contracts::to_snake_case(name)
 }
 
-fn pascal_case(name: &str) -> String {
+pub(crate) fn pascal_case(name: &str) -> String {
     name.split('_')
         .map(|s| {
             let mut c = s.chars();
