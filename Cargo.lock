@@ -1420,98 +1420,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "forsl"
-version = "0.1.0"
-dependencies = [
- "amethystate",
- "anyhow",
- "derive_more",
- "forsl-codegen",
- "forsl-core",
- "i-slint-backend-testing",
- "i-slint-backend-winit",
- "raw-window-handle",
- "serde",
- "serde_json",
- "slint",
- "tempfile",
- "tokio",
- "tracing",
- "uuid",
- "window-vibrancy",
- "windows 0.61.3",
-]
-
-[[package]]
-name = "forsl-codegen"
-version = "0.1.0"
-dependencies = [
- "fluent-syntax",
- "forsl-core",
- "heck",
- "i-slint-compiler",
- "proc-macro2",
- "quote",
- "strsim",
- "syn",
- "toml 0.9.12+spec-1.1.0",
- "walkdir",
-]
-
-[[package]]
-name = "forsl-core"
-version = "0.1.0"
-dependencies = [
- "amethystate",
- "anyhow",
- "arc-swap",
- "derive_more",
- "forsl-trace",
- "inventory",
- "once_cell",
- "parking_lot",
- "tokio",
- "tracing",
- "uuid",
-]
-
-[[package]]
-name = "forsl-macros"
-version = "0.1.0"
-dependencies = [
- "forsl-codegen",
- "heck",
- "proc-macro2",
- "quote",
- "syn",
-]
-
-[[package]]
-name = "forsl-test-kit"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "forsl",
- "forsl-core",
- "i-slint-backend-testing",
- "slint",
- "tracing-subscriber",
-]
-
-[[package]]
-name = "forsl-trace"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "once_cell",
- "parking_lot",
- "serde_json",
- "tracing",
- "tracing-subscriber",
- "uuid",
-]
-
-[[package]]
 name = "futures"
 version = "0.3.32"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1786,6 +1694,98 @@ name = "grid"
 version = "1.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b40ca9252762c466af32d0b1002e91e4e1bc5398f77455e55474deb466355ff5"
+
+[[package]]
+name = "guinea"
+version = "0.1.0"
+dependencies = [
+ "amethystate",
+ "anyhow",
+ "derive_more",
+ "guinea-codegen",
+ "guinea-core",
+ "i-slint-backend-testing",
+ "i-slint-backend-winit",
+ "raw-window-handle",
+ "serde",
+ "serde_json",
+ "slint",
+ "tempfile",
+ "tokio",
+ "tracing",
+ "uuid",
+ "window-vibrancy",
+ "windows 0.61.3",
+]
+
+[[package]]
+name = "guinea-codegen"
+version = "0.1.0"
+dependencies = [
+ "fluent-syntax",
+ "guinea-core",
+ "heck",
+ "i-slint-compiler",
+ "proc-macro2",
+ "quote",
+ "strsim",
+ "syn",
+ "toml 0.9.12+spec-1.1.0",
+ "walkdir",
+]
+
+[[package]]
+name = "guinea-core"
+version = "0.1.0"
+dependencies = [
+ "amethystate",
+ "anyhow",
+ "arc-swap",
+ "derive_more",
+ "guinea-trace",
+ "inventory",
+ "once_cell",
+ "parking_lot",
+ "tokio",
+ "tracing",
+ "uuid",
+]
+
+[[package]]
+name = "guinea-macros"
+version = "0.1.0"
+dependencies = [
+ "guinea-codegen",
+ "heck",
+ "proc-macro2",
+ "quote",
+ "syn",
+]
+
+[[package]]
+name = "guinea-test-kit"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "guinea",
+ "guinea-core",
+ "i-slint-backend-testing",
+ "slint",
+ "tracing-subscriber",
+]
+
+[[package]]
+name = "guinea-trace"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "once_cell",
+ "parking_lot",
+ "serde_json",
+ "tracing",
+ "tracing-subscriber",
+ "uuid",
+]
 
 [[package]]
 name = "harfrust"

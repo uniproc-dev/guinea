@@ -5,20 +5,20 @@ edition = "2024"
 [workspace]
 resolver = "2"
 members = [
-    "crates/forsl-trace",
-    "crates/forsl-codegen",
-    "crates/forsl-core",
-    "crates/forsl-macros",
-    "crates/forsl",
-    "crates/forsl-test-kit",
+    "crates/guinea-trace",
+    "crates/guinea-codegen",
+    "crates/guinea-core",
+    "crates/guinea-macros",
+    "crates/guinea",
+    "crates/guinea-test-kit",
 ]
 
 [workspace.dependencies]
-forsl-trace = { path = "crates/forsl-trace" }
-forsl-codegen = { path = "crates/forsl-codegen" }
-forsl-core = { path = "crates/forsl-core" }
-forsl-macros = { path = "crates/forsl-macros" }
-forsl = { path = "crates/forsl" }
+guinea-trace = { path = "crates/guinea-trace" }
+guinea-codegen = { path = "crates/guinea-codegen" }
+guinea-core = { path = "crates/guinea-core" }
+guinea-macros = { path = "crates/guinea-macros" }
+guinea = { path = "crates/guinea" }
 inventory = "0.3"
 
 # --- UI Stack (Slint & Windowing) ---
