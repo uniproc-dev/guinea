@@ -1,7 +1,39 @@
 use heck::ToUpperCamelCase;
 use proc_macro::TokenStream;
 use quote::quote;
-use syn::{FnArg, ItemFn, Pat, parse_macro_input};
+use syn::{FnArg, ItemFn, Pat, Path, parse_macro_input};
+
+/// `#[route_feature(ProcessesFeature)]` on `fn(ctx: FeatureInitContext, uri:
+/// &AppUri) -> anyhow::Result<()>` - implements `RouteFeature` for the
+/// already-declared marker type named in the attribute (the same type that
+/// hand-writes `impl FeatureState for ProcessesFeature`). Unlike
+/// `window_feature`/`app_feature`, this never generates a new struct: the
+/// marker already exists (business logic lives on it via `FeatureState`),
+/// so there's nothing for the macro to invent - just the mechanical mapping
+/// from "call this loader" to "call this fn".
+///
+/// The loader is never `async` - real I/O (e.g. resolving which WSL distro
+/// `uri` refers to) belongs to the actor's own `Context::spawn_bg`, not to
+/// `install` (see `RouteFeature`'s docs). An `async fn` here would simply
+/// fail to type-check against `install`'s plain `anyhow::Result<()>` return
+/// - no separate enforcement needed.
+pub fn route_feature_impl(args: TokenStream, input: TokenStream) -> TokenStream {
+    let marker = parse_macro_input!(args as Path);
+    let input_fn = parse_macro_input!(input as ItemFn);
+    let func_name = &input_fn.sig.ident;
+
+    let expanded = quote! {
+        #input_fn
+
+        impl RouteFeature for #marker {
+            fn install(&mut self, ctx: FeatureInitContext, uri: &AppUri) -> anyhow::Result<()> {
+                #func_name(ctx, uri)
+            }
+        }
+    };
+
+    expanded.into()
+}
 
 pub fn window_feature_impl(_args: TokenStream, input: TokenStream) -> TokenStream {
     let input_fn = parse_macro_input!(input as ItemFn);

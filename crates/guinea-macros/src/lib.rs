@@ -81,6 +81,14 @@ pub fn app_feature(args: TokenStream, input: TokenStream) -> TokenStream {
     features::app_feature_impl(args, input)
 }
 
+/// `#[route_feature(MarkerType)]` on `async fn(ctx: FeatureInitContext, uri:
+/// &AppUri) -> anyhow::Result<()>` - implements `RouteFeature` for the named
+/// (already-declared) marker type, boxing the async body.
+#[proc_macro_attribute]
+pub fn route_feature(args: TokenStream, input: TokenStream) -> TokenStream {
+    features::route_feature_impl(args, input)
+}
+
 /// Turns a standalone `fn(actor: &mut A, msg: M, [ctx])` or
 /// `async fn(ctx: AsyncContext<A>, msg: M)` into a real
 /// `guinea_core::actor::Handler<M> for A` impl.

@@ -49,6 +49,36 @@ pub struct AppFeatureDeinitContext<'a> {
     pub shared: &'a SharedState,
 }
 
+/// Given to a `#[route_feature]` loader at route/context activation.
+/// Deliberately minimal (no `LifecycleTracker`/`EventBus` subscription
+/// batch, unlike `WindowFeatureInitContext`/`AppFeatureInitContext`) - the
+/// route/context-scoped lifecycle model this targets doesn't hook into the
+/// `RouteActivated`/`RouteDeactivated` self-filtering mechanism those exist
+/// for (slated for removal, not something new route-scoped code should
+/// depend on). No lifetime parameter: both fields are already owned handles
+/// (`Rc`/`Copy` guard), so the struct doesn't need to borrow anything itself
+/// - only `uri` in `RouteFeature::install` is borrowed, tied to that one call.
+pub struct FeatureInitContext {
+    pub store: std::rc::Rc<guinea_core::store::Store>,
+    pub token: UiThreadToken,
+}
+
+/// A feature whose lifecycle is scoped to a route segment/context activation
+/// rather than the app or a window - the third/fourth lifecycle tiers.
+/// `install` is plain synchronous setup, never `async` - same rule as the
+/// Port/Bindings contract ("a future never crosses the contract"), applied
+/// here too. Resolving a route/context's actual backend (e.g. which WSL
+/// distro `uri` refers to) is real I/O, but that work belongs to the
+/// actor's own `Context::spawn_bg` (already how actors do background work
+/// today) - `install` constructs the actor with its state starting at
+/// `Load::Loading` and returns immediately; the resolved backend/initial
+/// data arrives later the same way every other update does, as an ordinary
+/// push into `Store`. One mechanism for all async data delivery (initial
+/// and subsequent), not two.
+pub trait RouteFeature {
+    fn install(&mut self, ctx: FeatureInitContext, uri: &AppUri) -> anyhow::Result<()>;
+}
+
 pub trait WindowFeature<TWindow: Window> {
     fn install(&mut self, ctx: &mut WindowFeatureInitContext<TWindow>) -> anyhow::Result<()>;
 }
