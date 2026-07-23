@@ -5,6 +5,8 @@ use std::rc::Rc;
 
 use tokio::task::JoinHandle;
 
+use crate::actor::Addr;
+
 /// The view-facing shape of a feature: what a `Store` cell folds its Port
 /// stream into, and how. Lives on the feature marker type produced by
 /// `#[feature(...)]` - the marker is the `Store` lookup key (`TypeId`), this
@@ -42,6 +44,14 @@ struct Cell {
     // registers handlers into it, a view's invoke-handle calls into it.
     bindings: RefCell<Option<Rc<dyn Any>>>,
     tasks: Vec<JoinHandle<()>>,
+    // Runs the actor's `Addr::dispose()` on teardown - see `Addr::dispose`
+    // for why this is required and not automatic: the thread-local actor
+    // `REGISTRY` stashes its own strong clone forever, so no `Addr<A>` clone
+    // going out of scope (including this cell's own) ever drops the actor by
+    // itself. `Option` because a cell can exist before any actor is
+    // installed into it (e.g. a view resolving `state`/`bindings` before the
+    // route loader has run).
+    actor_teardown: Option<Box<dyn FnOnce()>>,
 }
 
 impl Cell {
@@ -50,6 +60,7 @@ impl Cell {
             state: Rc::new(RefCell::new(F::State::default())),
             bindings: RefCell::new(None),
             tasks: Vec::new(),
+            actor_teardown: None,
         }
     }
 }
@@ -62,6 +73,9 @@ impl Drop for Cell {
         // wiring required at call sites.
         for task in self.tasks.drain(..) {
             task.abort();
+        }
+        if let Some(teardown) = self.actor_teardown.take() {
+            teardown();
         }
     }
 }
@@ -132,6 +146,17 @@ impl Store {
         let cell = cells.entry(TypeId::of::<F>()).or_insert_with(Cell::empty::<F>);
         cell.tasks.push(task);
     }
+
+    /// Ties an actor's lifetime to `F`'s cell: disposed (see `Addr::dispose`)
+    /// when the cell is dropped. This, not merely dropping a held `Addr`
+    /// clone, is what actually makes "close a route/context" kill its
+    /// actor - the thread-local actor registry otherwise keeps it alive
+    /// forever regardless of how many other handles go away.
+    pub fn own_actor<F: FeatureState, A: 'static>(&self, addr: Addr<A>) {
+        let mut cells = self.cells.borrow_mut();
+        let cell = cells.entry(TypeId::of::<F>()).or_insert_with(Cell::empty::<F>);
+        cell.actor_teardown = Some(Box::new(move || addr.dispose()));
+    }
 }
 
 #[cfg(test)]
@@ -199,6 +224,40 @@ mod tests {
         assert!(
             !ran_to_completion.load(Ordering::SeqCst),
             "task should have been aborted when its owning cell was dropped"
+        );
+    }
+
+    struct NoopTracker;
+    impl crate::lifecycle_tracker::LifecycleTracker for NoopTracker {
+        fn track_loop<T: 'static>(&self, _handle: T) {}
+        fn track_actor<A: 'static>(&self, _addr: &Addr<A>) {}
+        fn track_sub(&self, _id: crate::actor::event_bus::subscribe::SubscriptionId) {}
+    }
+
+    #[test]
+    fn own_actor_disposes_the_registry_entry_on_cell_drop() {
+        let token = crate::actor::UiThreadToken::dangerously_create_token_unchecked();
+        let addr = Addr::new((), token, &NoopTracker);
+        let counter = addr.strong_count_ptr();
+
+        let store = Store::new();
+        store.own_actor::<Counter, ()>(addr.clone());
+        drop(addr);
+
+        // Only our own local `counter` handle plus the REGISTRY's - the
+        // Store hasn't torn down yet, so it hasn't disposed it.
+        assert!(
+            Rc::strong_count(&counter) > 1,
+            "REGISTRY should still hold the actor alive while its Store is alive"
+        );
+
+        drop(store);
+
+        assert_eq!(
+            Rc::strong_count(&counter),
+            1,
+            "dropping the Store's cell should dispose the REGISTRY entry, \
+             leaving only this test's own counter handle"
         );
     }
 }
