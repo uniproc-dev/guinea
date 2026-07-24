@@ -1,61 +1,64 @@
-use crate::actor::UiThreadToken;
 use crate::actor::addr::Addr;
-use crate::actor::event_bus::subscribe::{
-    Event, FnSubscriber, Subscriber, SubscriptionId, UntypedSubscriber,
-};
+use crate::actor::event_bus::subscribe::{Event, FnSubscriber, Subscriber, SubscriptionId, UntypedSubscriber};
 use crate::actor::short_type_name;
 use crate::actor::traits::Handler;
 use crate::trace::{DispatchMeta, current_meta, is_scope_enabled};
-use once_cell::sync::Lazy;
-use parking_lot::RwLock;
 use std::any::TypeId;
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
+use std::rc::Rc;
 use std::sync::Arc;
-use std::sync::atomic::{AtomicUsize, Ordering};
 
-use crate::actor::event_bus::builder::EventBusBuilder;
 use tracing::{debug, warn};
 
 pub mod builder;
 pub mod rpc;
 pub mod subscribe;
-use crate::lifecycle_tracker::LifecycleTracker;
 pub use rpc::{AsyncBus, RpcCall, RpcRequest, RpcResponse};
-
-struct Registry {
-    counts: RwLock<HashMap<TypeId, usize>>,
-    next_id: AtomicUsize,
-}
-
-static REGISTRY: Lazy<Registry> = Lazy::new(|| Registry {
-    counts: RwLock::new(HashMap::new()),
-    next_id: AtomicUsize::new(0),
-});
-
-thread_local! {
-    static LOCAL_SUBSCRIBERS: RefCell<HashMap<TypeId, Vec<Box<dyn UntypedSubscriber>>>> = RefCell::new(HashMap::new());
-}
 
 #[cfg(feature = "test-utils")]
 pub static TEST_TASK_QUEUE: std::sync::LazyLock<std::sync::Mutex<Vec<Box<dyn FnOnce() + Send>>>> =
     std::sync::LazyLock::new(|| std::sync::Mutex::new(Vec::new()));
 
 #[cfg(feature = "test-utils")]
-pub static ACTIVE_TASKS: AtomicUsize = AtomicUsize::new(0);
+pub static ACTIVE_TASKS: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
 
-pub struct EventBus;
+pub struct EventBus {
+    subscribers: RefCell<HashMap<TypeId, Vec<Box<dyn UntypedSubscriber>>>>,
+    counts: RefCell<HashMap<TypeId, usize>>,
+    next_id: Cell<SubscriptionId>,
+}
+
+impl Default for EventBus {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 
 impl EventBus {
-    pub fn subscribe<A, M>(addr: Addr<A>, tracker: &impl LifecycleTracker)
+    pub fn new() -> Self {
+        Self {
+            subscribers: RefCell::new(HashMap::new()),
+            counts: RefCell::new(HashMap::new()),
+            next_id: Cell::new(0),
+        }
+    }
+
+    fn next_id(&self) -> SubscriptionId {
+        let id = self.next_id.get();
+        self.next_id.set(id + 1);
+        id
+    }
+
+    pub fn subscribe<A, M>(&self, addr: Addr<A>) -> SubscriptionId
     where
         A: Handler<M> + 'static,
         M: Event,
     {
         let type_id = TypeId::of::<M>();
-        let id = REGISTRY.next_id.fetch_add(1, Ordering::SeqCst) as SubscriptionId;
+        let id = self.next_id();
 
-        *REGISTRY.counts.write().entry(type_id).or_insert(0) += 1;
+        *self.counts.borrow_mut().entry(type_id).or_insert(0) += 1;
 
         let subscriber = Box::new(Subscriber {
             id,
@@ -63,12 +66,11 @@ impl EventBus {
             _marker: std::marker::PhantomData,
         });
 
-        LOCAL_SUBSCRIBERS.with(|s| {
-            s.borrow_mut()
-                .entry(type_id)
-                .or_insert_with(Vec::new)
-                .push(subscriber);
-        });
+        self.subscribers
+            .borrow_mut()
+            .entry(type_id)
+            .or_insert_with(Vec::new)
+            .push(subscriber);
 
         if is_scope_enabled("core.bus.subscribe") {
             debug!(
@@ -78,48 +80,47 @@ impl EventBus {
             );
         }
 
-        tracker.track_sub(id);
+        id
     }
 
-    pub fn subscribe_fn<M: Event>(callback: impl Fn(M) + 'static, tracker: &impl LifecycleTracker) {
+    pub fn subscribe_fn<M: Event>(&self, callback: impl Fn(M) + 'static) -> SubscriptionId {
         let type_id = TypeId::of::<M>();
-        let id = REGISTRY.next_id.fetch_add(1, Ordering::SeqCst) as SubscriptionId;
+        let id = self.next_id();
 
-        *REGISTRY.counts.write().entry(type_id).or_insert(0) += 1;
+        *self.counts.borrow_mut().entry(type_id).or_insert(0) += 1;
 
         let subscriber = Box::new(FnSubscriber {
             id,
             callback: Arc::new(callback),
         });
 
-        LOCAL_SUBSCRIBERS.with(|s| {
-            s.borrow_mut()
-                .entry(type_id)
-                .or_insert_with(Vec::new)
-                .push(subscriber);
-        });
+        self.subscribers
+            .borrow_mut()
+            .entry(type_id)
+            .or_insert_with(Vec::new)
+            .push(subscriber);
 
         if is_scope_enabled("core.bus.subscribe") {
             debug!(event = short_type_name::<M>(), "bus.subscribe_fn");
         }
 
-        tracker.track_sub(id);
+        id
     }
 
-    pub fn count_subscribers<M: Event>() -> usize {
+    pub fn count_subscribers<M: Event>(&self) -> usize {
         let type_id = TypeId::of::<M>();
-        *REGISTRY.counts.read().get(&type_id).unwrap_or(&0)
+        *self.counts.borrow().get(&type_id).unwrap_or(&0)
     }
 
-    pub fn has_subscribers<M: Event>() -> bool {
-        Self::count_subscribers::<M>() > 0
+    pub fn has_subscribers<M: Event>(&self) -> bool {
+        self.count_subscribers::<M>() > 0
     }
 
-    pub fn publish<M: Event>(msg: M) {
+    pub fn publish<M: Event>(&self, msg: M) {
         let meta =
             current_meta().unwrap_or_else(|| DispatchMeta::capture_or_root("core.bus.publish"));
 
-        if !Self::has_subscribers::<M>() {
+        if !self.has_subscribers::<M>() {
             warn!(
                 parent: &meta.span,
                 event = short_type_name::<M>(),
@@ -127,7 +128,6 @@ impl EventBus {
                 correlation_id = meta.correlation_id.as_deref().unwrap_or(""),
                 "no subscribers"
             );
-
             return;
         }
 
@@ -141,51 +141,51 @@ impl EventBus {
             );
         }
 
-        let task = move || {
-            let type_id = TypeId::of::<M>();
-            LOCAL_SUBSCRIBERS.with(|s| {
-                if let Some(subs) = s.borrow().get(&type_id) {
-                    for sub in subs {
-                        sub.deliver(
-                            Box::new(msg.clone()),
-                            meta.child("core.bus.publish", None, None),
-                        );
-                    }
-                }
-            });
-        };
-
-        crate::actor::invoke_on_ui(task);
+        let type_id = TypeId::of::<M>();
+        if let Some(subs) = self.subscribers.borrow().get(&type_id) {
+            for sub in subs {
+                sub.deliver(
+                    Box::new(msg.clone()),
+                    meta.child("core.bus.publish", None, None),
+                );
+            }
+        }
     }
 
-    pub fn unsubscribe(_guard: &UiThreadToken, id: SubscriptionId) {
-        LOCAL_SUBSCRIBERS.with(|s| {
-            let mut s = s.borrow_mut();
-            let mut found = false;
+    pub fn unsubscribe(&self, id: SubscriptionId) {
+        let mut subscribers = self.subscribers.borrow_mut();
+        let mut found = false;
 
-            for (type_id, list) in s.iter_mut() {
-                let start_len = list.len();
-                list.retain(|sub| sub.id() != id);
-                let removed = start_len - list.len();
+        for (type_id, list) in subscribers.iter_mut() {
+            let start_len = list.len();
+            list.retain(|sub| sub.id() != id);
+            let removed = start_len - list.len();
 
-                if removed > 0 {
-                    found = true;
-                    let mut counts = REGISTRY.counts.write();
-                    if let Some(count) = counts.get_mut(type_id) {
-                        *count = count.saturating_sub(removed);
-                    }
+            if removed > 0 {
+                found = true;
+                let mut counts = self.counts.borrow_mut();
+                if let Some(count) = counts.get_mut(type_id) {
+                    *count = count.saturating_sub(removed);
                 }
             }
+        }
 
-            if !found {
-                warn!(
-                    subscription_id = id,
-                    "unsubscribe: subscription not found in current thread"
-                );
-            } else if is_scope_enabled("core.bus.unsubscribe") {
-                debug!(subscription_id = id, "unsubscribe: success");
-            }
-        });
+        if !found {
+            warn!(subscription_id = id, "unsubscribe: subscription not found");
+        } else if is_scope_enabled("core.bus.unsubscribe") {
+            debug!(subscription_id = id, "unsubscribe: success");
+        }
+    }
+}
+
+pub struct GlobalEventBus;
+
+impl GlobalEventBus {
+    pub fn instance() -> Rc<EventBus> {
+        thread_local! {
+            static BUS: Rc<EventBus> = Rc::new(EventBus::new());
+        }
+        BUS.with(|bus| bus.clone())
     }
 }
 
@@ -206,6 +206,6 @@ impl EventBus {
     }
 
     pub fn task_count() -> usize {
-        ACTIVE_TASKS.load(Ordering::SeqCst)
+        ACTIVE_TASKS.load(std::sync::atomic::Ordering::SeqCst)
     }
 }

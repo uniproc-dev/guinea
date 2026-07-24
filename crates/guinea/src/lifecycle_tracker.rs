@@ -2,7 +2,7 @@ use crate::app::Window;
 use crate::feature::{AppFeatureDeinitContext, WindowFeatureDeinitContext};
 use guinea_core::actor::UiThreadToken;
 use guinea_core::actor::addr::Addr;
-use guinea_core::actor::event_bus::EventBus;
+use guinea_core::actor::event_bus::GlobalEventBus;
 use guinea_core::actor::event_bus::subscribe::SubscriptionId;
 use guinea_core::lifecycle_tracker::LifecycleTracker;
 use std::any::Any;
@@ -29,9 +29,10 @@ impl LifecycleCore {
         self.subs.push(id);
     }
 
-    fn shutdown(&mut self, token: &UiThreadToken) {
+    fn shutdown(&mut self) {
+        let bus = GlobalEventBus::instance();
         for sub_id in self.subs.drain(..) {
-            EventBus::unsubscribe(token, sub_id);
+            bus.unsubscribe(sub_id);
         }
         let counters = std::mem::take(&mut self.actor_counters);
         self.anchors.clear();
@@ -80,7 +81,8 @@ impl AppLifecycle {
                 tracing::error!("App cleanup error: {}", e);
             }
         }
-        inner.core.shutdown(token);
+        let _ = token;
+        inner.core.shutdown();
     }
 
     pub fn track_loop<T: 'static>(&self, handle: T) {
@@ -162,7 +164,8 @@ impl<TWindow: Window> WindowLifecycle<TWindow> {
                 tracing::error!("Window cleanup error: {}", e);
             }
         }
-        inner.core.shutdown(token);
+        let _ = token;
+        inner.core.shutdown();
     }
 
     pub fn track_loop<T: 'static>(&self, handle: T) {

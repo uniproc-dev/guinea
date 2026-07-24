@@ -7,6 +7,8 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use tokio::task::JoinHandle;
 
 use crate::actor::Addr;
+use crate::actor::event_bus::EventBus;
+use crate::actor::event_bus::subscribe::SubscriptionId;
 
 static NEXT_SUBSCRIBER_ID: AtomicU64 = AtomicU64::new(0);
 
@@ -167,10 +169,7 @@ impl Scope {
     }
 
     pub fn own_actor<A: 'static>(&self, addr: Addr<A>) {
-        // Leak diagnostics (debug only): after teardown disposes the actor and
-        // drops this last handle, its refcount proxy should reach 1 (only the
-        // local `counter`). Higher means a stray `Addr` clone outlived the
-        // segment - the check the old LifecycleTracker used to carry.
+        
         #[cfg(debug_assertions)]
         let counter = addr.strong_count_ptr();
         self.teardowns.borrow_mut().push(Box::new(move || {
@@ -188,6 +187,12 @@ impl Scope {
                 }
             }
         }));
+    }
+
+    pub fn own_subscription(&self, bus: Rc<EventBus>, id: SubscriptionId) {
+        self.teardowns
+            .borrow_mut()
+            .push(Box::new(move || bus.unsubscribe(id)));
     }
 }
 

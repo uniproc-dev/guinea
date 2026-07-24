@@ -1,6 +1,6 @@
 use crate::actor::addr::Addr;
 use crate::actor::event_bus::subscribe::Event;
-use crate::actor::event_bus::{EventBus, RpcCall, RpcRequest};
+use crate::actor::event_bus::{GlobalEventBus, RpcCall, RpcRequest};
 use crate::actor::traits::Handler;
 use crate::lifecycle_tracker::LifecycleTracker;
 
@@ -14,7 +14,8 @@ where
     A: Handler<M> + 'static,
 {
     fn subscribe_into(addr: Addr<A>, tracker: &impl LifecycleTracker) {
-        EventBus::subscribe::<A, M>(addr, tracker);
+        let id = GlobalEventBus::instance().subscribe::<A, M>(addr);
+        tracker.track_sub(id);
     }
 }
 
@@ -44,7 +45,8 @@ impl<'a, A: 'static, L: LifecycleTracker> EventBusBuilder<'a, A, L> {
         M: Event,
         A: Handler<M> + 'static,
     {
-        EventBus::subscribe::<A, M>(self.addr.clone(), self.tracker);
+        let id = GlobalEventBus::instance().subscribe::<A, M>(self.addr.clone());
+        self.tracker.track_sub(id);
         self
     }
 
@@ -53,7 +55,8 @@ impl<'a, A: 'static, L: LifecycleTracker> EventBusBuilder<'a, A, L> {
         Req: RpcCall,
         A: Handler<RpcRequest<Req>> + 'static,
     {
-        EventBus::subscribe::<A, RpcRequest<Req>>(self.addr.clone(), self.tracker);
+        let id = GlobalEventBus::instance().subscribe::<A, RpcRequest<Req>>(self.addr.clone());
+        self.tracker.track_sub(id);
         self
     }
 }

@@ -1,4 +1,4 @@
-use crate::actor::event_bus::EventBus;
+use crate::actor::event_bus::GlobalEventBus;
 use crate::actor::traits::Message;
 use once_cell::sync::Lazy;
 use parking_lot::RwLock;
@@ -53,7 +53,7 @@ impl AsyncBus {
         let (tx, rx) = oneshot::channel();
         PENDING_REQUESTS.write().insert(correlation_id, tx);
 
-        EventBus::publish(envelope);
+        GlobalEventBus::instance().publish(envelope);
 
         match tokio::time::timeout(timeout, rx).await {
             Ok(Ok(any_res)) => match any_res.downcast::<RpcResponse<Req::Response>>() {
@@ -81,7 +81,7 @@ impl AsyncBus {
             let _ = tx.send(Box::new(envelope.clone()));
         }
 
-        EventBus::publish(envelope);
+        GlobalEventBus::instance().publish(envelope);
     }
 }
 

@@ -177,28 +177,17 @@ fn nav_context<R: 'static>() -> windows_reactor::Context<Option<NavigateHandle<R
     windows_reactor::Context { default: None, id }
 }
 
-/// The process's singleton `Router`, created on first call. `App::render`
-/// requires a `Send` root closure while `Router` (`Rc`-based) is not `Send`,
-/// so it can't just be captured by the closure - `RouterRx::render` reaches
-/// it through here instead, safe to call every frame.
-fn shared_router(token: guinea_core::actor::UiThreadToken) -> Rc<Router> {
-    thread_local! {
-        static ROUTER: RefCell<Option<Rc<Router>>> = const { RefCell::new(None) };
+fn scoped_router(cx: &mut windows_reactor::RenderCx, token: guinea_core::actor::UiThreadToken) -> Rc<Router> {
+    let slot = cx.use_ref(None::<Rc<Router>>);
+    {
+        let mut slot = slot.borrow_mut();
+        if slot.is_none() {
+            *slot = Some(Rc::new(Router::new(token)));
+        }
     }
-    ROUTER.with(|slot| {
-        slot.borrow_mut()
-            .get_or_insert_with(|| Rc::new(Router::new(token)))
-            .clone()
-    })
+    slot.borrow().clone().expect("just initialized above")
 }
 
-/// A `windows-reactor` `root()`'s entire body, for an app routed by `R`:
-/// `RouterRx::<R>::render(cx, initial)` gets/creates the shared `Router`,
-/// re-navigates to the current route every frame (idempotent - `navigate`'s
-/// own diffing no-ops when nothing changed), and provides a
-/// `NavigateHandle<R>` any segment reads back with `cx.use_navigate::<R>()`.
-/// A zero-sized marker, not a value - there is nothing per-instance to hold
-/// (the `Router` itself is the process-wide singleton `shared_router` reaches).
 pub struct RouterRx<R>(std::marker::PhantomData<R>);
 
 impl<R> RouterRx<R>
@@ -213,7 +202,7 @@ where
         let token = guinea_core::actor::UiThreadToken::dangerously_create_token_unchecked();
 
         let (route, set_route) = cx.use_state(initial);
-        let router = shared_router(token);
+        let router = scoped_router(cx, token);
         router.navigate(route.clone(), &route.to_uri()).expect("navigate");
 
         let nav = NavigateHandle::new(router.clone(), set_route);
@@ -221,12 +210,6 @@ where
     }
 }
 
-/// `cx.use_navigate::<R>()` - the `NavigateHandle<R>` `RouterRx::render`
-/// provided at the root, from anywhere in the tree (`PageCx`/`LayoutCx` both
-/// `Deref` to `RenderCx`). Panics if the tree wasn't rendered through
-/// `RouterRx::<R>::render` - there's no sensible fallback for "navigate
-/// somewhere" with no router underneath, so a missing provider is a real
-/// wiring bug, not a state a caller should have to handle.
 pub trait UseNavigate {
     fn use_navigate<R>(&self) -> NavigateHandle<R>
     where
@@ -385,6 +368,10 @@ pub struct Router {
     active: RefCell<Option<ActiveChain>>,
     prev_route: RefCell<Option<Box<dyn Any>>>,
     token: guinea_core::actor::UiThreadToken,
+    /// One `EventBus` per window - shared by every segment installed through
+    /// this `Router`, so actors in different features of the same window can
+    /// reach each other. See `FeatureInitContext::event_bus`.
+    event_bus: Rc<guinea_core::actor::event_bus::EventBus>,
 }
 
 impl Router {
@@ -393,6 +380,7 @@ impl Router {
             active: RefCell::new(None),
             prev_route: RefCell::new(None),
             token,
+            event_bus: Rc::new(guinea_core::actor::event_bus::EventBus::new()),
         }
     }
     
@@ -451,6 +439,7 @@ impl Router {
             let ctx = FeatureInitContext {
                 scope: scope.clone(),
                 token: self.token.clone(),
+                event_bus: self.event_bus.clone(),
             };
             (entry.install)(&ctx, uri)?;
             scopes.push(scope);
@@ -522,6 +511,35 @@ mod tests {
             assert_eq!(state.seeded_from, "ubuntu");
             windows_reactor::Element::default()
         }
+    }
+
+    #[test]
+    fn scoped_router_is_call_site_scoped_not_process_global() {
+        let token = UiThreadToken::dangerously_create_token_unchecked();
+
+        let mut cx1 = windows_reactor::RenderCx::new(Rc::new(|| {}));
+        cx1.begin_render();
+        let router_a = scoped_router(&mut cx1, token.clone());
+
+        // A second render pass of the *same* window (hook slots realign) -
+        // must resolve the same Router, not a fresh one.
+        cx1.begin_render();
+        let router_a2 = scoped_router(&mut cx1, token.clone());
+        assert!(
+            Rc::ptr_eq(&router_a, &router_a2),
+            "re-rendering the same window must reuse its own Router"
+        );
+
+        // A different render root (e.g. a second window's own RenderCx) has
+        // its own independent hook storage - must get its own Router, no
+        // process-wide sharing.
+        let mut cx2 = windows_reactor::RenderCx::new(Rc::new(|| {}));
+        cx2.begin_render();
+        let router_b = scoped_router(&mut cx2, token);
+        assert!(
+            !Rc::ptr_eq(&router_a, &router_b),
+            "a different render root must get its own Router, not the first one's"
+        );
     }
 
     #[test]

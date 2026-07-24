@@ -1,7 +1,7 @@
 use guinea::feature::FeatureInitContext;
 use guinea::router::{Layout, LayoutCx, UseNavigate};
 use guinea::uri::AppUri;
-use windows_reactor::{Element, button, hstack, text_block, vstack};
+use windows_reactor::{Element, ReactorWindow, button, hstack, text_block, vstack};
 
 use crate::routes::Route;
 
@@ -25,6 +25,13 @@ impl Layout for TabsLayout {
             button("Services").on_click(nav.to_handler(Route::Services {
                 context: "ubuntu".to_string(),
             })),
+            
+            button("Open window").on_click(|| {
+                let _ = ReactorWindow::new()
+                    .title("guinea · processes (2)")
+                    .inner_size(420.0, 420.0)
+                    .render(crate::root);
+            }),
         ))
         .spacing(8.0);
 

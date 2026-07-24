@@ -1,5 +1,5 @@
 use crate::actor::addr::{Addr, REGISTRY};
-use crate::actor::event_bus::EventBus;
+use crate::actor::event_bus::GlobalEventBus;
 use crate::actor::event_bus::subscribe::Event;
 use crate::actor::traits::{Handler, Message};
 use crate::actor::{AllowedSignal, ManagedActor, invoke_on_ui, short_type_name};
@@ -22,7 +22,7 @@ impl<A: 'static> Context<A> {
         M: Event,
         A::Signals: AllowedSignal<M>,
     {
-        EventBus::publish(msg);
+        GlobalEventBus::instance().publish(msg);
     }
 
     pub fn spawn_bg<M, Fut>(&self, fut: Fut)
@@ -107,7 +107,7 @@ impl<A: 'static> AsyncContext<A> {
         M: Event,
         A::Signals: AllowedSignal<M>,
     {
-        EventBus::publish(msg);
+        GlobalEventBus::instance().publish(msg);
     }
 
     pub async fn apply<R, F>(&self, f: F) -> R
