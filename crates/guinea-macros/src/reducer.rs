@@ -1,7 +1,3 @@
-//! `#[reducer]` (fn -> feature marker + `impl Reducer`), the `#[dispatch]`
-//! helper it reads, and `#[derive(ReducerState)]` (terse `Default`/`Clone`/
-//! `PartialEq`/`Debug` for a reducer's state).
-
 use heck::ToUpperCamelCase;
 use proc_macro::TokenStream;
 use quote::{format_ident, quote};
@@ -16,9 +12,7 @@ pub fn reducer_impl(input: TokenStream) -> TokenStream {
 }
 
 fn expand_reducer(mut func: ItemFn) -> syn::Result<TokenStream> {
-    // The marker type is derived from the fn name (snake_case -> UpperCamelCase),
-    // not the fn name itself - a fn literally named like a type is confusing,
-    // and the fn symbol never escapes this expansion anyway.
+
     let marker = format_ident!(
         "{}",
         func.sig.ident.to_string().to_upper_camel_case(),
@@ -58,15 +52,12 @@ fn expand_reducer(mut func: ItemFn) -> syn::Result<TokenStream> {
         None => quote!(guinea_core::scope::NoopActions),
     };
 
-    // Reuse the original parameters (their names, e.g. `state`/`msg`) and the
-    // body verbatim - the concrete types equal the associated types, so the
-    // signature still satisfies `Reducer::reduce`.
-    let param_state = &func.sig.inputs[0];
-    let param_push = &func.sig.inputs[1];
-    let body = &func.block;
+    let fn_name = &func.sig.ident;
     let vis = &func.vis;
 
     Ok(quote! {
+        #func
+
         #[derive(Default)]
         #vis struct #marker;
 
@@ -75,7 +66,9 @@ fn expand_reducer(mut func: ItemFn) -> syn::Result<TokenStream> {
             type Push = #push_ty;
             type Actions = #actions_ty;
 
-            fn reduce(#param_state, #param_push) #body
+            fn reduce(state: &mut Self::State, msg: Self::Push) {
+                #fn_name(state, msg)
+            }
         }
     }
     .into())
@@ -100,9 +93,6 @@ fn extract_dispatch(attrs: &[syn::Attribute]) -> syn::Result<Option<Path>> {
     Ok(None)
 }
 
-/// Maps an actions *trait* path (`…::ProcessesActions`) to the generated
-/// store-dispatch-adapter type path (`…::ProcessesDispatch`) that `#[actions]`
-/// emits alongside it - same module, last segment's `Actions` suffix renamed.
 fn dispatch_adapter_path(mut path: Path) -> Path {
     if let Some(last) = path.segments.last_mut() {
         let name = last.ident.to_string();

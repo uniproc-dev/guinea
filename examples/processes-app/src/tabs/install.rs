@@ -1,13 +1,25 @@
 use guinea::feature::FeatureInitContext;
 use guinea::uri::AppUri;
+use guinea_core::actor::event_bus::GlobalEventBus;
 
-use super::contracts::TabsReducer;
+use crate::events::ProcessKilled;
 
-/// No actor - just this feature's own reducer, in the Scope that
-/// `Router::navigate` keeps alive across `Processes <-> Services` (only the
-/// leaf position tears down and reinstalls, not this ancestor).
+use super::contracts::{TabsMsg, TabsReducer};
+
 pub fn install(ctx: &FeatureInitContext, _uri: &AppUri) -> anyhow::Result<()> {
     let count = ctx.scope.peek::<TabsReducer>().map_or(0, |s| s.borrow().install_count);
-    ctx.scope.push::<TabsReducer>(count + 1);
+    ctx.scope.push::<TabsReducer>(TabsMsg::Installed(count + 1));
+    
+    let scope = ctx.scope.clone();
+    ctx.subscribe::<ProcessKilled>(move |ev: ProcessKilled| {
+        scope.push::<TabsReducer>(TabsMsg::LocalKill(ev.name));
+    });
+    
+    let scope = ctx.scope.clone();
+    let id = GlobalEventBus::instance().subscribe_fn(move |_: ProcessKilled| {
+        scope.push::<TabsReducer>(TabsMsg::GlobalKill);
+    });
+    ctx.scope.own_subscription(GlobalEventBus::instance(), id);
+
     Ok(())
 }

@@ -196,6 +196,17 @@ impl Scope {
     }
 }
 
+pub struct GlobalScope;
+
+impl GlobalScope {
+    pub fn instance() -> Rc<Scope> {
+        thread_local! {
+            static SCOPE: Rc<Scope> = Rc::new(Scope::new());
+        }
+        SCOPE.with(|scope| scope.clone())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

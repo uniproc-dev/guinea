@@ -1,18 +1,25 @@
-use guinea_core::actor::ManagedActor;
+use std::rc::Rc;
+
+use guinea_core::actor::{Context, ManagedActor};
+use guinea_core::actor::event_bus::EventBus;
 use guinea_macros::{actor_manifest, handler};
+
+use crate::events::ProcessKilled;
 
 use super::contracts::{ProcessesMessages, ProcessesPort};
 
 pub struct ProcessActor<P: ProcessesPort> {
     ui_port: P,
     items: Vec<String>,
+    event_bus: Rc<EventBus>,
 }
 
 impl<P: ProcessesPort> ProcessActor<P> {
-    pub fn new(_context: String, ui_port: P) -> Self {
+    pub fn new(_context: String, ui_port: P, event_bus: Rc<EventBus>) -> Self {
         Self {
             ui_port,
             items: Vec::new(),
+            event_bus,
         }
     }
 
@@ -30,13 +37,23 @@ impl<P: ProcessesPort + 'static> ManagedActor for ProcessActor<P> {
         },
         Refresh
     );
+    type Signals = bus!(ProcessKilled);
 }
 
 #[handler]
-fn kill<P: ProcessesPort + 'static>(this: &mut ProcessActor<P>, msg: Kill) {
+fn kill<P: ProcessesPort + 'static>(this: &mut ProcessActor<P>, msg: Kill, ctx: &Context<ProcessActor<P>>) {
     let needle = format!("(pid {})", msg.0);
+    let killed = this.items.iter().find(|row| row.ends_with(&needle)).cloned();
     this.items.retain(|row| !row.ends_with(&needle));
     this.publish();
+
+    if let Some(name) = killed {
+        // Window-local: only this window's `TabsLayout` hears it.
+        ctx.publish_local(&this.event_bus, ProcessKilled { name: name.clone() });
+        // Process-wide: every window's `TabsLayout` hears it, including
+        // ones opened after this event fires.
+        ctx.publish(ProcessKilled { name });
+    }
 }
 
 #[handler]

@@ -10,7 +10,6 @@ members = [
     "crates/guinea-core",
     "crates/guinea-macros",
     "crates/guinea",
-    "crates/guinea-test-kit",
 ]
 
 [workspace.dependencies]
@@ -21,16 +20,11 @@ guinea-macros = { path = "crates/guinea-macros" }
 guinea = { path = "crates/guinea" }
 inventory = "0.3"
 
-# --- UI Stack (Slint & Windowing) ---
-slint = { version = "=1.17.1", features = ["renderer-skia"] }
-i-slint-backend-winit = "=1.17.1"
-i-slint-core = "=1.17.1"
-i-slint-backend-testing = "=1.17.1"
-i-slint-compiler = "=1.17.1"
+# --- UI Stack (Windowing) ---
 window-vibrancy = "0.7.1"
 raw-window-handle = "0.6.2"
 
-# --- UI Stack (windows-reactor, replacing Slint) ---
+# --- UI Stack (windows-reactor) ---
 windows-reactor = { git = "https://github.com/microsoft/windows-rs" }
 windows-reactor-setup = { git = "https://github.com/microsoft/windows-rs" }
 

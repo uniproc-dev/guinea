@@ -6,7 +6,7 @@ edition.workspace = true
 [dependencies]
 guinea-core.workspace = true
 guinea-codegen.workspace = true
-slint.workspace = true
+guinea-meta = { path = "../../../guinea-meta/crates/guinea-meta" }
 tracing.workspace = true
 anyhow.workspace = true
 derive_more.workspace = true
@@ -26,6 +26,6 @@ workspace = true
 [dev-dependencies]
 tempfile = "3.27.0"
 uuid.workspace = true
-i-slint-backend-testing.workspace = true
 guinea-macros.workspace = true
 inventory.workspace = true
+guinea-core = { workspace = true, features = ["test-utils"] }

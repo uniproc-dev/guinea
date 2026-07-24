@@ -11,6 +11,7 @@ pub fn install(ctx: &FeatureInitContext, uri: &AppUri) -> anyhow::Result<()> {
         ProcessActor::new(
             uri.segment(0).expect("route always carries a :context segment").to_string(),
             ctx.port::<ProcessesReducer>(),
+            ctx.event_bus.clone(),
         ),
         ctx.token.clone(),
     );

@@ -41,7 +41,7 @@ impl UiThreadToken {
     }
 }
 
-pub(crate) fn invoke_on_ui<F>(f: F)
+pub fn invoke_on_ui<F>(f: F)
 where
     F: FnOnce() + Send + 'static,
 {
