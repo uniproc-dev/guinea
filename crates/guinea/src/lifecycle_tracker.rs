@@ -1,5 +1,4 @@
-use crate::app::Window;
-use crate::feature::{AppFeatureDeinitContext, WindowFeatureDeinitContext};
+use crate::feature::AppFeatureDeinitContext;
 use guinea_core::actor::UiThreadToken;
 use guinea_core::actor::addr::Addr;
 use guinea_core::actor::event_bus::GlobalEventBus;
@@ -110,88 +109,6 @@ impl LifecycleTracker for AppLifecycle {
     }
 }
 
-pub struct WindowLifecycle<TWindow: Window> {
-    inner: Rc<RefCell<WindowLifecycleInner<TWindow>>>,
-}
-
-impl<TWindow: Window> Clone for WindowLifecycle<TWindow> {
-    fn clone(&self) -> Self {
-        Self {
-            inner: self.inner.clone(),
-        }
-    }
-}
-
-struct WindowLifecycleInner<TWindow: Window> {
-    core: LifecycleCore,
-    cleanups: Vec<
-        Box<dyn for<'a> FnOnce(&mut WindowFeatureDeinitContext<'a, TWindow>) -> anyhow::Result<()>>,
-    >,
-}
-
-impl<TWindow: Window> Default for WindowLifecycleInner<TWindow> {
-    fn default() -> Self {
-        Self {
-            core: LifecycleCore::default(),
-            cleanups: Vec::new(),
-        }
-    }
-}
-
-impl<TWindow: Window> WindowLifecycle<TWindow> {
-    pub fn new() -> Self {
-        Self {
-            inner: Rc::new(RefCell::new(WindowLifecycleInner::default())),
-        }
-    }
-
-    pub fn on_cleanup(
-        &self,
-        f: impl for<'a> FnOnce(&mut WindowFeatureDeinitContext<'a, TWindow>) -> anyhow::Result<()>
-        + 'static,
-    ) {
-        self.inner.borrow_mut().cleanups.push(Box::new(f));
-    }
-
-    pub fn shutdown(
-        self,
-        token: &UiThreadToken,
-        ctx: &mut WindowFeatureDeinitContext<'_, TWindow>,
-    ) {
-        let mut inner = self.inner.borrow_mut();
-        for cleanup in inner.cleanups.drain(..).rev() {
-            if let Err(e) = cleanup(ctx) {
-                tracing::error!("Window cleanup error: {}", e);
-            }
-        }
-        let _ = token;
-        inner.core.shutdown();
-    }
-
-    pub fn track_loop<T: 'static>(&self, handle: T) {
-        self.inner.borrow_mut().core.track_loop(handle);
-    }
-
-    pub fn track_actor<A: 'static>(&self, addr: &Addr<A>) {
-        self.inner.borrow_mut().core.track_actor(addr);
-    }
-
-    pub fn track_sub(&self, id: SubscriptionId) {
-        self.inner.borrow_mut().core.track_sub(id);
-    }
-}
-
-impl<TWindow: Window> LifecycleTracker for WindowLifecycle<TWindow> {
-    fn track_loop<T: 'static>(&self, handle: T) {
-        self.track_loop(handle);
-    }
-    fn track_actor<A: 'static>(&self, addr: &Addr<A>) {
-        self.track_actor(addr);
-    }
-    fn track_sub(&self, id: SubscriptionId) {
-        self.track_sub(id);
-    }
-}
 #[cfg(test)]
 mod tests {
     use super::*;

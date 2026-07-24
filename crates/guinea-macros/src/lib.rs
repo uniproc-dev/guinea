@@ -34,11 +34,6 @@ pub fn capability(attr: TokenStream, item: TokenStream) -> TokenStream {
 }
 
 #[proc_macro_attribute]
-pub fn window_feature(args: TokenStream, input: TokenStream) -> TokenStream {
-    features::window_feature_impl(args, input)
-}
-
-#[proc_macro_attribute]
 pub fn app_feature(args: TokenStream, input: TokenStream) -> TokenStream {
     features::app_feature_impl(args, input)
 }

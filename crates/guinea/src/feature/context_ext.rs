@@ -1,8 +1,7 @@
 use crate::addr::{AddrBuilder, UiAutoWire};
-use crate::app::Window;
-use crate::feature::{AppFeatureInitContext, WindowFeatureInitContext};
+use crate::feature::AppFeatureInitContext;
 use crate::into_signal::IntoSignal;
-use crate::lifecycle_tracker::{AppLifecycle, WindowLifecycle};
+use crate::lifecycle_tracker::AppLifecycle;
 use crate::reactor::{LoopHandle, Reactor};
 use amethystate::DefaultStore;
 use guinea_core::SharedState;
@@ -16,22 +15,6 @@ pub trait FeatureContext {
     fn tracker(&self) -> &Self::Tracker;
     fn reactor(&self) -> &Reactor;
     fn shared(&self) -> &SharedState;
-}
-
-impl<TWindow: Window> FeatureContext for WindowFeatureInitContext<'_, TWindow> {
-    type Tracker = WindowLifecycle<TWindow>;
-    fn token(&self) -> UiThreadToken {
-        self.ui.new_token()
-    }
-    fn tracker(&self) -> &Self::Tracker {
-        self.tracker
-    }
-    fn reactor(&self) -> &Reactor {
-        self.reactor
-    }
-    fn shared(&self) -> &SharedState {
-        self.shared
-    }
 }
 
 impl FeatureContext for AppFeatureInitContext<'_> {

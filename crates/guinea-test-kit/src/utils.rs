@@ -1,8 +1,6 @@
 use anyhow::Context as _;
 use guinea::app::{App, UiContext, Window};
-use guinea::feature::{
-    AppFeature, AppFeatureInitContext, WindowFeature, WindowFeatureInitContext,
-};
+use guinea::feature::{AppFeature, AppFeatureInitContext};
 use guinea::reactor::Reactor;
 use guinea_core::SharedState;
 use guinea_core::actor::UiDispatcher;
@@ -76,26 +74,8 @@ impl FeatureHarness {
         Ok(self)
     }
 
-    pub fn window_feature<F, Builder>(mut self, builder: Builder) -> Self
-    where
-        Builder: Fn() -> F + Clone + 'static,
-        F: WindowFeature<DomainTestWindow> + 'static,
-    {
-        let app = self.0.take().expect("App is missing");
-        self.0 = Some(app.window_feature(builder));
-        self
-    }
-
     pub fn shared(&self) -> &SharedState {
         &self.0.as_ref().unwrap().shared()
-    }
-
-    pub fn spawn_window(&mut self) -> anyhow::Result<()> {
-        use slint::ComponentHandle;
-
-        let app = self.0.as_ref().expect("App is missing");
-        let ui_handle = app.ui().clone_strong();
-        app.spawn_window(ui_handle)
     }
 }
 

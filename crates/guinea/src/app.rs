@@ -1,8 +1,5 @@
-use crate::feature::{
-    AppFeature, AppFeatureDeinitContext, AppFeatureInitContext, IntoAppFeature, IntoWindowFeature,
-    WindowFeature, WindowFeatureDeinitContext, WindowFeatureInitContext,
-};
-use crate::lifecycle_tracker::{AppLifecycle, WindowLifecycle};
+use crate::feature::{AppFeature, AppFeatureDeinitContext, AppFeatureInitContext, IntoAppFeature};
+use crate::lifecycle_tracker::AppLifecycle;
 use crate::reactor::Reactor;
 use guinea_core::SharedState;
 use guinea_core::actor::{UiDispatcher, UiThreadToken};
@@ -10,7 +7,6 @@ use guinea_core::trace::in_named_scope;
 use slint::ComponentHandle;
 use std::cell::RefCell;
 use std::rc::Rc;
-use std::sync::atomic::{AtomicUsize, Ordering};
 
 struct SlintDispatcher;
 
@@ -41,15 +37,11 @@ pub struct App<TWindow> {
     ui: TWindow,
     shared: SharedState,
     runtime: tokio::runtime::Runtime,
-    next_window_id: Rc<AtomicUsize>,
-    inner: Rc<RefCell<AppInner<TWindow>>>,
+    inner: Rc<RefCell<AppInner>>,
 }
 
-type BoxedWindowFeature<TWindow> = Box<dyn Fn() -> Box<dyn WindowFeature<TWindow>> + 'static>;
-
-struct AppInner<TWindow> {
+struct AppInner {
     reactor: Reactor,
-    window_factories: Vec<BoxedWindowFeature<TWindow>>,
     app_features: Vec<Box<dyn AppFeature>>,
     root_tracker: AppLifecycle,
 }
@@ -74,10 +66,8 @@ impl<TWindow: Window> App<TWindow> {
             ui,
             shared,
             runtime,
-            next_window_id: Rc::new(AtomicUsize::new(1)),
             inner: Rc::new(RefCell::new(AppInner {
                 reactor: Reactor::new(),
-                window_factories: Vec::new(),
                 app_features: Vec::new(),
                 root_tracker: AppLifecycle::new(),
             })),
@@ -141,70 +131,6 @@ impl<TWindow: Window> App<TWindow> {
         )
     }
 
-    pub fn window_feature<I>(self, into_feature: I) -> Self
-    where
-        I: IntoWindowFeature<TWindow> + Clone + 'static,
-    {
-        self.inner
-            .borrow_mut()
-            .window_factories
-            .push(Box::new(move || {
-                Box::new(into_feature.clone().into_feature())
-            }));
-        self
-    }
-
-    pub fn spawn_window(&self, ui: TWindow) -> anyhow::Result<()> {
-        let _guard = self.runtime.enter();
-        let window_id = self.next_window_id.fetch_add(1, Ordering::Relaxed);
-        let token = ui.new_token();
-        let window_tracker = WindowLifecycle::new();
-        let mut active_features = Vec::new();
-
-        let inner = self.inner.borrow();
-
-        for factory in &inner.window_factories {
-            let mut feature = factory();
-            let mut init_ctx = WindowFeatureInitContext {
-                window_id,
-                ui: &ui,
-                shared: &self.shared,
-                reactor: &inner.reactor,
-                tracker: &window_tracker,
-                token: token.clone(),
-            };
-            feature.install(&mut init_ctx)?;
-            active_features.push(feature);
-        }
-
-        let features_storage = Rc::new(RefCell::new(active_features));
-        let tracker = window_tracker;
-        let token_for_close = token;
-        let ui_clone = ui.clone_strong();
-
-        let inner_clone = Rc::clone(&self.inner);
-        let shared_clone = self.shared.clone();
-
-        ui.window().on_close_requested(move || {
-            let inner_borrow = inner_clone.borrow();
-
-            let mut deinit_ctx = WindowFeatureDeinitContext {
-                ui: &ui_clone,
-                token: token_for_close.clone(),
-                reactor: &inner_borrow.reactor,
-                shared: &shared_clone,
-            };
-
-            tracker.clone().shutdown(&token_for_close, &mut deinit_ctx);
-
-            let _ = std::mem::take(&mut *features_storage.borrow_mut());
-
-            slint::CloseRequestResponse::HideWindow
-        });
-
-        Ok(())
-    }
-
     pub fn ui(&self) -> &TWindow {
         &self.ui
     }
@@ -215,8 +141,6 @@ impl<TWindow: Window> App<TWindow> {
 
     pub fn run(self) -> anyhow::Result<()> {
         let _guard = self.runtime.enter();
-
-        self.spawn_window(self.ui.clone_strong())?;
 
         let result = self.ui.run();
 
