@@ -52,6 +52,17 @@ impl<A: 'static> Addr<A> {
         addr
     }
 
+    pub fn new_managed_scoped(state: A, token: UiThreadToken) -> Self
+    where
+        A: ManagedActor,
+    {
+        Self::new_managed(state, token, &crate::lifecycle_tracker::NullTracker)
+    }
+
+    pub fn new_scoped(state: A, token: UiThreadToken) -> Self {
+        Self::new(state, token, &crate::lifecycle_tracker::NullTracker)
+    }
+
     pub fn new(state: A, guard: UiThreadToken, tracker: &impl LifecycleTracker) -> Self {
         let id = NEXT_ID.fetch_add(1, Ordering::Relaxed);
         let addr = Self {

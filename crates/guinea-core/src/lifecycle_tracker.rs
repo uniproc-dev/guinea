@@ -6,3 +6,11 @@ pub trait LifecycleTracker {
     fn track_actor<A: 'static>(&self, addr: &Addr<A>);
     fn track_sub(&self, id: SubscriptionId);
 }
+
+pub struct NullTracker;
+
+impl LifecycleTracker for NullTracker {
+    fn track_loop<T: 'static>(&self, _handle: T) {}
+    fn track_actor<A: 'static>(&self, _addr: &Addr<A>) {}
+    fn track_sub(&self, _id: SubscriptionId) {}
+}

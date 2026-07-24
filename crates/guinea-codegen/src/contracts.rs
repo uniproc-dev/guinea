@@ -1,19 +1,8 @@
-//! Emits `inventory::submit!` registrations (+ a small compile-time proof of
-//! the `UiXPort` -> `UiXPortMsg` naming convention for ports) directly at the
-//! definition site of a `#[port]`/`#[bindings]`-annotated trait - called from
-//! the proc-macro while it still holds the trait's `syn::ItemTrait`, so there
-//! is no source re-parsing and no JSON round-trip involved.
-
 use proc_macro2::TokenStream;
 use quote::{format_ident, quote};
 use syn::ItemTrait;
 
-/// Emits, right next to a `#[capability("key")]`-annotated struct: a `pub
-/// const <KEY>: &str = "key";` (so existing `app_contracts::features::x::KEY`
-/// call sites keep working with zero cross-crate lookup - this needs no
-/// registry at all, the key is known at the macro's own call site) plus an
-/// `inventory::submit!` registration (for consumers that need the *whole*
-/// list of capabilities at once, e.g. generating `capabilities.slint`).
+//TODO: to remove
 pub fn emit_capability_registration(key: &str, struct_name: &str) -> TokenStream {
     let const_name = format_ident!("{}", key.to_uppercase().replace(['.', '-'], "_"));
 
@@ -31,10 +20,17 @@ pub fn emit_capability_registration(key: &str, struct_name: &str) -> TokenStream
 
 pub fn emit_port_registration(item_trait: &ItemTrait) -> TokenStream {
     let trait_name = item_trait.ident.to_string();
-    let msg_type_name = format!("{trait_name}Msg");
     let feature = feature_from_trait_name(&trait_name);
 
-    let msg_ident = format_ident!("{}", msg_type_name);
+    let msg_ty = port_send_msg_type(item_trait);
+    let msg_type_name = msg_ty
+        .as_ref()
+        .map(|t| quote!(#t).to_string().replace(' ', ""))
+        .unwrap_or_default();
+    let msg_tokens = match &msg_ty {
+        Some(t) => quote!(#t),
+        None => quote!(()),
+    };
     let proof_fn = format_ident!("__assert_{}_shape", trait_name);
 
     let extra_methods = parse_port_extra_methods(item_trait);
@@ -53,15 +49,9 @@ pub fn emit_port_registration(item_trait: &ItemTrait) -> TokenStream {
     });
 
     quote! {
-        // `pub` (not just crate-private) + called once from
-        // `slint-adapter`/`domain-test-kit`'s build scripts as a forced
-        // link-time reference: with a single-codegen-unit override for
-        // `app-contracts` (see root `Cargo.toml`), one such reference is
-        // enough to keep every `inventory::submit!` in this crate from being
-        // dropped by the linker for being otherwise unreferenced.
         #[doc(hidden)]
         #[allow(non_snake_case, dead_code)]
-        pub fn #proof_fn(_: #msg_ident) {}
+        pub fn #proof_fn(_: #msg_tokens) {}
 
         ::inventory::submit! {
             guinea_core::contracts::PortStubMeta {
@@ -171,6 +161,89 @@ pub fn emit_binding_registration(item_trait: &ItemTrait) -> TokenStream {
             }
         }
     }
+}
+
+pub fn emit_store_dispatch_adapter(item_trait: &ItemTrait) -> TokenStream {
+    let trait_ident = &item_trait.ident;
+    let feature = feature_from_trait_name(&trait_ident.to_string());
+    let struct_name = format_ident!("{}Dispatch", crate::stub_gen::pascal_case(&feature));
+
+    let methods = parse_binding_methods(item_trait);
+
+    let mut fields = Vec::new();
+    let mut invoke_methods = Vec::new();
+    let mut trait_methods = Vec::new();
+    let mut forward_methods = Vec::new();
+
+    for method in &methods {
+        let m_name = format_ident!("{}", method.name);
+        let emit_name = format_ident!("emit_{}", method.name);
+        let field = format_ident!("{}_handler", method.name);
+        let arg_types: Vec<syn::Type> = method
+            .arg_types
+            .iter()
+            .map(|ty| syn::parse_str(ty).expect("binding handler arg type is valid Rust"))
+            .collect();
+        let arg_ids: Vec<syn::Ident> = (0..arg_types.len())
+            .map(|i| format_ident!("arg{}", i))
+            .collect();
+
+        fields.push(quote! {
+            #field: std::cell::RefCell<Option<Box<dyn Fn(#(#arg_types),*)>>>,
+        });
+        invoke_methods.push(quote! {
+            pub fn #emit_name(&self, #(#arg_ids: #arg_types),*) {
+                if let Some(handler) = self.#field.borrow().as_ref() {
+                    handler(#(#arg_ids),*);
+                }
+            }
+        });
+        trait_methods.push(quote! {
+            fn #m_name<F>(&self, handler: F) where F: Fn(#(#arg_types),*) + 'static {
+                *self.#field.borrow_mut() = Some(Box::new(handler));
+            }
+        });
+        forward_methods.push(quote! {
+            fn #m_name<F>(&self, handler: F) where F: Fn(#(#arg_types),*) + 'static {
+                (**self).#m_name(handler)
+            }
+        });
+    }
+
+    quote! {
+        #[derive(Default)]
+        pub struct #struct_name {
+            #(#fields)*
+        }
+
+        impl #struct_name {
+            #(#invoke_methods)*
+        }
+
+        impl #trait_ident for #struct_name {
+            #(#trait_methods)*
+        }
+
+        impl<T: #trait_ident + ?Sized> #trait_ident for std::rc::Rc<T> {
+            #(#forward_methods)*
+        }
+    }
+}
+
+fn port_send_msg_type(item_trait: &ItemTrait) -> Option<syn::Type> {
+    for item in &item_trait.items {
+        if let syn::TraitItem::Fn(method) = item {
+            if method.sig.ident != "send" {
+                continue;
+            }
+            for input in &method.sig.inputs {
+                if let syn::FnArg::Typed(pat_type) = input {
+                    return Some((*pat_type.ty).clone());
+                }
+            }
+        }
+    }
+    None
 }
 
 fn opt_str_tokens(value: &Option<String>) -> TokenStream {
@@ -315,11 +388,7 @@ fn extract_handler_arg_types(method: &syn::TraitItemFn) -> Vec<String> {
 }
 
 fn feature_from_trait_name(trait_name: &str) -> String {
-    // A handful of traits don't share their feature's plain plural name
-    // (e.g. `UiServiceDetailsPort` lives in the `services` feature alongside
-    // `UiServicesPort`/`UiServicesBindings`, not a separate `service_details`
-    // one) - the generic Ui/Port/Bindings stripping below can't know that on
-    // its own, so it's a short, explicit exception list instead.
+    
     if let Some(feature) = KNOWN_FEATURE_OVERRIDES
         .iter()
         .find_map(|(name, feature)| (*name == trait_name).then_some(*feature))
@@ -329,7 +398,8 @@ fn feature_from_trait_name(trait_name: &str) -> String {
 
     let stripped = trait_name.strip_prefix("Ui").unwrap_or(trait_name);
     let stripped = stripped
-        .strip_suffix("Bindings")
+        .strip_suffix("Actions")
+        .or_else(|| stripped.strip_suffix("Bindings"))
         .or_else(|| stripped.strip_suffix("Port"))
         .unwrap_or(stripped);
     to_snake_case(stripped)

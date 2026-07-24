@@ -9,6 +9,7 @@ proc-macro = true
 [dependencies]
 guinea-codegen.workspace = true
 proc-macro2 = "1.0"
+proc-macro-crate = "3.0"
 quote = "1.0"
 syn = { version = "2.0", features = ["full", "extra-traits"] }
 heck = "0.5"

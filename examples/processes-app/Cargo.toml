@@ -1,0 +1,23 @@
+# Self-contained example crate, deliberately OUTSIDE the workspace (empty
+# `[workspace]` below makes it its own root), the same way amethystate's
+# `examples/*` are laid out - an example is a real downstream consumer, so it
+# exercises guinea only through path deps and its public API, not as an
+# in-workspace member with crate-internal access.
+[package]
+name = "guinea-processes-app-example"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[workspace]
+
+[dependencies]
+guinea = { path = "../../crates/guinea" }
+guinea-core = { path = "../../crates/guinea-core" }
+guinea-macros = { path = "../../crates/guinea-macros" }
+windows-reactor = { git = "https://github.com/microsoft/windows-rs" }
+anyhow = "1.0"
+inventory = "0.3"
+
+[build-dependencies]
+windows-reactor-setup = { git = "https://github.com/microsoft/windows-rs" }

@@ -4,10 +4,7 @@ use syn::{ItemTrait, PathArguments, TraitItem, Type, TypeParamBound, WherePredic
 
 pub fn generate_binder(trait_item: &ItemTrait) -> TokenStream {
     let trait_ident = &trait_item.ident;
-    let base_name = trait_ident
-        .to_string()
-        .replace("Ui", "")
-        .replace("Bindings", "");
+    let base_name = trait_ident.to_string().replace("Actions", "");
 
     let binder_name = format_ident!("{}Binder", base_name);
     let partial_binder_name = format_ident!("{}PartialBinder", base_name);
@@ -116,9 +113,9 @@ pub fn generate_binder(trait_item: &ItemTrait) -> TokenStream {
 
         #[allow(non_camel_case_types)]
         impl<'p, A: 'static, P: #trait_ident> #binder_name<'p, A, P, #(#all_empty),*> {
-            pub fn new(addr: &guinea_core::actor::Addr<A>, port: &'p P) -> Self {
+            pub fn new(addr: &guinea_core::actor::Addr<A>, actions: &'p P) -> Self {
                 Self {
-                    inner: guinea_core::actor::binder::UiBinder::new(addr, port),
+                    inner: guinea_core::actor::binder::UiBinder::new(addr, actions),
                     _states: std::marker::PhantomData,
                 }
             }
@@ -137,9 +134,9 @@ pub fn generate_binder(trait_item: &ItemTrait) -> TokenStream {
 
         #[allow(non_camel_case_types)]
         impl<'p, A: 'static, P: #trait_ident> #partial_binder_name<'p, A, P> {
-            pub fn new(addr: &guinea_core::actor::Addr<A>, port: &'p P) -> Self {
+            pub fn new(addr: &guinea_core::actor::Addr<A>, actions: &'p P) -> Self {
                 Self {
-                    inner: guinea_core::actor::binder::UiBinder::new(addr, port),
+                    inner: guinea_core::actor::binder::UiBinder::new(addr, actions),
                 }
             }
 
