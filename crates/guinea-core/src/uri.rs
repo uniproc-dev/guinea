@@ -1,75 +1,45 @@
-use derive_more::{Deref, Display, From};
-use std::borrow::Cow;
 use std::fmt;
-use std::fmt::Display;
+use std::ops::Deref;
 
-#[derive(Clone, Debug, Default, PartialEq, Eq, Display, From, Deref)]
-pub struct SegmentName(Cow<'static, str>);
+pub use http::uri::{InvalidUri, PathAndQuery};
 
-impl Display for AppUri {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}://{}", self.context_name, self.base)
-    }
-}
-
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
-pub struct ContextlessAppUri {
-    pub segment: SegmentName,
-    pub capabilities: Cow<'static, [Cow<'static, str>]>,
-}
-
-impl Display for ContextlessAppUri {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.segment)?;
-
-        if !self.capabilities.is_empty() {
-            let caps = self.capabilities.join(",");
-            write!(f, "?capabilities={}", caps)?;
-        }
-
-        Ok(())
-    }
-}
-
-impl ContextlessAppUri {
-    pub fn new(
-        segment: impl Into<SegmentName>,
-        capabilities: impl Into<Cow<'static, [Cow<'static, str>]>>,
-    ) -> Self {
-        Self {
-            segment: segment.into(),
-            capabilities: capabilities.into(),
-        }
-    }
-    pub fn with_context(self, context_name: impl Into<Cow<'static, str>>) -> AppUri {
-        AppUri {
-            context_name: context_name.into(),
-            base: self,
-        }
-    }
-}
-
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
-pub struct AppUri {
-    pub context_name: Cow<'static, str>,
-    pub base: ContextlessAppUri,
-}
+/// An in-process route address - a bare path (+ optional query string), no
+/// scheme or host (this never crosses the network; it only identifies
+/// "which segment, with which params" within the running app). Wraps
+/// `http::uri::PathAndQuery` rather than a hand-rolled struct, so query
+/// strings (deep-link params) are real, correctly-parsed URI syntax instead
+/// of a bespoke reimplementation - `Deref`s to it for `.path()`/`.query()`;
+/// `segments`/`segment` are this app's own convenience on top, for reading
+/// out positional path segments (e.g. this app's `:context` convention).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct AppUri(PathAndQuery);
 
 impl AppUri {
-    pub fn new(
-        context_name: impl Into<Cow<'static, str>>,
-        segment: impl Into<SegmentName>,
-        capabilities: impl Into<Cow<'static, [Cow<'static, str>]>>,
-    ) -> Self {
-        Self {
-            base: ContextlessAppUri::new(segment, capabilities),
-            context_name: context_name.into(),
-        }
+    pub fn parse(s: impl AsRef<str>) -> Result<Self, InvalidUri> {
+        Ok(Self(s.as_ref().parse()?))
     }
-    pub fn from_parts(context_name: impl Into<Cow<'static, str>>, base: ContextlessAppUri) -> Self {
-        Self {
-            context_name: context_name.into(),
-            base,
-        }
+
+    /// Non-empty path segments, in order - `/ubuntu/processes` ->
+    /// `["ubuntu", "processes"]`.
+    pub fn segments(&self) -> impl Iterator<Item = &str> {
+        self.path().split('/').filter(|s| !s.is_empty())
+    }
+
+    /// The `n`th non-empty path segment (0-indexed).
+    pub fn segment(&self, n: usize) -> Option<&str> {
+        self.segments().nth(n)
+    }
+}
+
+impl Deref for AppUri {
+    type Target = PathAndQuery;
+    fn deref(&self) -> &PathAndQuery {
+        &self.0
+    }
+}
+
+impl fmt::Display for AppUri {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.0)
     }
 }

@@ -8,7 +8,10 @@ use super::contracts::{ProcessesBinder, ProcessesReducer};
 pub fn install(ctx: &FeatureInitContext, uri: &AppUri) -> anyhow::Result<()> {
 
     let addr = Addr::new_managed_scoped(
-        ProcessActor::new(uri.context_name.to_string(), ctx.port::<ProcessesReducer>()),
+        ProcessActor::new(
+            uri.segment(0).expect("route always carries a :context segment").to_string(),
+            ctx.port::<ProcessesReducer>(),
+        ),
         ctx.token.clone(),
     );
 

@@ -1,4 +1,3 @@
-use crate::feature::FeatureComponent;
 use guinea_core::actor::{Addr, ManagedActor, UiThreadToken};
 use guinea_core::lifecycle_tracker::LifecycleTracker;
 

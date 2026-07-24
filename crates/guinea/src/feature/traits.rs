@@ -1,17 +1,8 @@
 use crate::app::Window;
-use crate::feature::FeatureContextState;
 use crate::lifecycle_tracker::{AppLifecycle, WindowLifecycle};
-use crate::navigation::{RouteActivated, RouteDeactivated};
 use crate::reactor::Reactor;
-use crate::uri::AppUri;
 use guinea_core::SharedState;
-use guinea_core::actor::Addr;
-use guinea_core::actor::Context;
 use guinea_core::actor::UiThreadToken;
-use guinea_core::actor::event_bus::EventBus;
-use guinea_core::actor::event_bus::builder::EventSubscription;
-use guinea_core::lifecycle_tracker::LifecycleTracker;
-use guinea_core::trace::in_named_scope;
 use std::marker::PhantomData;
 
 pub struct WindowFeatureInitContext<'a, TWindow: Window> {
@@ -88,56 +79,6 @@ pub trait WindowFeature<TWindow: Window> {
 
 pub trait AppFeature {
     fn install(&mut self, ctx: &mut AppFeatureInitContext) -> anyhow::Result<()>;
-}
-
-pub trait FeatureComponent: Sized + 'static {
-    fn context_state(&mut self) -> &mut FeatureContextState;
-    fn on_activated(&mut self, uri: &AppUri, ctx: &Context<Self>);
-    fn on_deactivated(&mut self, previous_uri: &AppUri, ctx: &Context<Self>);
-}
-
-pub trait FromMessage<Args> {
-    fn from_msg(args: Args) -> Self;
-}
-
-pub struct Events<T>(PhantomData<T>);
-
-impl<A, T> EventSubscription<A> for Events<T>
-where
-    A: FeatureComponent + 'static,
-    T: EventSubscription<A>,
-{
-    fn subscribe_into(addr: Addr<A>, tracker: &impl LifecycleTracker) {
-        let a_act = addr.clone();
-        EventBus::subscribe_fn::<RouteActivated>(
-            move |msg| {
-                a_act.apply(move |actor, ctx| {
-                    in_named_scope("framework.navigation.activate", None, None, || {
-                        if let Some(key) = actor.context_state().handle_activation(&msg) {
-                            actor.on_activated(key, ctx);
-                        }
-                    });
-                });
-            },
-            tracker,
-        );
-
-        let a_deact = addr.clone();
-        EventBus::subscribe_fn::<RouteDeactivated>(
-            move |msg| {
-                a_deact.apply(move |actor, ctx| {
-                    in_named_scope("framework.navigation.deactivate", None, None, || {
-                        if actor.context_state().handle_deactivation(&msg) {
-                            actor.on_deactivated(&msg.uri, ctx);
-                        }
-                    });
-                });
-            },
-            tracker,
-        );
-
-        T::subscribe_into(addr, tracker);
-    }
 }
 
 pub trait IntoAppFeature {

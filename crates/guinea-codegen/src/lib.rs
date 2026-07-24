@@ -2,11 +2,7 @@
 #![cfg_attr(coverage, coverage(off))]
 
 pub mod actor_manifest;
-pub mod bindings_gen;
 pub mod contracts;
-pub mod l10n;
-pub mod slint_parser;
-pub mod store_adapter_gen;
 pub mod stub_gen;
 pub mod trace;
 pub mod util;

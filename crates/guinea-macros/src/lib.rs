@@ -1,15 +1,13 @@
 use proc_macro::TokenStream;
 use syn::{ItemFn, ItemImpl, ItemTrait, parse_macro_input};
 
-mod adapter;
 mod binder_gen;
 mod capability;
 mod contract_macros;
-mod dto;
 mod features;
 mod handler;
 mod reducer;
-mod routable;
+mod routes_dsl;
 
 #[proc_macro_attribute]
 pub fn port(_attr: TokenStream, item: TokenStream) -> TokenStream {
@@ -31,25 +29,8 @@ pub fn actor_manifest(attr: TokenStream, item: TokenStream) -> TokenStream {
 }
 
 #[proc_macro_attribute]
-pub fn port_adapter(attr: TokenStream, item: TokenStream) -> TokenStream {
-    let impl_block = parse_macro_input!(item as ItemImpl);
-    adapter::port_adapter_impl(attr, impl_block)
-}
-
-#[proc_macro_attribute]
-pub fn bindings_adapter(attr: TokenStream, item: TokenStream) -> TokenStream {
-    let impl_block = parse_macro_input!(item as ItemImpl);
-    adapter::bindings_adapter_impl(attr, impl_block)
-}
-
-#[proc_macro_attribute]
 pub fn capability(attr: TokenStream, item: TokenStream) -> TokenStream {
     capability::capability_impl(attr, item)
-}
-
-#[proc_macro_attribute]
-pub fn slint_dto(_attr: TokenStream, item: TokenStream) -> TokenStream {
-    dto::slint_dto_impl(item)
 }
 
 #[proc_macro_attribute]
@@ -62,9 +43,16 @@ pub fn app_feature(args: TokenStream, input: TokenStream) -> TokenStream {
     features::app_feature_impl(args, input)
 }
 
-#[proc_macro_derive(Routable, attributes(route, layout, end_layout))]
-pub fn derive_routable(input: TokenStream) -> TokenStream {
-    routable::derive_routable_impl(input)
+/// `routes! { Route { layout(TabsLayout) { page(Processes, "/:context/processes")
+/// { context: String } ... } } }` - the tree's `{}` nesting *is* the segment
+/// chain (no attribute stack to track); `page(...)`'s type also names the
+/// generated variant, so there's one name per leaf, not two kept in sync by
+/// hand. Generates the enum itself plus `path`/`parse` (string <-> enum),
+/// `RouteChain` (enum -> segment chain), and `ToUri` (enum -> `AppUri`, just
+/// the generated `.path()` string parsed - no per-app glue needed).
+#[proc_macro]
+pub fn routes(input: TokenStream) -> TokenStream {
+    routes_dsl::routes_impl(input)
 }
 
 #[proc_macro_attribute]

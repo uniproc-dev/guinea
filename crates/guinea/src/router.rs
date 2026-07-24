@@ -486,7 +486,7 @@ impl Router {
 mod tests {
     use super::*;
     use guinea_core::actor::UiThreadToken;
-    use guinea_macros::{Routable, ReducerState, reducer};
+    use guinea_macros::{ReducerState, reducer, routes};
 
     #[derive(ReducerState)]
     struct ProcessesViewState {
@@ -500,17 +500,17 @@ mod tests {
 
     fn install_processes(ctx: &FeatureInitContext, uri: &AppUri) -> anyhow::Result<()> {
         ctx.scope
-            .push::<ProcessesReducer>(uri.context_name.to_string());
+            .push::<ProcessesReducer>(uri.segment(0).expect("test uri always has a segment").to_string());
         Ok(())
     }
 
-    #[derive(Routable, Debug, PartialEq)]
-    enum AppRoute {
-        #[route("/:context/processes")]
-        Processes { context: String },
-    }
-
     struct Processes;
+
+    routes! {
+        AppRoute {
+            page(Processes, "/:context/processes") { context: String }
+        }
+    }
 
     impl Page for Processes {
         fn install(ctx: &FeatureInitContext, uri: &AppUri) -> anyhow::Result<()> {
@@ -542,7 +542,7 @@ mod tests {
     fn activating_a_page_runs_install_and_view_can_use_it() {
         let token = UiThreadToken::dangerously_create_token_unchecked();
         let router = Router::new(token);
-        let uri = AppUri::new("ubuntu", std::borrow::Cow::Borrowed("processes"), vec![]);
+        let uri = AppUri::parse("/ubuntu/processes").unwrap();
 
         let scope = router.activate::<Processes>(&uri).expect("activate");
         assert!(router.active_scope().is_some());
@@ -572,7 +572,7 @@ mod tests {
     fn push_after_first_render_requests_a_rerender() {
         let token = UiThreadToken::dangerously_create_token_unchecked();
         let router = Router::new(token);
-        let uri = AppUri::new("ubuntu", std::borrow::Cow::Borrowed("processes"), vec![]);
+        let uri = AppUri::parse("/ubuntu/processes").unwrap();
         let scope = router.activate::<Processes>(&uri).expect("activate");
 
         let rerender_count = Rc::new(std::cell::Cell::new(0));
@@ -655,7 +655,7 @@ mod tests {
     fn navigating_between_siblings_keeps_the_shared_ancestor_scope() {
         let token = UiThreadToken::dangerously_create_token_unchecked();
         let router = Router::new(token);
-        let uri = AppUri::new("ubuntu", std::borrow::Cow::Borrowed("processes"), vec![]);
+        let uri = AppUri::parse("/ubuntu/processes").unwrap();
 
         router
             .navigate(
@@ -709,7 +709,7 @@ mod tests {
                 TabRoute::Processes {
                     context: "ubuntu".to_string(),
                 },
-                &AppUri::new("ubuntu", std::borrow::Cow::Borrowed("processes"), vec![]),
+                &AppUri::parse("/ubuntu/processes").unwrap(),
             )
             .expect("navigate to processes/ubuntu");
         let leaf_scope_1 = router.active_scope().unwrap();
@@ -719,7 +719,7 @@ mod tests {
                 TabRoute::Processes {
                     context: "fedora".to_string(),
                 },
-                &AppUri::new("fedora", std::borrow::Cow::Borrowed("processes"), vec![]),
+                &AppUri::parse("/fedora/processes").unwrap(),
             )
             .expect("navigate to processes/fedora");
         let leaf_scope_2 = router.active_scope().unwrap();
@@ -744,7 +744,7 @@ mod tests {
     }
 
     #[test]
-    fn derive_routable_layout_attrs_produce_the_right_chain() {
+    fn routes_macro_nesting_produces_the_right_chain() {
         use std::any::TypeId;
 
         struct Services;
@@ -755,15 +755,13 @@ mod tests {
             }
         }
 
-        #[derive(Routable, Clone, PartialEq)]
-        enum DerivedRoute {
-            #[layout(ProcsTab)]
-            #[route("/tab/processes/:context")]
-            Processes { context: String },
-
-            #[route("/tab/services/:context")]
-            #[end_layout]
-            Services { context: String },
+        routes! {
+            DerivedRoute {
+                layout(ProcsTab) {
+                    page(Processes, "/tab/processes/:context") { context: String }
+                    page(Services, "/tab/services/:context") { context: String }
+                }
+            }
         }
 
         let processes_chain = DerivedRoute::Processes {
