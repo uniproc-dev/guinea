@@ -2,6 +2,7 @@
 //! helper it reads, and `#[derive(ReducerState)]` (terse `Default`/`Clone`/
 //! `PartialEq`/`Debug` for a reducer's state).
 
+use heck::ToUpperCamelCase;
 use proc_macro::TokenStream;
 use quote::{format_ident, quote};
 use syn::{
@@ -15,8 +16,14 @@ pub fn reducer_impl(input: TokenStream) -> TokenStream {
 }
 
 fn expand_reducer(mut func: ItemFn) -> syn::Result<TokenStream> {
-    // The fn name *is* the feature marker type.
-    let marker = func.sig.ident.clone();
+    // The marker type is derived from the fn name (snake_case -> UpperCamelCase),
+    // not the fn name itself - a fn literally named like a type is confusing,
+    // and the fn symbol never escapes this expansion anyway.
+    let marker = format_ident!(
+        "{}",
+        func.sig.ident.to_string().to_upper_camel_case(),
+        span = func.sig.ident.span()
+    );
 
     if func.sig.inputs.len() != 2 {
         return Err(Error::new(

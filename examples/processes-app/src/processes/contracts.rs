@@ -24,7 +24,7 @@ pub struct ProcessesViewState {
 
 #[reducer]
 #[dispatch(ProcessesActions)]
-pub fn ProcessesReducer(state: &mut ProcessesViewState, msg: ProcessesMessages) {
+pub fn processes_reducer(state: &mut ProcessesViewState, msg: ProcessesMessages) {
     match msg {
         ProcessesMessages::SetItems(items) => state.items = items,
     }

@@ -9,6 +9,6 @@ pub struct TabsViewState {
 }
 
 #[reducer]
-pub fn TabsReducer(state: &mut TabsViewState, msg: i32) {
+pub fn tabs_reducer(state: &mut TabsViewState, msg: i32) {
     state.install_count = msg;
 }

@@ -16,7 +16,7 @@ pub struct ServicesViewState {
 }
 
 #[reducer]
-pub fn ServicesReducer(state: &mut ServicesViewState, msg: ServicesMessages) {
+pub fn services_reducer(state: &mut ServicesViewState, msg: ServicesMessages) {
     match msg {
         ServicesMessages::SetItems(items) => state.items = items,
     }

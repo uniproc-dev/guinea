@@ -483,7 +483,7 @@ mod tests {
     }
 
     #[reducer]
-    fn ProcessesReducer(state: &mut ProcessesViewState, msg: String) {
+    fn processes_reducer(state: &mut ProcessesViewState, msg: String) {
         state.seeded_from = msg;
     }
 
@@ -625,7 +625,7 @@ mod tests {
     }
 
     #[reducer]
-    fn TabsReducer(state: &mut TabsViewState, msg: i32) {
+    fn tabs_reducer(state: &mut TabsViewState, msg: i32) {
         state.install_count = msg;
     }
 
@@ -822,17 +822,17 @@ mod reducer_macro_tests {
     use guinea_core::scope::{NoopActions, Reducer};
     use guinea_macros::{ReducerState, reducer};
 
-    // Proves `#[reducer]` turns the reduce fn into a marker (`WidgetReducer`
-    // the fn -> `WidgetReducer` the type) with a full `impl Reducer`, inferring
-    // `State`/`Push` from the signature and defaulting `Actions` to
-    // `NoopActions` when there's no `#[dispatch]`.
+    // Proves `#[reducer]` turns the reduce fn into a marker (fn `widget_reducer`
+    // -> type `WidgetReducer`, snake_case name UpperCamelCased) with a full
+    // `impl Reducer`, inferring `State`/`Push` from the signature and
+    // defaulting `Actions` to `NoopActions` when there's no `#[dispatch]`.
     #[derive(ReducerState)]
     struct WidgetState {
         value: i32,
     }
 
     #[reducer]
-    fn WidgetReducer(state: &mut WidgetState, msg: i32) {
+    fn widget_reducer(state: &mut WidgetState, msg: i32) {
         state.value = msg;
     }
 
