@@ -4,7 +4,7 @@ use anyhow::bail;
 use std::path::PathBuf;
 use tracing::debug;
 
-#[amethystate(prefix = "settings.persistence")]
+#[amethystate(prefix = "__internal__.settings.persistence")]
 pub struct SettingsPersistenceSettings {
     #[amestate(default = 300u64)]
     pub save_debounce_ms: u64,

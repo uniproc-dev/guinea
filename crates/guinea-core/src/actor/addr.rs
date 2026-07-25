@@ -188,19 +188,17 @@ impl<A: 'static> Addr<A> {
         self.counter.clone()
     }
 
-    /// Drops this actor's `REGISTRY` entry - the strong `Addr` clone `new`
-    /// stashed there for `spawn_bg`'s completion callback to find by id.
-    /// Without this, that clone outlives every other `Addr<A>` handle
-    /// forever (nothing else ever removes it), so the actor's `Rc<RefCell<A>>`
-    /// never reaches a zero refcount no matter how many other handles are
-    /// dropped. Route/component-scoped actors call this from their owning
-    /// `Store` cell's teardown; window/app-scoped actors (meant to live for
-    /// the process's lifetime) have no reason to call it.
-    ///
-    /// Any `spawn_bg` future still in flight for this actor when its scope
-    /// tears down simply finds nothing at this id and delivers its result
-    /// nowhere - the same outcome `Store::own_task` aborting it directly
-    /// would produce, just reached passively instead of by cancellation.
+    pub fn id(&self) -> usize {
+        self.id
+    }
+
+    pub fn debug_snapshot(&self) -> String
+    where
+        A: std::fmt::Debug,
+    {
+        format!("{:?}", self.state.borrow())
+    }
+
     pub fn dispose(&self) {
         REGISTRY.with(|reg| {
             reg.borrow_mut().remove(&self.id);

@@ -36,3 +36,4 @@ uuid.workspace = true
 guinea-macros.workspace = true
 inventory.workspace = true
 guinea-core = { workspace = true, features = ["test-utils"] }
+amethystate = { workspace = true, features = ["test-utils"] }

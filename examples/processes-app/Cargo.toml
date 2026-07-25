@@ -10,6 +10,7 @@ publish = false
 guinea = { path = "../../crates/guinea", features = ["widgets"] }
 guinea-core = { path = "../../crates/guinea-core" }
 guinea-macros = { path = "../../crates/guinea-macros" }
+amethystate = "0.9.2"
 anyhow = "1.0"
 inventory = "0.3"
 fluent-templates = "0.14.0"

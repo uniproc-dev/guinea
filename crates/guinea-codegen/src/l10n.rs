@@ -132,6 +132,7 @@ pub fn generate_l10n_accessors(
     });
 
     quote! {
+        #[allow(dead_code)]
         impl #resolver_path {
             #(#methods)*
         }

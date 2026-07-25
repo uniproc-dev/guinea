@@ -16,7 +16,6 @@ pub mod event_bus;
 
 pub mod binder;
 mod macros;
-#[cfg(feature = "test-utils")]
 pub mod registry;
 
 pub type UiTask = Box<dyn FnOnce() + Send>;

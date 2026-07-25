@@ -242,11 +242,8 @@ pub fn routes_impl(input: TokenStream1) -> TokenStream1 {
                 quote! { #field.to_string() }
             }
         });
-        let pattern = if field_pats.is_empty() {
-            quote! { #enum_ident::#ident }
-        } else {
-            quote! { #enum_ident::#ident { #(#field_pats),* } }
-        };
+
+        let pattern = quote! { #enum_ident::#ident { #(#field_pats),* } };
         quote! {
             #pattern => {
                 let parts: Vec<String> = vec![#(#parts),*];
@@ -268,11 +265,7 @@ pub fn routes_impl(input: TokenStream1) -> TokenStream1 {
             }
         });
         let field_inits: Vec<&Ident> = leaf.fields.iter().map(|(name, _)| name).collect();
-        let construct = if field_inits.is_empty() {
-            quote! { #enum_ident::#ident }
-        } else {
-            quote! { #enum_ident::#ident { #(#field_inits),* } }
-        };
+        let construct = quote! { #enum_ident::#ident { #(#field_inits),* } };
         quote! {
             if parts.len() == #expected_len && [#(#checks),*].iter().all(|c| *c) {
                 #(#binds)*
@@ -297,13 +290,9 @@ pub fn routes_impl(input: TokenStream1) -> TokenStream1 {
         }
     });
 
-    let chain_arms = leaves.iter().zip(&variant_idents).map(|(leaf, ident)| {
+    let chain_arms = leaves.iter().zip(&variant_idents).map(|(_leaf, ident)| {
         let const_name = format_ident!("__routes_chain_{}_{}", enum_ident, ident);
-        if leaf.fields.is_empty() {
-            quote! { #enum_ident::#ident => &#const_name }
-        } else {
-            quote! { #enum_ident::#ident { .. } => &#const_name }
-        }
+        quote! { #enum_ident::#ident { .. } => &#const_name }
     });
 
     let expanded = quote! {

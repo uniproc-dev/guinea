@@ -475,6 +475,7 @@ dependencies = [
 name = "guinea-processes-app-example"
 version = "0.1.0"
 dependencies = [
+ "amethystate",
  "anyhow",
  "fluent-bundle",
  "fluent-templates",

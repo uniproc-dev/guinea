@@ -1,7 +1,7 @@
 use crate::lifecycle_tracker::AppLifecycle;
 use crate::reactor::Reactor;
 use guinea_core::SharedState;
-use guinea_core::actor::UiThreadToken;
+use guinea_core::actor::{Addr, ManagedActor, UiThreadToken};
 use guinea_core::actor::event_bus::EventBus;
 use guinea_core::actor::event_bus::subscribe::Event;
 
@@ -23,6 +23,8 @@ pub struct FeatureInitContext {
     pub scope: std::rc::Rc<guinea_core::scope::Scope>,
     pub token: UiThreadToken,
     pub event_bus: std::rc::Rc<EventBus>,
+    pub store: amethystate::DefaultStore,
+    pub debug_registry: std::rc::Rc<guinea_core::actor::registry::DebugRegistry>,
 }
 
 impl FeatureInitContext {
@@ -39,6 +41,13 @@ impl FeatureInitContext {
     pub fn subscribe<M: Event>(&self, callback: impl Fn(M) + 'static) {
         let id = self.event_bus.subscribe_fn(callback);
         self.scope.own_subscription(self.event_bus.clone(), id);
+    }
+
+    pub fn spawn_actor<A: ManagedActor + std::fmt::Debug + 'static>(&self, actor: A) -> Addr<A> {
+        let addr = Addr::new_managed_scoped(actor, self.token.clone());
+        self.scope.own_actor(addr.clone());
+        self.debug_registry.register(&addr);
+        addr
     }
 }
 
