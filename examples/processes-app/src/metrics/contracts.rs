@@ -1,5 +1,5 @@
 use guinea_macros::{ReducerState, port, reducer};
-use guinea_widgets::chart::RingSeries;
+use guinea::widgets::chart::RingSeries;
 
 #[derive(Clone)]
 pub enum MetricsMsg {

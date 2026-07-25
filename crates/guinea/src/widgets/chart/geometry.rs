@@ -34,7 +34,7 @@ pub fn nearest_point(points: &[(u64, f32)], target: u64) -> Option<(u64, f32)> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::chart::Interpolation;
+    use crate::widgets::chart::Interpolation;
     use windows_canvas::ColorF;
 
     fn series(points: &[(u64, f32)]) -> Series {

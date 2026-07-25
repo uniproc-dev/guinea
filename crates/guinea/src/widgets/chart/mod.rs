@@ -8,7 +8,7 @@ use std::cell::Cell;
 use std::rc::Rc;
 use windows_canvas::{Brush, ColorF, GpuDevice, GradientStop, Path, PathBuilder, Rect, Result as CanvasResult, Vector2};
 
-use crate::color::{hex, hex_alpha};
+use crate::widgets::color::{hex, hex_alpha};
 use windows_reactor::{CanvasSwapChain, DrawContext, Element, ElementExt, PointerEventInfo, RenderCx, swap_chain_panel};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

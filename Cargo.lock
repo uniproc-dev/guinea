@@ -308,6 +308,7 @@ dependencies = [
  "tracing",
  "uuid",
  "windows",
+ "windows-canvas",
  "windows-reactor",
 ]
 
@@ -384,16 +385,6 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "uuid",
-]
-
-[[package]]
-name = "guinea-widgets"
-version = "0.1.0"
-dependencies = [
- "guinea-core",
- "tracing",
- "windows-canvas",
- "windows-reactor",
 ]
 
 [[package]]

@@ -1,8 +1,8 @@
 use guinea::feature::FeatureInitContext;
 use guinea::router::{Page, PageCx};
 use guinea::uri::AppUri;
-use guinea_widgets::chart::{HoverInfo, Interpolation, Series, line_chart};
-use guinea_widgets::color::{hex, hex_alpha};
+use guinea::widgets::chart::{HoverInfo, Interpolation, Series, line_chart};
+use guinea::widgets::color::{hex, hex_alpha};
 use windows_canvas::ColorF;
 use windows_reactor::{Element, ElementExt, text_block, title, vstack};
 

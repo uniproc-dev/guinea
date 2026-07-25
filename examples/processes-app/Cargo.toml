@@ -7,10 +7,9 @@ publish = false
 [workspace]
 
 [dependencies]
-guinea = { path = "../../crates/guinea" }
+guinea = { path = "../../crates/guinea", features = ["widgets"] }
 guinea-core = { path = "../../crates/guinea-core" }
 guinea-macros = { path = "../../crates/guinea-macros" }
-guinea-widgets = { path = "../../crates/guinea-widgets" }
 anyhow = "1.0"
 inventory = "0.3"
 fluent-templates = "0.14.0"

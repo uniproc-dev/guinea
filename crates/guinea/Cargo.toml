@@ -19,6 +19,13 @@ amethystate.workspace = true
 [target.'cfg(target_os = "windows")'.dependencies]
 windows.workspace = true
 windows-reactor.workspace = true
+windows-canvas = { workspace = true, optional = true }
+
+[features]
+# Table/chart widgets (crates/guinea/src/widgets) - opt-in since they pull in
+# windows-canvas and windows-reactor's `canvas` feature, which most apps that
+# only need routing/actors don't want.
+widgets = ["windows-reactor/canvas", "dep:windows-canvas"]
 
 [lints]
 workspace = true
