@@ -1,11 +1,17 @@
 use guinea::feature::FeatureInitContext;
 use guinea::router::{Page, PageCx};
 use guinea::uri::AppUri;
-use windows_reactor::{Element, button, hstack, text_block, title, vstack};
+use guinea_widgets::table::{ColumnSpec, table};
+use windows_reactor::{Element, button, text_block, title, vstack};
 
 use super::contracts::ProcessesReducer;
 
 pub struct Processes;
+
+struct Row {
+    pid: u32,
+    label: String,
+}
 
 impl Page for Processes {
     fn install(ctx: &FeatureInitContext, uri: &AppUri) -> anyhow::Result<()> {
@@ -15,22 +21,25 @@ impl Page for Processes {
     fn view(cx: &mut PageCx) -> Element {
         let (state, dispatch) = cx.use_reducer::<ProcessesReducer>();
 
-        let rows: Vec<Element> = state
+        let rows: Vec<Row> = state
             .items
             .iter()
-            .map(|row| {
-                let pid = parse_pid(row);
-                let dispatch = dispatch.clone();
-                hstack((
-                    text_block(row.clone()),
-                    button("Kill").on_click(move || dispatch.emit_on_kill(pid)),
-                ))
-                .spacing(12.0)
-                .into()
-            })
+            .map(|item| Row { pid: parse_pid(item), label: item.clone() })
             .collect();
 
-        vstack((title("Processes"), vstack(rows).spacing(6.0)))
+        let columns = vec![
+            ColumnSpec::new("name", "Process", 280, |row: &Row| text_block(row.label.clone()).into()),
+            ColumnSpec::new("actions", "", 80, {
+                let dispatch = dispatch.clone();
+                move |row: &Row| {
+                    let pid = row.pid;
+                    let dispatch = dispatch.clone();
+                    button("Kill").on_click(move || dispatch.emit_on_kill(pid)).into()
+                }
+            }),
+        ];
+
+        vstack((title("Processes"), table(cx, rows, columns, |row: &Row| row.pid.to_string())))
             .spacing(16.0)
             .into()
     }

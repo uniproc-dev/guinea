@@ -41,11 +41,28 @@ impl ScopeSpec {
     }
 }
 
+/// How many `.child()` calls deep a causality chain may nest its `tracing`
+/// span before `child()` re-roots it (see the field doc on `DispatchMeta::
+/// depth`). Picked generously above any real cause→effect chain (a handful
+/// of hops) but well short of "runs forever" - a perpetually
+/// self-rescheduling actor (e.g. a heartbeat/poll loop rearming itself via
+/// `Context::spawn_bg` from within its own handler) is exactly the case
+/// this guards against.
+const MAX_CAUSALITY_CHAIN_DEPTH: u32 = 8;
+
 #[derive(Clone)]
 pub struct DispatchMeta {
     pub op_id: u64,
     pub correlation_id: Option<String>,
     pub span: Span,
+    /// Number of `.child()` hops since the last root (real or re-rooted).
+    /// Unbounded for a finite cause→effect chain (fine, stays small); for a
+    /// perpetually self-rescheduling loop this would otherwise grow forever
+    /// - `.child()` re-roots the span once this hits
+    /// `MAX_CAUSALITY_CHAIN_DEPTH`, so the printed span-nesting prefix
+    /// doesn't grow unbounded (`correlation_id` is preserved across the
+    /// reset, so the lineage is still traceable, just no longer nested).
+    depth: u32,
 }
 
 #[derive(Clone, Debug)]
@@ -102,6 +119,7 @@ impl DispatchMeta {
             op_id,
             correlation_id: Some(correlation_id),
             span,
+            depth: 0,
         }
     }
 
@@ -112,6 +130,20 @@ impl DispatchMeta {
         target: Option<String>,
     ) -> Self {
         let correlation_id = self.correlation_id.clone();
+
+        if self.depth >= MAX_CAUSALITY_CHAIN_DEPTH {
+            // Re-root rather than nest further: same lineage (correlation_id
+            // carries over), fresh op_id and span parentage, depth back to 0.
+            let op_id = next_op_id();
+            let span = span_for_scope(scope, op_id, correlation_id.as_deref(), target_fields, target.as_deref());
+            return Self {
+                op_id,
+                correlation_id,
+                span,
+                depth: 0,
+            };
+        }
+
         let span = span_for_child(
             &self.span,
             scope,
@@ -125,6 +157,7 @@ impl DispatchMeta {
             op_id: self.op_id,
             correlation_id,
             span,
+            depth: self.depth + 1,
         }
     }
 }
@@ -397,4 +430,53 @@ fn extend_strings(dst: &mut Vec<String>, value: Option<&Value>) {
 fn dedup(values: &mut Vec<String>) {
     values.sort();
     values.dedup();
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn child_chain_shorter_than_the_cap_keeps_op_id_and_grows_depth() {
+        let root = DispatchMeta::root("test.root", None, None);
+        assert_eq!(root.depth, 0);
+
+        let mut meta = root.clone();
+        for expected_depth in 1..MAX_CAUSALITY_CHAIN_DEPTH {
+            meta = meta.child("test.child", None, None);
+            assert_eq!(meta.depth, expected_depth);
+            assert_eq!(meta.op_id, root.op_id, "still the same lineage, not yet re-rooted");
+            assert_eq!(meta.correlation_id, root.correlation_id);
+        }
+    }
+
+    #[test]
+    fn child_chain_past_the_cap_re_roots_but_keeps_the_correlation_id() {
+        // A perpetually self-rescheduling actor (heartbeat/poll loop
+        // rearming itself from within its own handler) calls `.child()`
+        // forever - this must not let `depth` (and the underlying span
+        // nesting) grow unbounded.
+        let root = DispatchMeta::root("test.root", None, None);
+
+        let mut meta = root.clone();
+        for _ in 0..(MAX_CAUSALITY_CHAIN_DEPTH + 5) {
+            meta = meta.child("test.child", None, None);
+        }
+
+        assert_eq!(meta.depth, 4, "re-rooted once at the cap, then grew 4 more");
+        assert_ne!(meta.op_id, root.op_id, "re-rooting assigns a fresh op_id");
+        assert_eq!(
+            meta.correlation_id, root.correlation_id,
+            "correlation_id survives re-rooting - the lineage is still traceable"
+        );
+    }
+
+    #[test]
+    fn many_generations_of_re_rooting_never_grows_depth_past_the_cap() {
+        let mut meta = DispatchMeta::root("test.root", None, None);
+        for _ in 0..10_000 {
+            meta = meta.child("test.tick", None, None);
+            assert!(meta.depth <= MAX_CAUSALITY_CHAIN_DEPTH);
+        }
+    }
 }

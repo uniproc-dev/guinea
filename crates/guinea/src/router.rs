@@ -250,10 +250,20 @@ impl<'a> SegmentCx<'a> {
 
         let owner_for_effect = owner.clone();
         self.cx.use_effect_with_cleanup((), move || {
-            let owner_for_callback = owner_for_effect.clone();
+            // Weak, not a clone of `owner_for_effect`: a strong `Rc<Scope>` here
+            // would close a cycle back to the very `Scope` whose `cells` map
+            // stores this closure (Scope -> cells -> listeners -> closure ->
+            // Rc<Scope>), so the refcount would never reach zero and the scope
+            // (and everything it owns - actors included) would leak forever,
+            // regardless of what the router does on navigation. If the scope is
+            // already gone by the time this fires, there's nothing to notify.
+            let owner_for_callback = Rc::downgrade(&owner_for_effect);
             let set_current = set_current.clone();
             let subscription = owner_for_effect.subscribe::<R>(move || {
-                let latest = owner_for_callback.state::<R>().borrow().clone();
+                let Some(owner) = owner_for_callback.upgrade() else {
+                    return;
+                };
+                let latest = owner.state::<R>().borrow().clone();
                 set_current.call(latest);
             });
             Some(move || drop(subscription))
@@ -614,6 +624,27 @@ mod tests {
             rerender_count.get() > 0,
             "a push after the first render should have requested a re-render, \
              not just updated a cell nothing is watching"
+        );
+    }
+
+    #[test]
+    fn navigating_to_the_same_route_twice_in_a_row_keeps_the_same_scope_identity() {
+        // Mirrors what `RouterRx::render` actually does: it calls
+        // `Router::navigate` on *every* render, not just when the route
+        // value changes (the caller doesn't know whether it changed).
+        let token = UiThreadToken::dangerously_create_token_unchecked();
+        let router = Router::new(token);
+        let uri = AppUri::parse("/ubuntu/processes").unwrap();
+        let route = AppRoute::Processes { context: "ubuntu".to_string() };
+
+        let scope_a = router.navigate(route.clone(), &uri).expect("first navigate");
+        let scope_b = router.navigate(route, &uri).expect("second navigate, same route value");
+
+        assert!(
+            Rc::ptr_eq(&scope_a, &scope_b),
+            "re-navigating to an unchanged route must reuse the exact same Scope, \
+             not silently reinstall it - anything accumulating state in that Scope \
+             (e.g. a live-updating chart) would otherwise reset on every single render"
         );
     }
 

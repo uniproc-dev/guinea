@@ -10,6 +10,7 @@ members = [
     "crates/guinea-core",
     "crates/guinea-macros",
     "crates/guinea",
+    "crates/guinea-widgets",
 ]
 
 [workspace.dependencies]
@@ -18,6 +19,7 @@ guinea-codegen = { path = "crates/guinea-codegen" }
 guinea-core = { path = "crates/guinea-core" }
 guinea-macros = { path = "crates/guinea-macros" }
 guinea = { path = "crates/guinea" }
+guinea-widgets = { path = "crates/guinea-widgets" }
 inventory = "0.3"
 
 # --- UI Stack (Windowing) ---
@@ -25,8 +27,11 @@ window-vibrancy = "0.7.1"
 raw-window-handle = "0.6.2"
 
 # --- UI Stack (windows-reactor) ---
-windows-reactor = { git = "https://github.com/microsoft/windows-rs" }
-windows-reactor-setup = { git = "https://github.com/microsoft/windows-rs" }
+# Pinned to an explicit rev (not just `git = "..."`) so this and
+# examples/processes-app's separate workspace/lockfile can't silently drift
+# onto different commits of the same crate - they did, until this was added.
+windows-reactor = { git = "https://github.com/microsoft/windows-rs", rev = "73befe67861e0f81c35445fdede1dd7a81da1748" }
+windows-reactor-setup = { git = "https://github.com/microsoft/windows-rs", rev = "73befe67861e0f81c35445fdede1dd7a81da1748" }
 
 # --- Async ---
 tokio = { version = "1.49.0", features = ["full"] }

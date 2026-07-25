@@ -31,6 +31,9 @@ impl Layout for TabsLayout {
             button("Services").on_click(nav.to_handler(Route::Services {
                 context: "ubuntu".to_string(),
             })),
+            button("Metrics").on_click(nav.to_handler(Route::Metrics {
+                context: "ubuntu".to_string(),
+            })),
 
             button("Open window").on_click(|| {
                 let _ = ReactorWindow::new()
