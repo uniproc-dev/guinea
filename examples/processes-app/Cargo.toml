@@ -19,9 +19,9 @@ unic-langid = { version = "0.9.6", features = ["macros"] }
 tokio = { version = "1", features = ["time", "rt-multi-thread"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
-windows-reactor = { git = "https://github.com/Tam1SH/windows-rs", rev = "86bd760230c836d9c5a393e2bd33690da4769f9a" }
-windows-canvas = { git = "https://github.com/Tam1SH/windows-rs", rev = "86bd760230c836d9c5a393e2bd33690da4769f9a" }
+windows-reactor = { git = "https://github.com/Tam1SH/windows-rs", rev = "a4b40ee584a659a57fa50f163ccb7d9ff74e39c5" }
+windows-canvas = { git = "https://github.com/Tam1SH/windows-rs", rev = "a4b40ee584a659a57fa50f163ccb7d9ff74e39c5" }
 
 [build-dependencies]
-windows-reactor-setup = { git = "https://github.com/Tam1SH/windows-rs", rev = "86bd760230c836d9c5a393e2bd33690da4769f9a" }
+windows-reactor-setup = { git = "https://github.com/Tam1SH/windows-rs", rev = "a4b40ee584a659a57fa50f163ccb7d9ff74e39c5" }
 guinea-codegen = { path = "../../crates/guinea-codegen" }
