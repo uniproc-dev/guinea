@@ -3,14 +3,7 @@ use std::ops::Deref;
 
 pub use http::uri::{InvalidUri, PathAndQuery};
 
-/// An in-process route address - a bare path (+ optional query string), no
-/// scheme or host (this never crosses the network; it only identifies
-/// "which segment, with which params" within the running app). Wraps
-/// `http::uri::PathAndQuery` rather than a hand-rolled struct, so query
-/// strings (deep-link params) are real, correctly-parsed URI syntax instead
-/// of a bespoke reimplementation - `Deref`s to it for `.path()`/`.query()`;
-/// `segments`/`segment` are this app's own convenience on top, for reading
-/// out positional path segments (e.g. this app's `:context` convention).
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct AppUri(PathAndQuery);
 

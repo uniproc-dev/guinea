@@ -55,9 +55,18 @@ struct SegmentProps {
 
 impl PartialEq for SegmentProps {
     fn eq(&self, other: &Self) -> bool {
-        std::ptr::eq(self.chain, other.chain)
-            && Rc::ptr_eq(&self.scopes, &other.scopes)
-            && self.cursor == other.cursor
+        // Not `std::ptr::eq(self.chain, other.chain)`: sibling leaves under the
+        // same layout each get their own `const` chain array (see
+        // `routes_dsl.rs`), so the two arrays' identity always differs even
+        // when the segment at `cursor` (e.g. a shared layout) is unchanged.
+        // Not `Rc::ptr_eq(&self.scopes, &other.scopes)` either: `Router::
+        // install_from` wraps the whole scope stack in a fresh `Rc` on every
+        // navigation, even when the individual `Rc<Scope>` at this cursor is
+        // reused. Compare what actually determines "is this still the same
+        // live segment instance": its type at `cursor`, and its own scope.
+        self.cursor == other.cursor
+            && (self.chain[self.cursor].type_id)() == (other.chain[other.cursor].type_id)()
+            && Rc::ptr_eq(&self.scopes[self.cursor], &other.scopes[other.cursor])
     }
 }
 
@@ -177,6 +186,19 @@ fn nav_context<R: 'static>() -> windows_reactor::Context<Option<NavigateHandle<R
     windows_reactor::Context { default: None, id }
 }
 
+fn route_context<R: 'static>() -> windows_reactor::Context<Option<R>> {
+    thread_local! {
+        static IDS: RefCell<std::collections::HashMap<TypeId, windows_reactor::ContextId>> =
+            RefCell::new(std::collections::HashMap::new());
+    }
+    let id = IDS.with(|ids| {
+        *ids.borrow_mut()
+            .entry(TypeId::of::<R>())
+            .or_insert_with(windows_reactor::ContextId::new)
+    });
+    windows_reactor::Context { default: None, id }
+}
+
 fn scoped_router(
     cx: &mut windows_reactor::RenderCx,
     token: guinea_core::actor::UiThreadToken,
@@ -210,7 +232,10 @@ where
         router.navigate(route.clone(), &route.to_uri()).expect("navigate");
 
         let nav = NavigateHandle::new(router.clone(), set_route);
-        router.render().provide(&nav_context::<R>(), Some(nav))
+        router
+            .render()
+            .provide(&nav_context::<R>(), Some(nav))
+            .provide(&route_context::<R>(), Some(route))
     }
 }
 
@@ -228,6 +253,27 @@ impl UseNavigate for windows_reactor::RenderCx {
         self.use_context(&nav_context::<R>()).unwrap_or_else(|| {
             panic!(
                 "use_navigate::<{}>() called with no NavigateHandle provided - \
+                 render the tree through RouterRx::<{0}>::render",
+                std::any::type_name::<R>()
+            )
+        })
+    }
+}
+
+pub trait UseRoute {
+    fn use_route<R>(&self) -> R
+    where
+        R: Clone + PartialEq + 'static;
+}
+
+impl UseRoute for windows_reactor::RenderCx {
+    fn use_route<R>(&self) -> R
+    where
+        R: Clone + PartialEq + 'static,
+    {
+        self.use_context(&route_context::<R>()).unwrap_or_else(|| {
+            panic!(
+                "use_route::<{}>() called with no route provided - \
                  render the tree through RouterRx::<{0}>::render",
                 std::any::type_name::<R>()
             )
