@@ -162,37 +162,67 @@ impl Scope {
         }
     }
 
-    pub fn own_task(&self, task: JoinHandle<()>) {
-        self.teardowns
-            .borrow_mut()
-            .push(Box::new(move || task.abort()));
-    }
-
-    pub fn own_actor<A: 'static>(&self, addr: Addr<A>) {
-        
-        #[cfg(debug_assertions)]
-        let counter = addr.strong_count_ptr();
-        self.teardowns.borrow_mut().push(Box::new(move || {
-            addr.dispose();
-            #[cfg(debug_assertions)]
-            {
-                drop(addr);
-                let alive = std::rc::Rc::strong_count(&counter);
-                if alive > 1 {
-                    tracing::error!(
-                        "LEAK: Scope-owned Actor<{}> still alive (refs: {})",
-                        *counter,
-                        alive - 1
-                    );
-                }
-            }
-        }));
-    }
-
     pub fn own_subscription(&self, bus: Rc<EventBus>, id: SubscriptionId) {
         self.teardowns
             .borrow_mut()
             .push(Box::new(move || bus.unsubscribe(id)));
+    }
+
+    /// Binds any [`Teardown`] resource to this scope's lifetime: it is torn
+    /// down when the scope is.
+    pub fn own<R: Teardown>(&self, resource: R) {
+        self.teardowns.borrow_mut().push(Box::new(move || resource.teardown()));
+    }
+}
+
+/// A resource whose lifetime can be bound to a [`Scope`] via [`Scope::own`].
+/// Implement per resource kind; the "blanket" over arbitrary `T` is the
+/// [`DropGuard`] newtype, so specialized teardowns never overlap.
+pub trait Teardown: 'static {
+    fn teardown(self);
+}
+
+impl Teardown for JoinHandle<()> {
+    fn teardown(self) {
+        self.abort();
+    }
+}
+
+impl<A: 'static> Teardown for Addr<A> {
+    fn teardown(self) {
+        #[cfg(debug_assertions)]
+        let counter = self.strong_count_ptr();
+        self.dispose();
+        #[cfg(debug_assertions)]
+        {
+            drop(self);
+            let alive = std::rc::Rc::strong_count(&counter);
+            if alive > 1 {
+                tracing::error!(
+                    "LEAK: Scope-owned Actor<{}> still alive (refs: {})",
+                    *counter,
+                    alive - 1
+                );
+            }
+        }
+        #[cfg(not(debug_assertions))]
+        drop(self);
+    }
+}
+
+impl Teardown for crate::signal::SignalSubscription {
+    fn teardown(self) {
+        drop(self);
+    }
+}
+
+/// Blanket teardown for resources that just need dropping
+/// (`scope.own(DropGuard(resource))` when no specialized impl exists).
+pub struct DropGuard<T: 'static>(pub T);
+
+impl<T: 'static> Teardown for DropGuard<T> {
+    fn teardown(self) {
+        drop(self.0);
     }
 }
 
@@ -288,7 +318,7 @@ mod tests {
             tokio::time::sleep(std::time::Duration::from_millis(50)).await;
             flag.store(true, Ordering::SeqCst);
         });
-        store.own_task(handle);
+        store.own(handle);
 
         // Scope teardown, well before the task's sleep elapses.
         drop(store);
@@ -307,7 +337,7 @@ mod tests {
         let counter = addr.strong_count_ptr();
 
         let store = Scope::new();
-        store.own_actor(addr.clone());
+        store.own(addr.clone());
         drop(addr);
 
         // Only our own local `counter` handle plus the REGISTRY's - the

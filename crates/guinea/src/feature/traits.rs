@@ -45,7 +45,7 @@ impl FeatureInitContext {
 
     pub fn spawn_actor<A: ManagedActor + std::fmt::Debug + 'static>(&self, actor: A) -> Addr<A> {
         let addr = Addr::new_managed_scoped(actor, self.token.clone());
-        self.scope.own_actor(addr.clone());
+        self.scope.own(addr.clone());
         self.debug_registry.register(&addr);
         addr
     }

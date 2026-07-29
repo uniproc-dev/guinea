@@ -34,6 +34,12 @@ impl Drop for LoopHandle {
     }
 }
 
+impl guinea_core::scope::Teardown for LoopHandle {
+    fn teardown(self) {
+        drop(self);
+    }
+}
+
 pub struct Reactor;
 
 impl Reactor {

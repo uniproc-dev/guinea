@@ -22,6 +22,6 @@ pub fn install(ctx: &FeatureInitContext, uri: &AppUri) -> anyhow::Result<()> {
 
     addr.send(Refresh);
 
-    ctx.scope.own_actor(addr);
+    ctx.scope.own(addr);
     Ok(())
 }
