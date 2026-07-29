@@ -14,7 +14,7 @@ const MIN_COLUMN_WIDTH: f64 = 24.0;
 
 pub struct ColumnSpec<T> {
     pub id: &'static str,
-    pub header: String,
+    pub header: Rc<dyn Fn() -> Element>,
     pub initial_width: Signal<u64>,
     pub sortable: bool,
     pub cell: Rc<dyn Fn(&T) -> Element>,
@@ -22,7 +22,14 @@ pub struct ColumnSpec<T> {
 
 impl<T> ColumnSpec<T> {
     pub fn new(id: &'static str, header: impl Into<String>, initial_width: impl IntoWidth, cell: impl Fn(&T) -> Element + 'static) -> Self {
-        Self { id, header: header.into(), initial_width: initial_width.into_width(), sortable: false, cell: Rc::new(cell) }
+        let header = header.into();
+        Self { id, header: Rc::new(move || windows_reactor::text_block(header.clone()).into()), initial_width: initial_width.into_width(), sortable: false, cell: Rc::new(cell) }
+    }
+
+    /// Use an arbitrary `Element` as the column header instead of plain text.
+    /// The factory is called on every render, so the element can depend on signals.
+    pub fn new_with_header(id: &'static str, header: impl Fn() -> Element + 'static, initial_width: impl IntoWidth, cell: impl Fn(&T) -> Element + 'static) -> Self {
+        Self { id, header: Rc::new(header), initial_width: initial_width.into_width(), sortable: false, cell: Rc::new(cell) }
     }
 
     /// Makes the header clickable and shows the sort indicator when `table`
@@ -35,7 +42,7 @@ impl<T> ColumnSpec<T> {
 
 struct ResolvedColumn<T> {
     id: &'static str,
-    header: String,
+    header: Rc<dyn Fn() -> Element>,
     width: Signal<u64>,
     sortable: bool,
     cell: Rc<dyn Fn(&T) -> Element>,
@@ -94,20 +101,26 @@ pub fn table<T: 'static>(
 }
 
 fn header_cell<T>(c: &ResolvedColumn<T>, sort_state: Option<&SortState<String>>, on_sort: Option<&SetState<String>>) -> Element {
-    let label = match sort_state {
-        Some(s) if c.sortable && s.field_id.as_deref() == Some(c.id) => {
-            format!("{} {}", c.header, if s.descending { "▼" } else { "▲" })
-        }
-        _ => c.header.clone(),
+    let active = sort_state
+        .filter(|s| c.sortable && s.field_id.as_deref() == Some(c.id))
+        .map(|s| if s.descending { "▼" } else { "▲" });
+
+    let base = (c.header)();
+    let content: Element = match active {
+        Some(indicator) => hstack(vec![
+            base,
+            windows_reactor::text_block(indicator).into(),
+        ]).into(),
+        None => base,
     };
-    let text: Element = windows_reactor::text_block(label).into();
+
     let cell: Element = match (c.sortable, on_sort) {
         (true, Some(cb)) => {
             let id = c.id.to_string();
             let cb = cb.clone();
-            windows_reactor::border(text).on_tapped(move || cb.call(id.clone())).into()
+            windows_reactor::border(content).on_tapped(move || cb.call(id.clone())).into()
         }
-        _ => text,
+        _ => content,
     };
     cell.width(c.width.get() as f64)
 }
