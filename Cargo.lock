@@ -13,9 +13,9 @@ dependencies = [
 
 [[package]]
 name = "amethystate"
-version = "0.9.1"
+version = "0.9.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8fc1f5872e725be2c1c2e9832cdb50cf1248185def583b65249455dab96d8456"
+checksum = "d199074b1839ef4eb6f17dba3421d6cceaf7b211494b5c17ae14bf905ad6b113"
 dependencies = [
  "amethystate-core",
  "amethystate-macros",
@@ -34,22 +34,23 @@ dependencies = [
 
 [[package]]
 name = "amethystate-core"
-version = "0.9.1"
+version = "0.9.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4b09b9bfeeed95b2efc4e036cbfacfa6dfe1ee6d511942d4e40f5036816dfc4b"
+checksum = "557080a44579159c23b93184e43ad7f92034b1ffa8cc9b8885314271658763ab"
 dependencies = [
  "arc-swap",
  "inventory",
  "serde",
+ "thiserror",
  "tracing",
  "uuid",
 ]
 
 [[package]]
 name = "amethystate-macros"
-version = "0.9.1"
+version = "0.9.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5d45976465c8133598f2fe1262d4f7d1c2e942e66f6c453ca47fbc9cf0d714d3"
+checksum = "68c7f9f73673a3e54c08804ccea194ed3e66bb0472bd3430094703ba1a9f4a00"
 dependencies = [
  "amethystate-macros-core",
  "darling",
@@ -61,9 +62,9 @@ dependencies = [
 
 [[package]]
 name = "amethystate-macros-core"
-version = "0.9.1"
+version = "0.9.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "81d9935c7dcf72c7c0843cbf8c0cb8e53d8dd4cb1ffa167200cc9cd0b0cf6a72"
+checksum = "822ef0f193f9350972dee356b332bf6b27b93ee665a6a40fd154df3d179f8a36"
 dependencies = [
  "darling",
  "proc-macro2",
