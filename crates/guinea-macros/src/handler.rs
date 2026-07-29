@@ -16,7 +16,7 @@ fn expand_handler(item: ItemFn) -> Result<TokenStream> {
     let (actor_ty, actor_name) = if is_async {
         extract_actor_from_async_ctx(inputs.get(0))?
     } else {
-        extract_actor_from_mut(inputs.get(0))?
+        extract_actor_from_ref(inputs.get(0))?
     };
 
     let (msg_ty, msg_name) = extract_msg_info(inputs.get(1))?;
@@ -43,8 +43,8 @@ fn expand_handler(item: ItemFn) -> Result<TokenStream> {
             return Err(Error::new(
                 item.sig.span(),
                 format!(
-                    "Sync handler for actor '{}' and message '{}' must have 2 or 3 arguments: (actor: &mut {}, msg: {}, [ctx: &Context<{}>])",
-                    actor_name, msg_name, actor_name, msg_name, actor_name
+                    "Sync handler for actor '{}' and message '{}' must have 2 or 3 arguments: (actor: &{} or &mut {}, msg: {}, [ctx: &Context<{}>])",
+                    actor_name, msg_name, actor_name, actor_name, msg_name, actor_name
                 ),
             ));
         }
@@ -90,20 +90,18 @@ fn extract_msg_info(arg: Option<&FnArg>) -> Result<(&Type, String)> {
     }
 }
 
-fn extract_actor_from_mut(arg: Option<&FnArg>) -> Result<(&Type, String)> {
+fn extract_actor_from_ref(arg: Option<&FnArg>) -> Result<(&Type, String)> {
     let arg =
         arg.ok_or_else(|| Error::new(proc_macro2::Span::call_site(), "Missing actor argument"))?;
     if let FnArg::Typed(PatType { ty, .. }) = arg {
         if let Type::Reference(tr) = ty.as_ref() {
-            if tr.mutability.is_some() {
-                let inner = tr.elem.as_ref();
-                return Ok((inner, type_to_string(inner)));
-            }
+            let inner = tr.elem.as_ref();
+            return Ok((inner, type_to_string(inner)));
         }
     }
     Err(Error::new(
         arg.span(),
-        "First argument of a sync handler must be '&mut ActorType'",
+        "First argument of a sync handler must be '&ActorType' or '&mut ActorType'",
     ))
 }
 

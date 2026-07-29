@@ -29,9 +29,8 @@ impl LifecycleCore {
     }
 
     fn shutdown(&mut self) {
-        let bus = GlobalEventBus::instance();
         for sub_id in self.subs.drain(..) {
-            bus.unsubscribe(sub_id);
+            GlobalEventBus::unsubscribe(sub_id);
         }
         let counters = std::mem::take(&mut self.actor_counters);
         self.anchors.clear();

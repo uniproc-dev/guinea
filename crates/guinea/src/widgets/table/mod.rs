@@ -6,7 +6,7 @@ pub use layout::{IntoWidth, TableLayout};
 
 use guinea_core::signal::Signal;
 use std::rc::Rc;
-use windows_reactor::{hstack, Element, ElementExt, RenderCx, SetState};
+use windows_reactor::{grid, hstack, Element, ElementExt, GridLength, RenderCx, SetState};
 
 use crate::widgets::resize::resize_handle;
 
@@ -88,7 +88,9 @@ pub fn table<T: 'static>(
         .with_key_selector(key)
         .build();
 
-    windows_reactor::vstack(vec![header.into(), body]).into()
+    grid((header.grid_row(0), body.grid_row(1)))
+        .rows([GridLength::Auto, GridLength::Star(1.0)])
+        .into()
 }
 
 fn header_cell<T>(c: &ResolvedColumn<T>, sort_state: Option<&SortState<String>>, on_sort: Option<&SetState<String>>) -> Element {

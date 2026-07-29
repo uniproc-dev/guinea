@@ -168,6 +168,35 @@ impl Scope {
             .push(Box::new(move || bus.unsubscribe(id)));
     }
 
+    /// Returns a shallow clone of every reducer state currently held by this
+    /// scope, keyed by the reducer's `TypeId`. Used by the router to cache
+    /// page state in memory while the page is not mounted.
+    pub fn snapshot_states(&self) -> HashMap<TypeId, Rc<dyn Any>> {
+        self.cells
+            .borrow()
+            .iter()
+            .map(|(type_id, cell)| (*type_id, cell.state.clone()))
+            .collect()
+    }
+
+    /// Pre-populates reducer cells with previously cached states. This is the
+    /// inverse of [`snapshot_states`]: when a page is remounted, restoring its
+    /// state before `install` runs lets the page find ready data instead of
+    /// defaults.
+    pub fn restore_states(&self, states: HashMap<TypeId, Rc<dyn Any>>) {
+        let mut cells = self.cells.borrow_mut();
+        for (type_id, state) in states {
+            cells.insert(
+                type_id,
+                Cell {
+                    state,
+                    actions: RefCell::new(None),
+                    listeners: RefCell::new(Vec::new()),
+                },
+            );
+        }
+    }
+
     /// Binds any [`Teardown`] resource to this scope's lifetime: it is torn
     /// down when the scope is.
     pub fn own<R: Teardown>(&self, resource: R) {
@@ -190,22 +219,7 @@ impl Teardown for JoinHandle<()> {
 
 impl<A: 'static> Teardown for Addr<A> {
     fn teardown(self) {
-        #[cfg(debug_assertions)]
-        let counter = self.strong_count_ptr();
         self.dispose();
-        #[cfg(debug_assertions)]
-        {
-            drop(self);
-            let alive = std::rc::Rc::strong_count(&counter);
-            if alive > 1 {
-                tracing::error!(
-                    "LEAK: Scope-owned Actor<{}> still alive (refs: {})",
-                    *counter,
-                    alive - 1
-                );
-            }
-        }
-        #[cfg(not(debug_assertions))]
         drop(self);
     }
 }

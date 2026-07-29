@@ -20,3 +20,4 @@ pub use actor::{
     Addr, Context, Handler, ManagedActor, Message, UiDispatcher, UiTask, UiThreadToken,
     invoke_on_ui, set_ui_dispatcher,
 };
+pub use actor::event_bus::GlobalEventBusSubscription;

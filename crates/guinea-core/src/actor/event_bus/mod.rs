@@ -1,5 +1,6 @@
 use crate::actor::addr::Addr;
 use crate::actor::event_bus::subscribe::{Event, FnSubscriber, Subscriber, SubscriptionId, UntypedSubscriber};
+use crate::actor::invoke_on_ui;
 use crate::actor::short_type_name;
 use crate::actor::traits::Handler;
 use crate::trace::{DispatchMeta, current_meta, is_scope_enabled};
@@ -181,11 +182,56 @@ impl EventBus {
 pub struct GlobalEventBus;
 
 impl GlobalEventBus {
-    pub fn instance() -> Rc<EventBus> {
+    pub(crate) fn instance() -> Rc<EventBus> {
         thread_local! {
             static BUS: Rc<EventBus> = Rc::new(EventBus::new());
         }
         BUS.with(|bus| bus.clone())
+    }
+
+    /// Publishes the event on the UI thread's global event bus.
+    ///
+    /// The global event bus lives on the UI thread, so this call is redirected
+    /// there via the UI dispatcher. It is safe to call from any thread.
+    pub fn publish<M: Event>(msg: M) {
+        invoke_on_ui(move || {
+            Self::instance().publish(msg);
+        });
+    }
+
+    pub fn subscribe<A, M>(addr: Addr<A>) -> SubscriptionId
+    where
+        A: Handler<M> + 'static,
+        M: Event,
+    {
+        Self::instance().subscribe(addr)
+    }
+
+    pub fn subscribe_fn<M: Event>(callback: impl Fn(M) + 'static) -> SubscriptionId {
+        Self::instance().subscribe_fn(callback)
+    }
+
+    pub fn count_subscribers<M: Event>() -> usize {
+        Self::instance().count_subscribers::<M>()
+    }
+
+    pub fn has_subscribers<M: Event>() -> bool {
+        Self::instance().has_subscribers::<M>()
+    }
+
+    pub fn unsubscribe(id: SubscriptionId) {
+        Self::instance().unsubscribe(id);
+    }
+}
+
+/// A scope-owned handle to a `GlobalEventBus` subscription. Dropping/teardown
+/// unsubscribes automatically, so business code does not have to remember to
+/// call `GlobalEventBus::unsubscribe` manually.
+pub struct GlobalEventBusSubscription(pub SubscriptionId);
+
+impl crate::scope::Teardown for GlobalEventBusSubscription {
+    fn teardown(self) {
+        GlobalEventBus::unsubscribe(self.0);
     }
 }
 

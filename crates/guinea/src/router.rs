@@ -1,5 +1,6 @@
 use std::any::{Any, TypeId};
 use std::cell::RefCell;
+use std::collections::{HashMap, VecDeque};
 use std::rc::Rc;
 
 use guinea_core::scope::{Reducer, Scope};
@@ -11,6 +12,12 @@ pub trait Page: Sized + 'static {
     fn install(_ctx: &FeatureInitContext, _uri: &AppUri) -> anyhow::Result<()> {
         Ok(())
     }
+
+    /// When `true`, the router keeps this page's reducer states in memory
+    /// while the page is not mounted. The page's scope (and therefore its
+    /// actors) is still torn down, but when the user returns the UI will see
+    /// the last cached state immediately instead of starting from defaults.
+    const CACHE_STATE_IN_MEMORY: bool = false;
 
     fn view(cx: &mut PageCx) -> windows_reactor::Element;
 }
@@ -28,6 +35,7 @@ pub struct SegmentEntry {
     pub type_id: fn() -> TypeId,
     pub install: fn(&FeatureInitContext, &AppUri) -> anyhow::Result<()>,
     view: fn(SegmentProps) -> windows_reactor::Element,
+    pub cache_state: bool,
 }
 
 pub const fn segment_entry<P: Page>() -> SegmentEntry {
@@ -35,6 +43,7 @@ pub const fn segment_entry<P: Page>() -> SegmentEntry {
         type_id: TypeId::of::<P>,
         install: P::install,
         view: mount_page::<P>,
+        cache_state: P::CACHE_STATE_IN_MEMORY,
     }
 }
 
@@ -43,6 +52,7 @@ pub const fn layout_entry<L: Layout>() -> SegmentEntry {
         type_id: TypeId::of::<L>,
         install: L::install,
         view: mount_layout::<L>,
+        cache_state: false,
     }
 }
 
@@ -424,6 +434,48 @@ fn common_prefix_len(prev: &[SegmentEntry], next: &[SegmentEntry]) -> usize {
         .count()
 }
 
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+struct StateCacheKey {
+    segment_index: usize,
+    type_id: TypeId,
+}
+
+const MAX_CACHED_STATES: usize = 10;
+
+struct StateCache {
+    /// Cached reducer states, keyed by segment position and type.
+    entries: HashMap<StateCacheKey, HashMap<TypeId, Rc<dyn Any>>>,
+    /// Order of insertion for LRU eviction.
+    order: VecDeque<StateCacheKey>,
+}
+
+impl StateCache {
+    fn new() -> Self {
+        Self {
+            entries: HashMap::new(),
+            order: VecDeque::new(),
+        }
+    }
+
+    fn insert(&mut self, key: StateCacheKey, states: HashMap<TypeId, Rc<dyn Any>>) {
+        if self.entries.insert(key, states).is_none() {
+            self.order.push_back(key);
+        }
+        while self.order.len() > MAX_CACHED_STATES {
+            if let Some(oldest) = self.order.pop_front() {
+                self.entries.remove(&oldest);
+            }
+        }
+    }
+
+    fn take(&mut self, key: StateCacheKey) -> Option<HashMap<TypeId, Rc<dyn Any>>> {
+        if self.entries.contains_key(&key) {
+            self.order.retain(|k| *k != key);
+        }
+        self.entries.remove(&key)
+    }
+}
+
 pub struct Router {
     active: RefCell<Option<ActiveChain>>,
     prev_route: RefCell<Option<Box<dyn Any>>>,
@@ -434,6 +486,7 @@ pub struct Router {
     event_bus: Rc<guinea_core::actor::event_bus::EventBus>,
     store: amethystate::DefaultStore,
     debug_registry: Rc<guinea_core::actor::registry::DebugRegistry>,
+    state_cache: RefCell<StateCache>,
 }
 
 impl Router {
@@ -445,6 +498,7 @@ impl Router {
             event_bus: Rc::new(guinea_core::actor::event_bus::EventBus::new()),
             store,
             debug_registry: Rc::new(guinea_core::actor::registry::DebugRegistry::new()),
+            state_cache: RefCell::new(StateCache::new()),
         }
     }
     
@@ -488,8 +542,30 @@ impl Router {
         shared_len: usize,
         uri: &AppUri,
     ) -> anyhow::Result<Rc<Scope>> {
-        
-        let mut scopes: Vec<Rc<Scope>> = match self.active.borrow_mut().take() {
+        // Capture the previous chain/scopes before dropping them, so we can
+        // snapshot reducer states for cache-eligible segments.
+        let prev = self.active.borrow_mut().take();
+
+        if let Some(prev) = &prev {
+            let mut cache = self.state_cache.borrow_mut();
+            for (index, (entry, scope)) in prev
+                .entries
+                .iter()
+                .zip(prev.scopes.iter())
+                .enumerate()
+                .skip(shared_len)
+            {
+                if entry.cache_state {
+                    let key = StateCacheKey {
+                        segment_index: index,
+                        type_id: (entry.type_id)(),
+                    };
+                    cache.insert(key, scope.snapshot_states());
+                }
+            }
+        }
+
+        let mut scopes: Vec<Rc<Scope>> = match prev {
             Some(prev) => {
                 let mut v = (*prev.scopes).clone();
                 v.truncate(shared_len);
@@ -498,8 +574,19 @@ impl Router {
             None => Vec::new(),
         };
 
-        for entry in &chain[shared_len..] {
+        for (index, entry) in chain.iter().enumerate().skip(shared_len) {
             let scope = Rc::new(Scope::new());
+
+            if entry.cache_state {
+                let key = StateCacheKey {
+                    segment_index: index,
+                    type_id: (entry.type_id)(),
+                };
+                if let Some(states) = self.state_cache.borrow_mut().take(key) {
+                    scope.restore_states(states);
+                }
+            }
+
             let ctx = FeatureInitContext {
                 scope: scope.clone(),
                 token: self.token.clone(),
@@ -929,6 +1016,134 @@ mod tests {
         let route = ZeroFieldRoute::Home {};
         assert_eq!(route.path(), "/");
         assert_eq!(ZeroFieldRoute::parse("/"), Some(ZeroFieldRoute::Home {}));
+    }
+
+    #[test]
+    fn navigating_away_from_page_disposes_actor_subscribed_to_global_bus() {
+        use guinea_core::actor::{Context, ManagedActor};
+        use guinea_core::actor::event_bus::GlobalEventBus;
+        use guinea_core::actor::Message;
+        use guinea_macros::{actor_manifest, handler};
+        use std::cell::RefCell;
+        use std::rc::Rc;
+
+        #[derive(Clone, Debug)]
+        struct ProbeEvent(u32);
+        impl Message for ProbeEvent {}
+
+        struct ProbeActor {
+            seen: Rc<RefCell<Vec<u32>>>,
+            /// Simulates a real actor holding a UI port closure produced by
+            /// `ctx.port::<Reducer>()`. The port must not keep the page scope
+            /// alive via a strong Rc, otherwise Scope -> Addr -> Actor -> Port
+            /// -> Scope forms an Rc cycle and the actor never drops on navigation.
+            _port: Box<dyn Fn(()) + 'static>,
+        }
+
+        impl std::fmt::Debug for ProbeActor {
+            fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                f.debug_struct("ProbeActor").finish()
+            }
+        }
+
+        impl Drop for ProbeActor {
+            fn drop(&mut self) {
+                PROBE_DROPPED.with(|d| *d.borrow_mut() = true);
+            }
+        }
+
+        #[actor_manifest]
+        impl ManagedActor for ProbeActor {
+            type Handlers = handlers!(@ProbeEvent);
+            type Signals = ();
+        }
+
+        #[handler]
+        fn on_probe(this: &mut ProbeActor, msg: ProbeEvent, _ctx: &Context<ProbeActor>) {
+            this.seen.borrow_mut().push(msg.0);
+        }
+
+        thread_local! {
+            static PROBE_DROPPED: RefCell<bool> = RefCell::new(false);
+        }
+
+        #[derive(ReducerState)]
+        struct ProbeState {
+            value: u32,
+        }
+
+        #[reducer]
+        fn probe_reducer(state: &mut ProbeState, _msg: ()) {
+            state.value += 1;
+        }
+
+        struct ProbePage;
+        impl Page for ProbePage {
+            fn install(ctx: &FeatureInitContext, _uri: &AppUri) -> anyhow::Result<()> {
+                PROBE_DROPPED.with(|d| *d.borrow_mut() = false);
+                let addr = ctx.spawn_actor(ProbeActor {
+                    seen: Rc::new(RefCell::new(Vec::new())),
+                    // Use the real port helper; it must not keep the page scope
+                    // alive via a strong Rc, otherwise Scope -> Addr -> Actor
+                    // -> Port -> Scope forms a cycle.
+                    _port: Box::new(ctx.port::<ProbeReducer>()),
+                });
+                ctx.subscribe_on_global_bus::<ProbeActor, ProbeEvent>(addr.clone());
+                Ok(())
+            }
+
+            fn view(_cx: &mut PageCx) -> windows_reactor::Element {
+                windows_reactor::Element::default()
+            }
+        }
+
+        struct OtherPage;
+        impl Page for OtherPage {
+            fn view(_cx: &mut PageCx) -> windows_reactor::Element {
+                windows_reactor::Element::default()
+            }
+        }
+
+        struct ProbeLayout;
+        impl Layout for ProbeLayout {
+            fn view(cx: &mut LayoutCx) -> windows_reactor::Element {
+                cx.outlet()
+            }
+        }
+
+        routes! {
+            ProbeRoute {
+                layout(ProbeLayout) {
+                    page(ProbePage, "/probe")
+                    page(OtherPage, "/other")
+                }
+            }
+        }
+
+        let token = UiThreadToken::dangerously_create_token_unchecked();
+        let router = Router::new(token, amethystate::test_utils::unique_store("router-test"));
+
+        router
+            .navigate(ProbeRoute::ProbePage {}, &AppUri::parse("/probe").unwrap())
+            .expect("navigate to probe");
+        assert!(
+            GlobalEventBus::has_subscribers::<ProbeEvent>(),
+            "actor must be subscribed to the global bus while the page is active"
+        );
+
+        router
+            .navigate(ProbeRoute::OtherPage {}, &AppUri::parse("/other").unwrap())
+            .expect("navigate to other");
+
+        assert!(
+            PROBE_DROPPED.with(|d| *d.borrow()),
+            "ProbeActor state must be dropped when the page scope is torn down"
+        );
+
+        assert!(
+            !GlobalEventBus::has_subscribers::<ProbeEvent>(),
+            "global bus subscription must be removed when the page scope drops"
+        );
     }
 }
 
