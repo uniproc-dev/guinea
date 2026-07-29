@@ -173,8 +173,6 @@ impl EventBus {
 
         if !found {
             warn!(subscription_id = id, "unsubscribe: subscription not found");
-        } else if is_scope_enabled("core.bus.unsubscribe") {
-            debug!(subscription_id = id, "unsubscribe: success");
         }
     }
 }
