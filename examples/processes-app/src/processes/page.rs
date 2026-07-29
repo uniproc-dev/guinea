@@ -39,7 +39,7 @@ impl Page for Processes {
             }),
         ];
 
-        vstack((title("Processes"), table(cx, rows, columns, |row: &Row| row.pid.to_string())))
+        vstack((title("Processes"), table(cx, rows, columns, |row: &Row| row.pid.to_string(), None)))
             .spacing(16.0)
             .into()
     }
