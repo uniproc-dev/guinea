@@ -6,7 +6,7 @@ pub use ring::RingSeries;
 
 use std::cell::Cell;
 use std::rc::Rc;
-use windows_canvas::{Brush, ColorF, GpuDevice, GradientStop, Path, PathBuilder, Rect, Result as CanvasResult, Vector2};
+use windows_canvas::{Brush, ColorF, GpuDevice, Path, PathBuilder, Rect, Result as CanvasResult, Vector2};
 
 use crate::widgets::color::{hex, hex_alpha};
 use windows_reactor::{CanvasSwapChain, DrawContext, Element, ElementExt, PointerEventInfo, RenderCx, swap_chain_panel};
@@ -31,14 +31,43 @@ pub struct HoverInfo {
     pub values: Vec<f32>,
 }
 
-const LINE_WIDTH: f32 = 2.0;
+#[derive(Clone, Copy, Debug)]
+pub struct LineChartOptions {
+    /// Solid background color; `None` for a fully transparent background.
+    pub background: Option<ColorF>,
+    /// Border color; `None` for no border. Use `theme_border_color()` to match
+    /// the current dark/light scheme.
+    pub border: Option<ColorF>,
+    /// Whether to draw the background grid lines.
+    pub show_grid: bool,
+    /// Fixed Y range; `None` means auto-fit to the data.
+    pub y_range: Option<(f32, f32)>,
+}
+
+impl Default for LineChartOptions {
+    fn default() -> Self {
+        Self {
+            background: Some(BACKGROUND_TOP),
+            border: Some(theme_border_color()),
+            show_grid: true,
+            y_range: None,
+        }
+    }
+}
+
+pub fn theme_border_color() -> ColorF {
+    match windows_reactor::current_color_scheme() {
+        windows_reactor::ColorScheme::Dark => hex_alpha(0xffffff, 36),
+        windows_reactor::ColorScheme::Light => hex_alpha(0x000000, 36),
+    }
+}
+
+const LINE_WIDTH: f32 = 1.0;
 const GRID_LINE_WIDTH: f32 = 1.0;
 const GRID_COLOR: ColorF = hex_alpha(0xffffff, 20);
-const GRID_ROWS: u32 = 4;
-const GRID_COLS: u32 = 6;
+const GRID_TARGET_SPACING_X: f32 = 80.0;
+const GRID_TARGET_SPACING_Y: f32 = 40.0;
 const BACKGROUND_TOP: ColorF = hex(0x1c1e26);
-const BACKGROUND_BOTTOM: ColorF = hex(0x0d0e12);
-const BORDER_COLOR: ColorF = hex_alpha(0xffffff, 36);
 const BORDER_WIDTH: f32 = 1.0;
 
 /// Cheap, comparable summary of a chart's data, used as a `use_effect`
@@ -53,6 +82,15 @@ fn chart_revision(series: &[Series]) -> ChartRevision {
 }
 
 pub fn line_chart(cx: &mut RenderCx, series: Vec<Series>, on_hover: impl Fn(Option<HoverInfo>) + 'static) -> Element {
+    line_chart_with_options(cx, series, on_hover, LineChartOptions::default())
+}
+
+pub fn line_chart_with_options(
+    cx: &mut RenderCx,
+    series: Vec<Series>,
+    on_hover: impl Fn(Option<HoverInfo>) + 'static,
+    options: LineChartOptions,
+) -> Element {
     // `CanvasSwapChain` (unlike `animated_canvas`) presents a frame only when
     // `draw` is called explicitly, instead of every vsync forever - a
     // continuous render loop for a chart that changes a few times a second
@@ -63,6 +101,8 @@ pub fn line_chart(cx: &mut RenderCx, series: Vec<Series>, on_hover: impl Fn(Opti
     // series data has actually grown.
     let series_cell = cx.use_ref(Vec::<Series>::new());
     series_cell.set(series);
+    let options_cell = cx.use_ref(options);
+    options_cell.set(options);
 
     let last_width = Rc::new(Cell::new(0.0f32));
     let chain_cell = cx.use_ref(None::<CanvasSwapChain>);
@@ -72,12 +112,14 @@ pub fn line_chart(cx: &mut RenderCx, series: Vec<Series>, on_hover: impl Fn(Opti
     let series_for_effect = series_cell.clone();
     let chain_for_effect = chain_cell.clone();
     let width_for_effect = last_width.clone();
+    let options_for_effect = options_cell.clone();
     cx.use_effect((revision,), move || {
         if let Some(chain) = chain_for_effect.borrow().as_ref() {
             let series = series_for_effect.borrow();
+            let options = *options_for_effect.borrow();
             let _ = chain.draw(|ctx| {
                 width_for_effect.set(ctx.width);
-                render(ctx, &series);
+                render(ctx, &series, &options);
             });
         }
     });
@@ -85,6 +127,7 @@ pub fn line_chart(cx: &mut RenderCx, series: Vec<Series>, on_hover: impl Fn(Opti
     let series_for_mount = series_cell.clone();
     let chain_for_mount = chain_cell.clone();
     let size_for_mount = size_cell.clone();
+    let options_for_mount = options_cell.clone();
     let panel = swap_chain_panel().on_mounted(move |handle| {
         let scale = handle.composition_scale().map_or(1.0, |(x, _)| x);
         let (w, h) = size_for_mount.get();
@@ -93,7 +136,8 @@ pub fn line_chart(cx: &mut RenderCx, series: Vec<Series>, on_hover: impl Fn(Opti
             return;
         };
         if w > 0.0 && h > 0.0 {
-            let _ = chain.draw(|ctx| render(ctx, &series_for_mount.borrow()));
+            let options = *options_for_mount.borrow();
+            let _ = chain.draw(|ctx| render(ctx, &series_for_mount.borrow(), &options));
         }
         chain_for_mount.set(Some(chain));
     });
@@ -101,12 +145,14 @@ pub fn line_chart(cx: &mut RenderCx, series: Vec<Series>, on_hover: impl Fn(Opti
     let series_for_resize = series_cell.clone();
     let chain_for_resize = chain_cell.clone();
     let size_for_resize = size_cell.clone();
+    let options_for_resize = options_cell.clone();
     let panel = panel.on_resize(move |w, h| {
         let (w, h) = (w as f32, h as f32);
         size_for_resize.set((w, h));
         if let Some(chain) = chain_for_resize.borrow().as_ref() {
             if chain.resize(w, h).is_ok() {
-                let _ = chain.draw(|ctx| render(ctx, &series_for_resize.borrow()));
+                let options = *options_for_resize.borrow();
+                let _ = chain.draw(|ctx| render(ctx, &series_for_resize.borrow(), &options));
             }
         }
     });
@@ -152,7 +198,7 @@ fn hover_at(series: &[Series], pixel_x: f32, width: f32) -> Option<HoverInfo> {
     any.then_some(HoverInfo { x: target, values })
 }
 
-fn render(draw: &DrawContext<'_>, series: &[Series]) {
+fn render(draw: &DrawContext<'_>, series: &[Series], options: &LineChartOptions) {
     draw.clear(ColorF::TRANSPARENT);
 
     let (width, height) = (draw.width, draw.height);
@@ -161,12 +207,28 @@ fn render(draw: &DrawContext<'_>, series: &[Series]) {
         return;
     }
 
-    draw_backdrop(draw, width, height);
+    if let Some(background) = options.background {
+        draw_backdrop(draw, width, height, background);
+    }
+    if options.show_grid
+        && let Ok(grid_brush) = draw.create_solid_brush(GRID_COLOR)
+    {
+        draw_grid(draw, &grid_brush, width, height);
+    }
+    if let Some(border) = options.border {
+        let rect = Rect::from_xywh(0.0, 0.0, width, height);
+        match draw.create_solid_brush(border) {
+            Ok(brush) => draw.draw_rect(&rect, &brush, BORDER_WIDTH),
+            Err(e) => tracing::warn!(error = %e, "line_chart: failed to create border brush"),
+        }
+    }
 
     let Some((min_t, max_t, min_v, max_v)) = bounds(series) else {
         tracing::trace!("line_chart: no points in any series yet, nothing to draw");
         return;
     };
+
+    let (min_v, max_v) = options.y_range.unwrap_or((min_v, max_v));
 
     let t_span = (max_t - min_t).max(1) as f32;
     let v_span = (max_v - min_v).max(f32::EPSILON);
@@ -204,38 +266,23 @@ fn render(draw: &DrawContext<'_>, series: &[Series]) {
     }
 }
 
-fn draw_backdrop(draw: &DrawContext<'_>, width: f32, height: f32) {
+fn draw_backdrop(draw: &DrawContext<'_>, width: f32, height: f32, background: ColorF) {
     let rect = Rect::from_xywh(0.0, 0.0, width, height);
-
-    // Top-to-bottom gradient rather than a flat fill so the panel reads as a
-    // slightly glossy surface (subtle top highlight) instead of a dead-flat
-    // rectangle, similar to Task Manager's chart panels.
-    match draw.create_linear_gradient(
-        Vector2 { x: 0.0, y: 0.0 },
-        Vector2 { x: 0.0, y: height },
-        &[GradientStop::new(0.0, BACKGROUND_TOP), GradientStop::new(1.0, BACKGROUND_BOTTOM)],
-    ) {
-        Ok(gradient) => draw.fill_rect(&rect, &gradient),
-        Err(e) => tracing::warn!(error = %e, "line_chart: failed to create background gradient"),
-    }
-
-    if let Ok(grid_brush) = draw.create_solid_brush(GRID_COLOR) {
-        draw_grid(draw, &grid_brush, width, height);
-    }
-
-    match draw.create_solid_brush(BORDER_COLOR) {
-        Ok(border_brush) => draw.draw_rect(&rect, &border_brush, BORDER_WIDTH),
-        Err(e) => tracing::warn!(error = %e, "line_chart: failed to create border brush"),
+    match draw.create_solid_brush(background) {
+        Ok(brush) => draw.fill_rect(&rect, &brush),
+        Err(e) => tracing::warn!(error = %e, "line_chart: failed to create background brush"),
     }
 }
 
 fn draw_grid(draw: &DrawContext<'_>, brush: &Brush, width: f32, height: f32) {
-    for row in 1..GRID_ROWS {
-        let y = height * (row as f32 / GRID_ROWS as f32);
+    let cols = (width / GRID_TARGET_SPACING_X).ceil().max(1.0) as u32;
+    let rows = (height / GRID_TARGET_SPACING_Y).ceil().max(1.0) as u32;
+    for row in 1..rows {
+        let y = height * (row as f32 / rows as f32);
         draw.draw_line(Vector2 { x: 0.0, y }, Vector2 { x: width, y }, brush, GRID_LINE_WIDTH);
     }
-    for col in 1..GRID_COLS {
-        let x = width * (col as f32 / GRID_COLS as f32);
+    for col in 1..cols {
+        let x = width * (col as f32 / cols as f32);
         draw.draw_line(Vector2 { x, y: 0.0 }, Vector2 { x, y: height }, brush, GRID_LINE_WIDTH);
     }
 }

@@ -6,12 +6,19 @@ pub use layout::{IntoWidth, TableLayout};
 
 use guinea_core::signal::Signal;
 use std::rc::Rc;
-use windows_reactor::{grid, hstack, Color, Element, ElementExt, GridLength, RenderCx, SetState, Shape};
+use windows_reactor::{grid, hstack, Color, Element, ElementExt, GridLength, RenderCx, SetState, Shape, Thickness};
 
 use crate::widgets::resize::resize_handle;
 
 const MIN_COLUMN_WIDTH: f64 = 24.0;
 const HEADER_SEPARATOR_COLOR: Color = Color { a: 48, r: 128, g: 128, b: 128 };
+
+/// Horizontal inset shared by header and body cells so column content never
+/// sits flush against the resize handle or the row edge.
+const CELL_HORIZONTAL_PADDING: f64 = 12.0;
+/// Extra vertical room for the header row - it can carry two-line content
+/// (label + aggregate value) where body rows stay a single fixed height.
+const HEADER_VERTICAL_PADDING: f64 = 8.0;
 
 pub struct ColumnSpec<T> {
     pub id: &'static str,
@@ -65,6 +72,23 @@ pub fn table<T: 'static>(
     sort: Option<(SortState<String>, SetState<String>)>,
     selection: Option<(i32, SetState<i32>)>,
 ) -> Element {
+    table_with_sort_indicator(cx, rows, columns, key, sort, selection, None)
+}
+
+/// Like [`table`], but lets the caller render the sort direction indicator
+/// itself (e.g. a themed icon) instead of the plain text glyph fallback.
+/// `guinea` has no dependency on any particular icon set, so it cannot
+/// bundle one - the closure receives `descending` and returns the element
+/// shown next to the active sort column's header.
+pub fn table_with_sort_indicator<T: 'static>(
+    cx: &mut RenderCx,
+    rows: Vec<T>,
+    columns: Vec<ColumnSpec<T>>,
+    key: impl Fn(&T) -> String + 'static,
+    sort: Option<(SortState<String>, SetState<String>)>,
+    selection: Option<(i32, SetState<i32>)>,
+    sort_indicator: Option<Rc<dyn Fn(bool) -> Element>>,
+) -> Element {
     let layout_ref = cx.use_ref(TableLayout::<&'static str>::new());
     let columns: Rc<Vec<ResolvedColumn<T>>> = {
         let mut layout = layout_ref.borrow_mut();
@@ -94,7 +118,7 @@ pub fn table<T: 'static>(
 
     let mut header_cells: Vec<Element> = Vec::with_capacity(columns.len() * 2);
     for (i, c) in columns.iter().enumerate() {
-        header_cells.push(header_cell(c, sort_state.as_ref(), on_sort.as_ref()));
+        header_cells.push(header_cell(c, sort_state.as_ref(), on_sort.as_ref(), sort_indicator.as_ref()));
         if i != last_index {
             header_cells.push(column_resize_handle(cx, c.width.clone(), c.min_width, request_rerender.clone()));
         }
@@ -124,17 +148,23 @@ pub fn table<T: 'static>(
         .into()
 }
 
-fn header_cell<T>(c: &ResolvedColumn<T>, sort_state: Option<&SortState<String>>, on_sort: Option<&SetState<String>>) -> Element {
-    let active = sort_state
-        .filter(|s| c.sortable && s.field_id.as_deref() == Some(c.id))
-        .map(|s| if s.descending { "▼" } else { "▲" });
+fn header_cell<T>(
+    c: &ResolvedColumn<T>,
+    sort_state: Option<&SortState<String>>,
+    on_sort: Option<&SetState<String>>,
+    sort_indicator: Option<&Rc<dyn Fn(bool) -> Element>>,
+) -> Element {
+    let active = sort_state.filter(|s| c.sortable && s.field_id.as_deref() == Some(c.id));
 
     let base = (c.header)();
     let content: Element = match active {
-        Some(indicator) => hstack(vec![
-            base,
-            windows_reactor::text_block(indicator).into(),
-        ]).into(),
+        Some(s) => {
+            let indicator = match sort_indicator {
+                Some(render) => render(s.descending),
+                None => windows_reactor::text_block(if s.descending { "▼" } else { "▲" }).into(),
+            };
+            hstack(vec![base, indicator]).into()
+        }
         None => base,
     };
 
@@ -146,7 +176,8 @@ fn header_cell<T>(c: &ResolvedColumn<T>, sort_state: Option<&SortState<String>>,
         }
         _ => content,
     };
-    cell.width(c.width.get() as f64)
+    cell.padding(Thickness::xy(CELL_HORIZONTAL_PADDING, HEADER_VERTICAL_PADDING))
+        .width(c.width.get() as f64)
 }
 
 fn column_resize_handle(cx: &mut RenderCx, width: Signal<u64>, min_width: f64, request_rerender: SetState<()>) -> Element {
@@ -163,7 +194,9 @@ fn row_view<T>(row: &T, columns: &[ResolvedColumn<T>]) -> Element {
         .iter()
         .map(|c| {
             let width = c.width.get() as f64;
-            (c.cell)(row).width(width)
+            (c.cell)(row)
+                .padding(Thickness::xy(CELL_HORIZONTAL_PADDING, 0.0))
+                .width(width)
         })
         .collect();
     hstack(cells).into()
