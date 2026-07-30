@@ -9,16 +9,17 @@ use crate::feature::FeatureInitContext;
 use crate::uri::AppUri;
 
 pub trait Page: Sized + 'static {
-    fn install(_ctx: &FeatureInitContext, _uri: &AppUri) -> anyhow::Result<()> {
-        Ok(())
-    }
 
     /// When `true`, the router keeps this page's reducer states in memory
     /// while the page is not mounted. The page's scope (and therefore its
     /// actors) is still torn down, but when the user returns the UI will see
     /// the last cached state immediately instead of starting from defaults.
     const CACHE_STATE_IN_MEMORY: bool = false;
-
+    
+    fn install(_ctx: &FeatureInitContext, _uri: &AppUri) -> anyhow::Result<()> {
+        Ok(())
+    }
+    
     fn view(cx: &mut PageCx) -> windows_reactor::Element;
 }
 
