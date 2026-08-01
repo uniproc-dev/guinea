@@ -25,11 +25,3 @@ pub trait ManagedActor: Sized + 'static {
 
 pub trait AllowedSignal<M: Message> {}
 impl<M: Message> AllowedSignal<M> for M {}
-
-#[derive(Debug, Clone)]
-pub struct NoOp;
-impl Message for NoOp {}
-
-impl<T: 'static> Handler<NoOp> for T {
-    fn handle(&mut self, _: NoOp, _: &Context<Self>) {}
-}

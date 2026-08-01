@@ -83,6 +83,37 @@ impl<A: 'static> Context<A> {
             invoke_on_ui(return_task);
         });
     }
+
+    pub fn spawn_bg_detached<Fut>(&self, fut: Fut)
+    where
+        Fut: Future<Output = ()> + 'static + Send,
+    {
+        let meta = current_meta().unwrap_or_else(|| DispatchMeta::capture_or_root("core.actor.bg"));
+        let span = tracing::debug_span!(
+            parent: &meta.span,
+            "actor.bg.detached",
+            actor = short_type_name::<A>(),
+            op_id = meta.op_id,
+            correlation_id = meta.correlation_id.as_deref().unwrap_or(""),
+        );
+
+        #[cfg(feature = "test-utils")]
+        use crate::actor::event_bus::ACTIVE_TASKS;
+
+        #[cfg(feature = "test-utils")]
+        ACTIVE_TASKS.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+
+        tokio::spawn(async move {
+            let _meta_guard = install_current_meta(meta.clone());
+            {
+                let _enter = span.enter();
+                fut.await;
+            }
+
+            #[cfg(feature = "test-utils")]
+            ACTIVE_TASKS.fetch_sub(1, std::sync::atomic::Ordering::SeqCst);
+        });
+    }
 }
 
 pub struct AsyncContext<A: 'static> {

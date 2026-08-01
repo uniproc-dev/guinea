@@ -407,8 +407,8 @@ dependencies = [
  "tokio",
  "tracing",
  "windows",
- "windows-canvas",
- "windows-reactor",
+ "windows-canvas 0.0.0 (git+https://github.com/Tam1SH/windows-rs?rev=ed0f21acd)",
+ "windows-reactor 0.0.0 (git+https://github.com/Tam1SH/windows-rs?rev=ed0f21acd)",
 ]
 
 [[package]]
@@ -488,8 +488,8 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "unic-langid",
- "windows-canvas",
- "windows-reactor",
+ "windows-canvas 0.0.0 (git+https://github.com/Tam1SH/windows-rs?rev=ab3d2a793560287c572ff9964856c43fd0ce9af7)",
+ "windows-reactor 0.0.0 (git+https://github.com/Tam1SH/windows-rs?rev=ab3d2a793560287c572ff9964856c43fd0ce9af7)",
  "windows-reactor-setup",
 ]
 
@@ -1446,9 +1446,19 @@ name = "windows-canvas"
 version = "0.0.0"
 source = "git+https://github.com/Tam1SH/windows-rs?rev=ab3d2a793560287c572ff9964856c43fd0ce9af7#ab3d2a793560287c572ff9964856c43fd0ce9af7"
 dependencies = [
- "windows-core 0.62.2",
- "windows-numerics 0.3.1",
- "windows-window",
+ "windows-core 0.62.2 (git+https://github.com/Tam1SH/windows-rs?rev=ab3d2a793560287c572ff9964856c43fd0ce9af7)",
+ "windows-numerics 0.3.1 (git+https://github.com/Tam1SH/windows-rs?rev=ab3d2a793560287c572ff9964856c43fd0ce9af7)",
+ "windows-window 0.0.0 (git+https://github.com/Tam1SH/windows-rs?rev=ab3d2a793560287c572ff9964856c43fd0ce9af7)",
+]
+
+[[package]]
+name = "windows-canvas"
+version = "0.0.0"
+source = "git+https://github.com/Tam1SH/windows-rs?rev=ed0f21acd#ed0f21acd5f90310a636379512d7777cdba4413d"
+dependencies = [
+ "windows-core 0.62.2 (git+https://github.com/Tam1SH/windows-rs?rev=ed0f21acd)",
+ "windows-numerics 0.3.1 (git+https://github.com/Tam1SH/windows-rs?rev=ed0f21acd)",
+ "windows-window 0.0.0 (git+https://github.com/Tam1SH/windows-rs?rev=ed0f21acd)",
 ]
 
 [[package]]
@@ -1465,7 +1475,15 @@ name = "windows-collections"
 version = "0.3.2"
 source = "git+https://github.com/Tam1SH/windows-rs?rev=ab3d2a793560287c572ff9964856c43fd0ce9af7#ab3d2a793560287c572ff9964856c43fd0ce9af7"
 dependencies = [
- "windows-core 0.62.2",
+ "windows-core 0.62.2 (git+https://github.com/Tam1SH/windows-rs?rev=ab3d2a793560287c572ff9964856c43fd0ce9af7)",
+]
+
+[[package]]
+name = "windows-collections"
+version = "0.3.2"
+source = "git+https://github.com/Tam1SH/windows-rs?rev=ed0f21acd#ed0f21acd5f90310a636379512d7777cdba4413d"
+dependencies = [
+ "windows-core 0.62.2 (git+https://github.com/Tam1SH/windows-rs?rev=ed0f21acd)",
 ]
 
 [[package]]
@@ -1473,10 +1491,21 @@ name = "windows-composition"
 version = "0.0.0"
 source = "git+https://github.com/Tam1SH/windows-rs?rev=ab3d2a793560287c572ff9964856c43fd0ce9af7#ab3d2a793560287c572ff9964856c43fd0ce9af7"
 dependencies = [
- "windows-collections 0.3.2",
- "windows-core 0.62.2",
- "windows-numerics 0.3.1",
- "windows-time",
+ "windows-collections 0.3.2 (git+https://github.com/Tam1SH/windows-rs?rev=ab3d2a793560287c572ff9964856c43fd0ce9af7)",
+ "windows-core 0.62.2 (git+https://github.com/Tam1SH/windows-rs?rev=ab3d2a793560287c572ff9964856c43fd0ce9af7)",
+ "windows-numerics 0.3.1 (git+https://github.com/Tam1SH/windows-rs?rev=ab3d2a793560287c572ff9964856c43fd0ce9af7)",
+ "windows-time 0.1.0 (git+https://github.com/Tam1SH/windows-rs?rev=ab3d2a793560287c572ff9964856c43fd0ce9af7)",
+]
+
+[[package]]
+name = "windows-composition"
+version = "0.0.0"
+source = "git+https://github.com/Tam1SH/windows-rs?rev=ed0f21acd#ed0f21acd5f90310a636379512d7777cdba4413d"
+dependencies = [
+ "windows-collections 0.3.2 (git+https://github.com/Tam1SH/windows-rs?rev=ed0f21acd)",
+ "windows-core 0.62.2 (git+https://github.com/Tam1SH/windows-rs?rev=ed0f21acd)",
+ "windows-numerics 0.3.1 (git+https://github.com/Tam1SH/windows-rs?rev=ed0f21acd)",
+ "windows-time 0.1.0 (git+https://github.com/Tam1SH/windows-rs?rev=ed0f21acd)",
 ]
 
 [[package]]
@@ -1498,8 +1527,18 @@ version = "0.62.2"
 source = "git+https://github.com/Tam1SH/windows-rs?rev=ab3d2a793560287c572ff9964856c43fd0ce9af7#ab3d2a793560287c572ff9964856c43fd0ce9af7"
 dependencies = [
  "windows-link 0.2.1 (git+https://github.com/Tam1SH/windows-rs?rev=ab3d2a793560287c572ff9964856c43fd0ce9af7)",
- "windows-result 0.4.1",
- "windows-strings 0.5.1",
+ "windows-result 0.4.1 (git+https://github.com/Tam1SH/windows-rs?rev=ab3d2a793560287c572ff9964856c43fd0ce9af7)",
+ "windows-strings 0.5.1 (git+https://github.com/Tam1SH/windows-rs?rev=ab3d2a793560287c572ff9964856c43fd0ce9af7)",
+]
+
+[[package]]
+name = "windows-core"
+version = "0.62.2"
+source = "git+https://github.com/Tam1SH/windows-rs?rev=ed0f21acd#ed0f21acd5f90310a636379512d7777cdba4413d"
+dependencies = [
+ "windows-link 0.2.1 (git+https://github.com/Tam1SH/windows-rs?rev=ed0f21acd)",
+ "windows-result 0.4.1 (git+https://github.com/Tam1SH/windows-rs?rev=ed0f21acd)",
+ "windows-strings 0.5.1 (git+https://github.com/Tam1SH/windows-rs?rev=ed0f21acd)",
 ]
 
 [[package]]
@@ -1518,9 +1557,19 @@ name = "windows-future"
 version = "0.3.2"
 source = "git+https://github.com/Tam1SH/windows-rs?rev=ab3d2a793560287c572ff9964856c43fd0ce9af7#ab3d2a793560287c572ff9964856c43fd0ce9af7"
 dependencies = [
- "windows-core 0.62.2",
+ "windows-core 0.62.2 (git+https://github.com/Tam1SH/windows-rs?rev=ab3d2a793560287c572ff9964856c43fd0ce9af7)",
  "windows-link 0.2.1 (git+https://github.com/Tam1SH/windows-rs?rev=ab3d2a793560287c572ff9964856c43fd0ce9af7)",
- "windows-threading 0.2.1",
+ "windows-threading 0.2.1 (git+https://github.com/Tam1SH/windows-rs?rev=ab3d2a793560287c572ff9964856c43fd0ce9af7)",
+]
+
+[[package]]
+name = "windows-future"
+version = "0.3.2"
+source = "git+https://github.com/Tam1SH/windows-rs?rev=ed0f21acd#ed0f21acd5f90310a636379512d7777cdba4413d"
+dependencies = [
+ "windows-core 0.62.2 (git+https://github.com/Tam1SH/windows-rs?rev=ed0f21acd)",
+ "windows-link 0.2.1 (git+https://github.com/Tam1SH/windows-rs?rev=ed0f21acd)",
+ "windows-threading 0.2.1 (git+https://github.com/Tam1SH/windows-rs?rev=ed0f21acd)",
 ]
 
 [[package]]
@@ -1563,6 +1612,11 @@ version = "0.2.1"
 source = "git+https://github.com/Tam1SH/windows-rs?rev=ab3d2a793560287c572ff9964856c43fd0ce9af7#ab3d2a793560287c572ff9964856c43fd0ce9af7"
 
 [[package]]
+name = "windows-link"
+version = "0.2.1"
+source = "git+https://github.com/Tam1SH/windows-rs?rev=ed0f21acd#ed0f21acd5f90310a636379512d7777cdba4413d"
+
+[[package]]
 name = "windows-numerics"
 version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1577,8 +1631,17 @@ name = "windows-numerics"
 version = "0.3.1"
 source = "git+https://github.com/Tam1SH/windows-rs?rev=ab3d2a793560287c572ff9964856c43fd0ce9af7#ab3d2a793560287c572ff9964856c43fd0ce9af7"
 dependencies = [
- "windows-core 0.62.2",
+ "windows-core 0.62.2 (git+https://github.com/Tam1SH/windows-rs?rev=ab3d2a793560287c572ff9964856c43fd0ce9af7)",
  "windows-link 0.2.1 (git+https://github.com/Tam1SH/windows-rs?rev=ab3d2a793560287c572ff9964856c43fd0ce9af7)",
+]
+
+[[package]]
+name = "windows-numerics"
+version = "0.3.1"
+source = "git+https://github.com/Tam1SH/windows-rs?rev=ed0f21acd#ed0f21acd5f90310a636379512d7777cdba4413d"
+dependencies = [
+ "windows-core 0.62.2 (git+https://github.com/Tam1SH/windows-rs?rev=ed0f21acd)",
+ "windows-link 0.2.1 (git+https://github.com/Tam1SH/windows-rs?rev=ed0f21acd)",
 ]
 
 [[package]]
@@ -1587,15 +1650,31 @@ version = "0.0.0"
 source = "git+https://github.com/Tam1SH/windows-rs?rev=ab3d2a793560287c572ff9964856c43fd0ce9af7#ab3d2a793560287c572ff9964856c43fd0ce9af7"
 dependencies = [
  "rustc-hash",
- "windows-canvas",
- "windows-collections 0.3.2",
- "windows-composition",
- "windows-core 0.62.2",
- "windows-future 0.3.2",
- "windows-numerics 0.3.1",
- "windows-reference",
- "windows-threading 0.2.1",
- "windows-time",
+ "windows-collections 0.3.2 (git+https://github.com/Tam1SH/windows-rs?rev=ab3d2a793560287c572ff9964856c43fd0ce9af7)",
+ "windows-composition 0.0.0 (git+https://github.com/Tam1SH/windows-rs?rev=ab3d2a793560287c572ff9964856c43fd0ce9af7)",
+ "windows-core 0.62.2 (git+https://github.com/Tam1SH/windows-rs?rev=ab3d2a793560287c572ff9964856c43fd0ce9af7)",
+ "windows-future 0.3.2 (git+https://github.com/Tam1SH/windows-rs?rev=ab3d2a793560287c572ff9964856c43fd0ce9af7)",
+ "windows-numerics 0.3.1 (git+https://github.com/Tam1SH/windows-rs?rev=ab3d2a793560287c572ff9964856c43fd0ce9af7)",
+ "windows-reference 0.1.0 (git+https://github.com/Tam1SH/windows-rs?rev=ab3d2a793560287c572ff9964856c43fd0ce9af7)",
+ "windows-threading 0.2.1 (git+https://github.com/Tam1SH/windows-rs?rev=ab3d2a793560287c572ff9964856c43fd0ce9af7)",
+ "windows-time 0.1.0 (git+https://github.com/Tam1SH/windows-rs?rev=ab3d2a793560287c572ff9964856c43fd0ce9af7)",
+]
+
+[[package]]
+name = "windows-reactor"
+version = "0.0.0"
+source = "git+https://github.com/Tam1SH/windows-rs?rev=ed0f21acd#ed0f21acd5f90310a636379512d7777cdba4413d"
+dependencies = [
+ "rustc-hash",
+ "windows-canvas 0.0.0 (git+https://github.com/Tam1SH/windows-rs?rev=ed0f21acd)",
+ "windows-collections 0.3.2 (git+https://github.com/Tam1SH/windows-rs?rev=ed0f21acd)",
+ "windows-composition 0.0.0 (git+https://github.com/Tam1SH/windows-rs?rev=ed0f21acd)",
+ "windows-core 0.62.2 (git+https://github.com/Tam1SH/windows-rs?rev=ed0f21acd)",
+ "windows-future 0.3.2 (git+https://github.com/Tam1SH/windows-rs?rev=ed0f21acd)",
+ "windows-numerics 0.3.1 (git+https://github.com/Tam1SH/windows-rs?rev=ed0f21acd)",
+ "windows-reference 0.1.0 (git+https://github.com/Tam1SH/windows-rs?rev=ed0f21acd)",
+ "windows-threading 0.2.1 (git+https://github.com/Tam1SH/windows-rs?rev=ed0f21acd)",
+ "windows-time 0.1.0 (git+https://github.com/Tam1SH/windows-rs?rev=ed0f21acd)",
 ]
 
 [[package]]
@@ -1608,8 +1687,17 @@ name = "windows-reference"
 version = "0.1.0"
 source = "git+https://github.com/Tam1SH/windows-rs?rev=ab3d2a793560287c572ff9964856c43fd0ce9af7#ab3d2a793560287c572ff9964856c43fd0ce9af7"
 dependencies = [
- "windows-core 0.62.2",
- "windows-time",
+ "windows-core 0.62.2 (git+https://github.com/Tam1SH/windows-rs?rev=ab3d2a793560287c572ff9964856c43fd0ce9af7)",
+ "windows-time 0.1.0 (git+https://github.com/Tam1SH/windows-rs?rev=ab3d2a793560287c572ff9964856c43fd0ce9af7)",
+]
+
+[[package]]
+name = "windows-reference"
+version = "0.1.0"
+source = "git+https://github.com/Tam1SH/windows-rs?rev=ed0f21acd#ed0f21acd5f90310a636379512d7777cdba4413d"
+dependencies = [
+ "windows-core 0.62.2 (git+https://github.com/Tam1SH/windows-rs?rev=ed0f21acd)",
+ "windows-time 0.1.0 (git+https://github.com/Tam1SH/windows-rs?rev=ed0f21acd)",
 ]
 
 [[package]]
@@ -1630,6 +1718,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "windows-result"
+version = "0.4.1"
+source = "git+https://github.com/Tam1SH/windows-rs?rev=ed0f21acd#ed0f21acd5f90310a636379512d7777cdba4413d"
+dependencies = [
+ "windows-link 0.2.1 (git+https://github.com/Tam1SH/windows-rs?rev=ed0f21acd)",
+]
+
+[[package]]
 name = "windows-strings"
 version = "0.4.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1644,6 +1740,14 @@ version = "0.5.1"
 source = "git+https://github.com/Tam1SH/windows-rs?rev=ab3d2a793560287c572ff9964856c43fd0ce9af7#ab3d2a793560287c572ff9964856c43fd0ce9af7"
 dependencies = [
  "windows-link 0.2.1 (git+https://github.com/Tam1SH/windows-rs?rev=ab3d2a793560287c572ff9964856c43fd0ce9af7)",
+]
+
+[[package]]
+name = "windows-strings"
+version = "0.5.1"
+source = "git+https://github.com/Tam1SH/windows-rs?rev=ed0f21acd#ed0f21acd5f90310a636379512d7777cdba4413d"
+dependencies = [
+ "windows-link 0.2.1 (git+https://github.com/Tam1SH/windows-rs?rev=ed0f21acd)",
 ]
 
 [[package]]
@@ -1673,12 +1777,29 @@ dependencies = [
 ]
 
 [[package]]
+name = "windows-threading"
+version = "0.2.1"
+source = "git+https://github.com/Tam1SH/windows-rs?rev=ed0f21acd#ed0f21acd5f90310a636379512d7777cdba4413d"
+dependencies = [
+ "windows-link 0.2.1 (git+https://github.com/Tam1SH/windows-rs?rev=ed0f21acd)",
+]
+
+[[package]]
 name = "windows-time"
 version = "0.1.0"
 source = "git+https://github.com/Tam1SH/windows-rs?rev=ab3d2a793560287c572ff9964856c43fd0ce9af7#ab3d2a793560287c572ff9964856c43fd0ce9af7"
 dependencies = [
- "windows-core 0.62.2",
+ "windows-core 0.62.2 (git+https://github.com/Tam1SH/windows-rs?rev=ab3d2a793560287c572ff9964856c43fd0ce9af7)",
  "windows-link 0.2.1 (git+https://github.com/Tam1SH/windows-rs?rev=ab3d2a793560287c572ff9964856c43fd0ce9af7)",
+]
+
+[[package]]
+name = "windows-time"
+version = "0.1.0"
+source = "git+https://github.com/Tam1SH/windows-rs?rev=ed0f21acd#ed0f21acd5f90310a636379512d7777cdba4413d"
+dependencies = [
+ "windows-core 0.62.2 (git+https://github.com/Tam1SH/windows-rs?rev=ed0f21acd)",
+ "windows-link 0.2.1 (git+https://github.com/Tam1SH/windows-rs?rev=ed0f21acd)",
 ]
 
 [[package]]
@@ -1686,7 +1807,15 @@ name = "windows-window"
 version = "0.0.0"
 source = "git+https://github.com/Tam1SH/windows-rs?rev=ab3d2a793560287c572ff9964856c43fd0ce9af7#ab3d2a793560287c572ff9964856c43fd0ce9af7"
 dependencies = [
- "windows-core 0.62.2",
+ "windows-core 0.62.2 (git+https://github.com/Tam1SH/windows-rs?rev=ab3d2a793560287c572ff9964856c43fd0ce9af7)",
+]
+
+[[package]]
+name = "windows-window"
+version = "0.0.0"
+source = "git+https://github.com/Tam1SH/windows-rs?rev=ed0f21acd#ed0f21acd5f90310a636379512d7777cdba4413d"
+dependencies = [
+ "windows-core 0.62.2 (git+https://github.com/Tam1SH/windows-rs?rev=ed0f21acd)",
 ]
 
 [[package]]

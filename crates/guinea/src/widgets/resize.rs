@@ -1,6 +1,6 @@
 use windows_reactor::{
-    border, grid, Color, Element, ElementExt, GridLength, HorizontalAlignment, PointerEventInfo,
-    RenderCx, SetState, ThemeRef, VerticalAlignment,
+    border, grid, Color, Element, ElementExt, GridLength, HookRef, HorizontalAlignment,
+    PointerEventInfo, RenderCx, SetState, ThemeRef, VerticalAlignment,
 };
 
 /// Width of the full drag surface (the hit-test area, not the visible pill).
@@ -26,6 +26,10 @@ pub struct ResizeHandle {
     set_hovered: SetState<bool>,
     pressed: bool,
     set_pressed: SetState<bool>,
+    /// `(root_x, current)` captured on `PointerPressed` - the anchor for
+    /// computing a real drag delta. See the `on_pointer_moved` comment in
+    /// [`build`](Self::build) for why this can't just be `current + info.x`.
+    drag_start: HookRef<(f64, f64)>,
     current: f64,
     set: SetState<f64>,
     min: f64,
@@ -36,11 +40,13 @@ pub struct ResizeHandle {
 pub fn resize_handle(cx: &mut RenderCx, current: f64, set: SetState<f64>) -> ResizeHandle {
     let (hovered, set_hovered) = cx.use_state(false);
     let (pressed, set_pressed) = cx.use_state(false);
+    let drag_start = cx.use_ref((0.0_f64, 0.0_f64));
     ResizeHandle {
         hovered,
         set_hovered,
         pressed,
         set_pressed,
+        drag_start,
         current,
         set,
         min: 0.0,
@@ -72,6 +78,7 @@ impl ResizeHandle {
             set_hovered,
             pressed,
             set_pressed,
+            drag_start,
             current,
             set,
             min,
@@ -131,6 +138,7 @@ impl ResizeHandle {
 
         let set_hovered_on_exit = set_hovered.clone();
         let set_pressed_on_release = set_pressed.clone();
+        let drag_start_on_press = drag_start.clone();
         border(indicator)
             .width(RESIZE_HANDLE_WIDTH)
             // Background must stay set (even fully transparent) so the whole
@@ -141,11 +149,21 @@ impl ResizeHandle {
             .vertical_alignment(VerticalAlignment::Stretch)
             .on_pointer_entered(move |_: PointerEventInfo| set_hovered.call(true))
             .on_pointer_exited(move || set_hovered_on_exit.call(false))
-            .on_pointer_pressed(move |_: PointerEventInfo| set_pressed.call(true))
+            .on_pointer_pressed(move |info: PointerEventInfo| {
+                set_pressed.call(true);
+                // Anchor the drag to where it started, in `root_x` (window-
+                // relative, not `element`-relative) - this handle's own
+                // margin follows `current` every render, so its own local
+                // coordinate origin moves out from under the drag on every
+                // frame. `root_x` doesn't move with it.
+                *drag_start_on_press.borrow_mut() = (info.root_x, current);
+            })
             .on_pointer_released(move |_: PointerEventInfo| set_pressed_on_release.call(false))
             .on_pointer_moved(move |info: PointerEventInfo| {
                 if info.is_left_button_pressed {
-                    set.call((current + info.x).clamp(min, max));
+                    let (start_root_x, start_current) = *drag_start.borrow();
+                    let delta = info.root_x - start_root_x;
+                    set.call((start_current + delta).clamp(min, max));
                 }
             })
             .into()
