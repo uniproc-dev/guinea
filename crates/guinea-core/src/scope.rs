@@ -110,6 +110,20 @@ impl Scope {
         )
     }
 
+    /// Sets `F`'s starting state instead of `F::State::default()`. Call
+    /// before anything else touches `F` in this scope - overwrites any
+    /// existing cell, dropping its listeners.
+    pub fn seed<F: Reducer>(&self, state: F::State) {
+        self.cells.borrow_mut().insert(
+            TypeId::of::<F>(),
+            Cell {
+                state: Rc::new(RefCell::new(state)),
+                actions: RefCell::new(None),
+                listeners: RefCell::new(Vec::new()),
+            },
+        );
+    }
+
     pub fn actions<F: Reducer>(&self) -> Rc<F::Actions> {
         let mut cells = self.cells.borrow_mut();
         let cell = cells.entry(TypeId::of::<F>()).or_insert_with(Cell::empty::<F>);
