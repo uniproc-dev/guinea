@@ -1,14 +1,28 @@
 use proc_macro::TokenStream;
+use proc_macro_crate::{FoundCrate, crate_name};
 use quote::quote;
 use syn::{
-    Error, FnArg, GenericArgument, ItemFn, PatType, PathArguments, Result, Type, spanned::Spanned,
+    Error, FnArg, GenericArgument, ItemFn, PatType, PathArguments, ReturnType, Result, Type,
+    spanned::Spanned,
 };
 
 pub fn generate_standalone_handler(item: ItemFn) -> TokenStream {
     expand_handler(item).unwrap_or_else(|err| err.to_compile_error().into())
 }
 
+fn guinea_core_crate_path() -> proc_macro2::TokenStream {
+    match crate_name("guinea-core") {
+        Ok(FoundCrate::Itself) => quote!(crate),
+        Ok(FoundCrate::Name(name)) => {
+            let ident = syn::Ident::new(&name, proc_macro2::Span::call_site());
+            quote!(::#ident)
+        }
+        Err(_) => quote!(::guinea_core),
+    }
+}
+
 fn expand_handler(item: ItemFn) -> Result<TokenStream> {
+    let gc = guinea_core_crate_path();
     let fn_name = &item.sig.ident;
     let is_async = item.sig.asyncness.is_some();
     let inputs = &item.sig.inputs;
@@ -19,57 +33,143 @@ fn expand_handler(item: ItemFn) -> Result<TokenStream> {
         extract_actor_from_ref(inputs.get(0))?
     };
 
-    let (msg_ty, msg_name) = extract_msg_info(inputs.get(1))?;
+    let (msg_ty, _msg_name) = extract_msg_info(inputs.get(1))?;
 
-    let handler_body = if is_async {
-        if inputs.len() != 2 {
-            return Err(Error::new(
-                item.sig.span(),
-                format!(
-                    "Async handler for actor '{}' and message '{}' must have exactly 2 arguments: (ctx: AsyncContext<{}>, msg: {})",
-                    actor_name, msg_name, actor_name, msg_name
-                ),
-            ));
-        }
-
-        quote! {
-            let actx = ctx.async_ctx();
-            tokio::spawn(async move {
-                #fn_name(actx, msg).await;
-            });
-        }
-    } else {
-        if inputs.len() < 2 || inputs.len() > 3 {
-            return Err(Error::new(
-                item.sig.span(),
-                format!(
-                    "Sync handler for actor '{}' and message '{}' must have 2 or 3 arguments: (actor: &{} or &mut {}, msg: {}, [ctx: &Context<{}>])",
-                    actor_name, msg_name, actor_name, actor_name, msg_name, actor_name
-                ),
-            ));
-        }
-
-        let has_ctx = inputs.len() == 3;
-        let call_args = if has_ctx {
-            quote! { self, msg, ctx }
-        } else {
-            quote! { self, msg }
-        };
-
-        quote! { #fn_name(#call_args); }
+    // A return type is the signal that this handler answers an
+    // `AsyncBus::request` rather than reacting to a fire-and-forget event.
+    // The generated impl is the only code path that can call
+    // `AsyncBus::reply` for this message, so "replies exactly once" holds
+    // by construction regardless of which of the four branches below fires.
+    let ret_ty = match &item.sig.output {
+        ReturnType::Default => None,
+        ReturnType::Type(_, ty) => Some(ty),
     };
 
     let trait_generics = item.sig.generics.clone();
     let (impl_generics, _, where_clause) = trait_generics.split_for_impl();
 
+    let trait_impl = match (is_async, ret_ty) {
+        // Fire-and-forget sync handler - unchanged from before the RPC
+        // heuristic existed.
+        (false, None) => {
+            if inputs.len() < 2 || inputs.len() > 3 {
+                return Err(Error::new(
+                    item.sig.span(),
+                    format!(
+                        "Sync handler for actor '{}' must have 2 or 3 arguments: (actor: &{} or &mut {}, msg: _, [ctx: &Context<{}>])",
+                        actor_name, actor_name, actor_name, actor_name
+                    ),
+                ));
+            }
+            let call_args = if inputs.len() == 3 {
+                quote! { self, msg, ctx }
+            } else {
+                quote! { self, msg }
+            };
+            quote! {
+                impl #impl_generics #gc::actor::Handler<#msg_ty> for #actor_ty #where_clause {
+                    fn handle(&mut self, msg: #msg_ty, ctx: &#gc::actor::Context<Self>) {
+                        #fn_name(#call_args);
+                    }
+                }
+            }
+        }
+
+        // Sync RPC handler - `RpcHandler<#msg_ty>`'s blanket `Handler<RpcRequest<#msg_ty>>`
+        // impl (in guinea-core) calls `AsyncBus::reply` right after this
+        // returns, so the value just needs to flow back out as an
+        // expression.
+        (false, Some(ret_ty)) => {
+            if inputs.len() < 2 || inputs.len() > 3 {
+                return Err(Error::new(
+                    item.sig.span(),
+                    format!(
+                        "Sync RPC handler for actor '{}' must have 2 or 3 arguments: (actor: &{} or &mut {}, req: _, [ctx: &Context<{}>])",
+                        actor_name, actor_name, actor_name, actor_name
+                    ),
+                ));
+            }
+            let call_args = if inputs.len() == 3 {
+                quote! { self, msg, ctx }
+            } else {
+                quote! { self, msg }
+            };
+            quote! {
+                impl #impl_generics #gc::actor::event_bus::rpc::RpcHandler<#msg_ty> for #actor_ty #where_clause {
+                    fn handle_rpc(&mut self, msg: #msg_ty, ctx: &#gc::actor::Context<Self>) -> #ret_ty {
+                        #fn_name(#call_args)
+                    }
+                }
+            }
+        }
+
+        // Fire-and-forget async handler - unchanged from before the RPC
+        // heuristic existed.
+        (true, None) => {
+            if inputs.len() != 2 {
+                return Err(Error::new(
+                    item.sig.span(),
+                    format!(
+                        "Async handler for actor '{}' must have exactly 2 arguments: (ctx: AsyncContext<{}>, msg: _)",
+                        actor_name, actor_name
+                    ),
+                ));
+            }
+            quote! {
+                impl #impl_generics #gc::actor::Handler<#msg_ty> for #actor_ty #where_clause {
+                    fn handle(&mut self, msg: #msg_ty, ctx: &#gc::actor::Context<Self>) {
+                        let actx = ctx.async_ctx();
+                        tokio::spawn(async move {
+                            #fn_name(actx, msg).await;
+                        });
+                    }
+                }
+            }
+        }
+
+        // Async RPC handler - the reply only becomes available after
+        // `.await`, so `RpcHandler` (sync-only) doesn't fit. Implement
+        // `Handler<RpcRequest<#msg_ty>>` directly instead: unwrap the
+        // envelope up front, spawn the body, and reply with whatever it
+        // returns once it resolves. The user's fn body never sees
+        // `correlation_id` and has no way to call `reply` itself - this
+        // generated glue is the only thing that can, same "exactly once"
+        // guarantee as the sync branch, just paid for with generated code
+        // instead of the trait system (async traits can't express "you
+        // must eventually produce exactly one value" the way a plain
+        // return type does).
+        (true, Some(ret_ty)) => {
+            if inputs.len() != 2 {
+                return Err(Error::new(
+                    item.sig.span(),
+                    format!(
+                        "Async RPC handler for actor '{}' must have exactly 2 arguments: (ctx: AsyncContext<{}>, req: _)",
+                        actor_name, actor_name
+                    ),
+                ));
+            }
+            quote! {
+                impl #impl_generics #gc::actor::Handler<#gc::actor::event_bus::RpcRequest<#msg_ty>> for #actor_ty #where_clause {
+                    fn handle(&mut self, msg: #gc::actor::event_bus::RpcRequest<#msg_ty>, ctx: &#gc::actor::Context<Self>) {
+                        let correlation_id = msg.correlation_id;
+                        let chain = msg.chain;
+                        let msg = msg.payload;
+                        let actx = ctx.async_ctx();
+                        #gc::actor::event_bus::AsyncBus::spawn_reply::<#ret_ty, _>(
+                            correlation_id,
+                            chain,
+                            async move { #fn_name(actx, msg).await },
+                        );
+                    }
+                }
+            }
+        }
+    };
+
     Ok(TokenStream::from(quote! {
         #item
 
-        impl #impl_generics guinea_core::actor::Handler<#msg_ty> for #actor_ty #where_clause {
-            fn handle(&mut self, msg: #msg_ty, ctx: &guinea_core::actor::Context<Self>) {
-                #handler_body
-            }
-        }
+        #trait_impl
     }))
 }
 

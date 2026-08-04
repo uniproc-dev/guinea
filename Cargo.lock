@@ -339,6 +339,7 @@ dependencies = [
  "anyhow",
  "arc-swap",
  "derive_more",
+ "guinea-macros",
  "guinea-trace",
  "http",
  "inventory",
