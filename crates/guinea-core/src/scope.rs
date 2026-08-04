@@ -1,6 +1,6 @@
 use std::any::{Any, TypeId};
 use std::cell::{Ref, RefCell};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
 use std::sync::atomic::{AtomicU64, Ordering};
 
@@ -75,6 +75,15 @@ impl Cell {
 pub struct Scope {
     cells: RefCell<HashMap<TypeId, Cell>>,
     teardowns: RefCell<Vec<Box<dyn FnOnce()>>>,
+    /// Features (identified by their `install` function's own type - see
+    /// `FeatureInitContext::install`/`inherit` in the `guinea` crate) that
+    /// were explicitly installed *in this scope*. Separate from `cells`
+    /// (which tracks `Reducer` state/actions) because a feature can spawn
+    /// several actors/reducers as one unit - this tracks the unit itself,
+    /// so a descendant scope can find out "has an ancestor already taken
+    /// ownership of this feature" without knowing which reducer types it
+    /// happens to use internally.
+    installed_features: RefCell<HashSet<TypeId>>,
 }
 
 impl Drop for Scope {
@@ -88,6 +97,38 @@ impl Drop for Scope {
 impl Scope {
     pub fn new() -> Self {
         Self::default()
+    }
+
+    /// Marks feature `F` (its `install` function, used purely as a type
+    /// identity) as owned by this scope. `F` must not already be marked
+    /// here - two different call sites both claiming ownership of the same
+    /// feature in the same scope is a setup bug, not something to merge
+    /// silently.
+    pub fn mark_feature_installed<F: 'static>(&self) {
+        let newly_inserted = self.installed_features.borrow_mut().insert(TypeId::of::<F>());
+        assert!(
+            newly_inserted,
+            "feature already installed in this scope - install() called twice for the same feature"
+        );
+    }
+
+    /// Marks reducer `R` as owned by this scope - same underlying set as
+    /// [`mark_feature_installed`](Self::mark_feature_installed), keyed on
+    /// `R` instead of an install-function type. Idempotent (unlike
+    /// `mark_feature_installed`): a feature's actor constructor calling
+    /// `ctx.port::<R>()` more than once (e.g. wiring two actors to the
+    /// same reducer) is normal, not a setup bug - only the reducer-typed
+    /// query this feeds (`resolve_owner`) cares whether it happened at
+    /// all, not how many times.
+    pub fn note_reducer_owner<R: 'static>(&self) {
+        self.installed_features.borrow_mut().insert(TypeId::of::<R>());
+    }
+
+    /// Whether feature `F` was marked installed in *this exact* scope (not
+    /// ancestors - callers walk the ancestor chain themselves, see
+    /// `FeatureInitContext::inherit`).
+    pub fn has_feature<F: 'static>(&self) -> bool {
+        self.installed_features.borrow().contains(&TypeId::of::<F>())
     }
 
     pub fn state<F: Reducer>(&self) -> Rc<RefCell<F::State>> {

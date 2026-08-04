@@ -335,11 +335,28 @@ impl<'a> SegmentCx<'a> {
     }
     
     fn resolve_owner<R: Reducer>(&self) -> Rc<Scope> {
-        self.scopes[..=self.cursor]
+        // Ownership is decided by `note_reducer_owner::<R>()` - set
+        // synchronously inside `ctx.port`/`ctx.actions`/`ctx.seed_reducer`
+        // during `install()`, always before the first render for this
+        // segment. That makes this a reliable signal (unlike checking
+        // whether `R`'s state cell already exists, which depends on
+        // render/actor-response timing, not on ownership), so a miss here
+        // is a genuine setup bug, not a normal race - panic instead of
+        // silently treating the current scope as the owner.
+        let owner = self.scopes[..=self.cursor]
             .iter()
             .rev()
-            .find(|scope| scope.peek::<R>().is_some())
-            .unwrap_or(&self.scopes[self.cursor])
+            .find(|scope| scope.has_feature::<R>());
+        owner
+            .unwrap_or_else(|| {
+                panic!(
+                    "use_reducer::<{}>() found no scope (this one or any ancestor) whose \
+                     install() called ctx.port/ctx.actions/ctx.seed_reducer for it. Either \
+                     this route never installs the feature that owns it, or that feature \
+                     installs in the wrong branch of the route tree.",
+                    std::any::type_name::<R>()
+                )
+            })
             .clone()
     }
     
@@ -590,6 +607,11 @@ impl Router {
 
             let ctx = FeatureInitContext {
                 scope: scope.clone(),
+                // Snapshot of everything built so far this loop - root to
+                // this segment's immediate parent, never including `scope`
+                // itself. `inherit()` walks this to find an ancestor that
+                // already `install()`-ed the feature being asked for.
+                ancestors: Rc::from(scopes.clone()),
                 token: self.token.clone(),
                 event_bus: self.event_bus.clone(),
                 store: self.store.clone(),
@@ -642,8 +664,9 @@ mod tests {
     }
 
     fn install_processes(ctx: &FeatureInitContext, uri: &AppUri) -> anyhow::Result<()> {
-        ctx.scope
-            .push::<ProcessesReducer>(uri.segment(0).expect("test uri always has a segment").to_string());
+        ctx.seed_reducer::<ProcessesReducer>(ProcessesViewState {
+            seeded_from: uri.segment(0).expect("test uri always has a segment").to_string(),
+        });
         Ok(())
     }
 

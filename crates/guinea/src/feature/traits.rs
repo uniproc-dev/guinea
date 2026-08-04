@@ -26,6 +26,7 @@ pub struct AppFeatureDeinitContext<'a> {
 #[derive(Clone)]
 pub struct FeatureInitContext {
     pub scope: Rc<Scope>,
+    pub ancestors: Rc<[Rc<Scope>]>,
     pub token: UiThreadToken,
     pub event_bus: Rc<EventBus>,
     pub store: amethystate::DefaultStore,
@@ -33,8 +34,36 @@ pub struct FeatureInitContext {
 }
 
 impl FeatureInitContext {
+    pub fn install<F>(&self, install: F) -> anyhow::Result<()>
+    where
+        F: Fn(&FeatureInitContext) -> anyhow::Result<()> + 'static,
+    {
+        install(self)?;
+        self.scope.mark_feature_installed::<F>();
+        Ok(())
+    }
+
+    pub fn inherit<F>(&self, _install: F)
+    where
+        F: Fn(&FeatureInitContext) -> anyhow::Result<()> + 'static,
+    {
+        let found = self.ancestors.iter().any(|s| s.has_feature::<F>());
+        assert!(
+            found,
+            "inherit() found no ancestor scope that installed this feature - \
+             an ancestor must call ctx.install(...) for it first"
+        );
+    }
 
     pub fn port<R: Reducer>(&self) -> impl Fn(R::Push) + 'static {
+        // A feature manages exactly one reducer, wired via exactly this
+        // call - `ctx.port::<R>()` inside `install()`, before any render
+        // happens for this segment. That makes it a reliable, non-racy
+        // "this scope owns R" signal for `resolve_owner` to check, unlike
+        // guessing from whether R's state cell happens to exist yet
+        // (which depends on render/actor-response timing, not ownership).
+        self.scope.note_reducer_owner::<R>();
+
         // Weak, not strong: an actor storing this port closure must not keep
         // its owning page scope alive. Otherwise Scope -> Addr -> Actor -> Port
         // -> Scope forms an Rc cycle and the actor leaks across navigation.
@@ -47,6 +76,10 @@ impl FeatureInitContext {
     }
 
     pub fn actions<R: Reducer>(&self) -> Rc<R::Actions> {
+        // Same "this scope owns R" signal as `port` - a feature dispatching
+        // through `ctx.actions::<R>()` directly (without ever calling
+        // `ctx.port::<R>()`) is just as much a declaration of ownership.
+        self.scope.note_reducer_owner::<R>();
         self.scope.actions::<R>()
     }
 
@@ -55,6 +88,7 @@ impl FeatureInitContext {
     /// read - so the first render already reflects real data instead of the
     /// default followed by an async actor round-trip. See [`Scope::seed`].
     pub fn seed_reducer<R: Reducer>(&self, state: R::State) {
+        self.scope.note_reducer_owner::<R>();
         self.scope.seed::<R>(state);
     }
 
