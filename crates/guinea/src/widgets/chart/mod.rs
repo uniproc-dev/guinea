@@ -120,6 +120,7 @@ pub fn line_chart_with_options(
             let _ = chain.draw(|ctx| {
                 width_for_effect.set(ctx.width);
                 render(ctx, &series, &options);
+                Ok(())
             });
         }
     });
@@ -137,7 +138,10 @@ pub fn line_chart_with_options(
         };
         if w > 0.0 && h > 0.0 {
             let options = *options_for_mount.borrow();
-            let _ = chain.draw(|ctx| render(ctx, &series_for_mount.borrow(), &options));
+            let _ = chain.draw(|ctx| {
+                render(ctx, &series_for_mount.borrow(), &options);
+                Ok(())
+            });
         }
         chain_for_mount.set(Some(chain));
     });
@@ -152,7 +156,10 @@ pub fn line_chart_with_options(
         if let Some(chain) = chain_for_resize.borrow().as_ref() {
             if chain.resize(w, h).is_ok() {
                 let options = *options_for_resize.borrow();
-                let _ = chain.draw(|ctx| render(ctx, &series_for_resize.borrow(), &options));
+                let _ = chain.draw(|ctx| {
+                    render(ctx, &series_for_resize.borrow(), &options);
+                    Ok(())
+                });
             }
         }
     });

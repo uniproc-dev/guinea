@@ -28,9 +28,9 @@ raw-window-handle = "0.6.2"
 # Pinned to an explicit rev (not just `git = "..."`) so this and
 # examples/processes-app's separate workspace/lockfile can't silently drift
 # onto different commits of the same crate - they did, until this was added.
-windows-reactor = { git = "https://github.com/Tam1SH/windows-rs", rev = "a27687681" }
-windows-reactor-setup = { git = "https://github.com/Tam1SH/windows-rs", rev = "a27687681" }
-windows-canvas = { git = "https://github.com/Tam1SH/windows-rs", rev = "a27687681" }
+windows-reactor = { git = "https://github.com/Tam1SH/windows-rs", rev = "fba3ccc1c" }
+windows-reactor-setup = { git = "https://github.com/Tam1SH/windows-rs", rev = "fba3ccc1c" }
+windows-canvas = { git = "https://github.com/Tam1SH/windows-rs", rev = "fba3ccc1c" }
 
 # --- Async ---
 tokio = { version = "1.49.0", features = ["full"] }

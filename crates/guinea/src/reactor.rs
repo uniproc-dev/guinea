@@ -120,8 +120,17 @@ mod tests {
     use super::*;
     use guinea_core::actor::event_bus::EventBus;
     use std::sync::atomic::{AtomicUsize, Ordering};
-    use std::sync::Arc;
+    use std::sync::{Arc, Mutex};
     use std::time::Duration as StdDuration;
+
+    /// `invoke_on_ui` (under `test-utils`) queues onto `EventBus`'s single
+    /// *global* `TEST_TASK_QUEUE` - there's no per-test isolation. Run two of
+    /// these tests in parallel (cargo's default) and one test's `wait()` will
+    /// happily drain the *other* test's still-pending timer wakeups via
+    /// `process_queue()`, corrupting both tests' counters. A plain `Mutex`
+    /// held for each test's duration serializes just this module without
+    /// needing a new dependency or touching the shared queue itself.
+    static TEST_LOCK: Mutex<()> = Mutex::new(());
 
     /// Real time, not a fake clock - `wait` sleeps past `ms`, then drains
     /// whatever `invoke_on_ui` queued (`test-utils` routes it through
@@ -133,6 +142,7 @@ mod tests {
 
     #[test]
     fn loop_fires_on_interval() {
+        let _guard = TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let reactor = Reactor::new();
         let counter = Arc::new(AtomicUsize::new(0));
 
@@ -150,6 +160,7 @@ mod tests {
 
     #[test]
     fn loop_stops_on_handle_drop() {
+        let _guard = TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let reactor = Reactor::new();
         let counter = Arc::new(AtomicUsize::new(0));
 
@@ -168,6 +179,7 @@ mod tests {
 
     #[test]
     fn loop_respects_active_signal() {
+        let _guard = TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let reactor = Reactor::new();
         let active = Signal::new(false);
         let counter = Arc::new(AtomicUsize::new(0));
@@ -191,6 +203,7 @@ mod tests {
 
     #[test]
     fn loop_drop_before_first_tick() {
+        let _guard = TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let reactor = Reactor::new();
         let counter = Arc::new(AtomicUsize::new(0));
 
@@ -207,6 +220,7 @@ mod tests {
 
     #[test]
     fn heartbeat_always_fires() {
+        let _guard = TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let reactor = Reactor::new();
         let counter = Arc::new(AtomicUsize::new(0));
 
@@ -223,6 +237,7 @@ mod tests {
 
     #[test]
     fn heartbeat_stops_on_drop() {
+        let _guard = TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let reactor = Reactor::new();
         let counter = Arc::new(AtomicUsize::new(0));
 

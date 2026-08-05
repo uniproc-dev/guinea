@@ -26,7 +26,7 @@ pub struct ResizeHandle {
     set_hovered: SetState<bool>,
     pressed: bool,
     set_pressed: SetState<bool>,
-    /// `(root_x, current)` captured on `PointerPressed` - the anchor for
+    /// `(window_x, current)` captured on `PointerPressed` - the anchor for
     /// computing a real drag delta. See the `on_pointer_moved` comment in
     /// [`build`](Self::build) for why this can't just be `current + info.x`.
     drag_start: HookRef<(f64, f64)>,
@@ -147,22 +147,23 @@ impl ResizeHandle {
             .background(TRANSPARENT)
             .horizontal_alignment(HorizontalAlignment::Left)
             .vertical_alignment(VerticalAlignment::Stretch)
+            .capture_pointer_on_press()
             .on_pointer_entered(move |_: PointerEventInfo| set_hovered.call(true))
             .on_pointer_exited(move || set_hovered_on_exit.call(false))
             .on_pointer_pressed(move |info: PointerEventInfo| {
                 set_pressed.call(true);
-                // Anchor the drag to where it started, in `root_x` (window-
+                // Anchor the drag to where it started, in `window_x` (window-
                 // relative, not `element`-relative) - this handle's own
                 // margin follows `current` every render, so its own local
                 // coordinate origin moves out from under the drag on every
-                // frame. `root_x` doesn't move with it.
-                *drag_start_on_press.borrow_mut() = (info.root_x, current);
+                // frame. `window_x` doesn't move with it.
+                *drag_start_on_press.borrow_mut() = (info.window_x, current);
             })
             .on_pointer_released(move |_: PointerEventInfo| set_pressed_on_release.call(false))
             .on_pointer_moved(move |info: PointerEventInfo| {
                 if info.is_left_button_pressed {
-                    let (start_root_x, start_current) = *drag_start.borrow();
-                    let delta = info.root_x - start_root_x;
+                    let (start_window_x, start_current) = *drag_start.borrow();
+                    let delta = info.window_x - start_window_x;
                     set.call((start_current + delta).clamp(min, max));
                 }
             })
