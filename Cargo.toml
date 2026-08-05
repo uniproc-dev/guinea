@@ -39,7 +39,7 @@ tokio = { version = "1.49.0", features = ["full"] }
 serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.149"
 uuid = { version = "1.23.0", features = ["v4"] }
-amethystate = "0.9.3"
+amethystate = "0.9.4"
 
 # --- Logging & Diagnostics ---
 tracing = { version = "0.1.44", features = ["release_max_level_warn"] }
