@@ -13,7 +13,7 @@ strsim.workspace = true
 guinea-core.workspace = true
 heck = "0.5"
 fluent-syntax.workspace = true
-guinea-meta-build = { path = "../../../guinea-meta/crates/guinea-meta-build" }
+guinea-meta-build = { git = "https://github.com/uniproc-dev/guinea-meta", branch = "main" }
 
 [dev-dependencies]
 insta = "1"
