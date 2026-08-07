@@ -366,12 +366,12 @@ dependencies = [
 [[package]]
 name = "guinea-meta"
 version = "0.1.0"
-source = "git+https://github.com/uniproc-dev/guinea-meta?branch=main#c2ed5a9cc5ae531ad624a77acf9d3428e6ee4f39"
+source = "git+https://github.com/uniproc-dev/guinea-meta?tag=v0.1.0#c2ed5a9cc5ae531ad624a77acf9d3428e6ee4f39"
 
 [[package]]
 name = "guinea-meta-build"
 version = "0.1.0"
-source = "git+https://github.com/uniproc-dev/guinea-meta?branch=main#c2ed5a9cc5ae531ad624a77acf9d3428e6ee4f39"
+source = "git+https://github.com/uniproc-dev/guinea-meta?tag=v0.1.0#c2ed5a9cc5ae531ad624a77acf9d3428e6ee4f39"
 dependencies = [
  "serde",
  "toml 0.8.23",

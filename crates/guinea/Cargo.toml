@@ -6,7 +6,7 @@ edition.workspace = true
 [dependencies]
 guinea-core.workspace = true
 guinea-codegen.workspace = true
-guinea-meta = { git = "https://github.com/uniproc-dev/guinea-meta", branch = "main" }
+guinea-meta = { git = "https://github.com/uniproc-dev/guinea-meta", tag = "v0.1.0" }
 tracing.workspace = true
 anyhow.workspace = true
 derive_more.workspace = true
