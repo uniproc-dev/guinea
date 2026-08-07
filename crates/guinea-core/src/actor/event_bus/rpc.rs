@@ -205,11 +205,25 @@ impl AsyncBus {
 mod tests {
     use super::*;
     use crate::actor::event_bus::EventBus;
+    use std::sync::Mutex;
     use std::sync::mpsc as std_mpsc;
     use std::time::Duration as StdDuration;
 
+    /// Every test here drives the bus by hand via `EventBus::process_queue()`,
+    /// and under `test-utils` `invoke_on_ui` funnels all work into one
+    /// process-wide `TEST_TASK_QUEUE`. A drain is therefore not scoped to the
+    /// test that issued it: run two of these concurrently (cargo's default)
+    /// and one test consumes the other's queued `RpcRequest`/`RpcResponse`
+    /// deliveries, so the rightful owner never sees its reply and dies on
+    /// `RPC request timed out`. `PENDING_REQUESTS` is global for the same
+    /// reason. Serializing the module with a plain `Mutex` held for each
+    /// test's duration is enough; `into_inner` on poisoning keeps a single
+    /// failing test from cascading into bogus failures everywhere else.
+    static TEST_LOCK: Mutex<()> = Mutex::new(());
+
     #[tokio::test]
     async fn request_reply_round_trip_same_thread() {
+        let _guard = TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         #[derive(Clone, Debug)]
         struct Ping;
         #[derive(Clone, Debug)]
@@ -234,6 +248,7 @@ mod tests {
 
     #[tokio::test]
     async fn rpc_handler_replies_exactly_once_via_the_blanket_impl() {
+        let _guard = TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         use crate::actor::{Addr, UiThreadToken};
 
         #[derive(Clone, Debug)]
@@ -266,6 +281,7 @@ mod tests {
 
     #[tokio::test]
     async fn request_times_out_with_no_subscriber() {
+        let _guard = TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         #[derive(Clone, Debug)]
         struct Unanswered;
         #[derive(Clone, Debug)]
@@ -290,6 +306,7 @@ mod tests {
     /// runs on.
     #[test]
     fn request_resolves_when_subscriber_is_on_a_different_os_thread() {
+        let _guard = TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         #[derive(Clone, Debug)]
         struct Ping;
         #[derive(Clone, Debug)]
@@ -337,6 +354,7 @@ mod tests {
     /// just the hand-written `RpcHandler` impl the other tests use.
     #[tokio::test]
     async fn handler_macro_rpc_heuristic_sync_and_async() {
+        let _guard = TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         use crate::actor::{Addr, AsyncContext, UiThreadToken};
         use guinea_macros::handler;
 
@@ -419,6 +437,7 @@ mod tests {
     /// the rest of it, which shares `GlobalEventBus`/`PENDING_REQUESTS`).
     #[tokio::test]
     async fn cross_actor_rpc_cycle_is_detected_immediately() {
+        let _guard = TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         use crate::actor::{Addr, AsyncContext, UiThreadToken};
         use guinea_macros::handler;
         use std::panic;
@@ -507,6 +526,7 @@ mod tests {
     /// loud, obviously-a-deadlock failure instead.
     #[test]
     fn many_concurrent_requests_do_not_deadlock() {
+        let _guard = TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         use crate::actor::{Addr, UiThreadToken};
         use std::sync::Arc;
         use std::sync::atomic::{AtomicBool, Ordering};
