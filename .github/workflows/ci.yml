@@ -1,0 +1,37 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+
+# Cancels a stale run when new commits land on the same branch/PR - avoids
+# burning CI minutes on a build for a diff that's already been superseded.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # Windows-only by construction: every crate in the workspace pulls in
+  # `windows-reactor` (git fork) and the `windows` crate. There is no
+  # non-Windows build to gate.
+  rust:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      # Mandatory, not an optimisation: `windows-reactor` comes from a rev
+      # pin on the windows-rs fork, and that repo is large enough that the
+      # very first `cargo fetch` takes minutes. rust-cache restores
+      # ~/.cargo/git alongside the registry and target dir, so subsequent
+      # runs skip the clone entirely.
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Build
+        run: cargo build --workspace --all-targets
+
+      - name: Test
+        run: cargo test --workspace
