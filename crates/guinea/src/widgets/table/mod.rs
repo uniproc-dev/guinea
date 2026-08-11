@@ -14,7 +14,8 @@ const MIN_COLUMN_WIDTH: f64 = 24.0;
 const HEADER_SEPARATOR_COLOR: Color = Color { a: 48, r: 128, g: 128, b: 128 };
 
 /// Horizontal inset shared by header and body cells so column content never
-/// sits flush against the resize handle or the row edge.
+/// sits flush against the resize handle or the row edge. Opt out per column
+/// with [`ColumnSpec::flush`].
 const CELL_HORIZONTAL_PADDING: f64 = 12.0;
 /// Extra vertical room for the header row - it can carry two-line content
 /// (label + aggregate value) where body rows stay a single fixed height.
@@ -26,19 +27,20 @@ pub struct ColumnSpec<T> {
     pub initial_width: Signal<u64>,
     pub min_width: f64,
     pub sortable: bool,
+    pub flush: bool,
     pub cell: Rc<dyn Fn(&T) -> Element>,
 }
 
 impl<T> ColumnSpec<T> {
     pub fn new(id: &'static str, header: impl Into<String>, initial_width: impl IntoWidth, cell: impl Fn(&T) -> Element + 'static) -> Self {
         let header = header.into();
-        Self { id, header: Rc::new(move || windows_reactor::text_block(header.clone()).into()), initial_width: initial_width.into_width(), min_width: MIN_COLUMN_WIDTH, sortable: false, cell: Rc::new(cell) }
+        Self { id, header: Rc::new(move || windows_reactor::text_block(header.clone()).into()), initial_width: initial_width.into_width(), min_width: MIN_COLUMN_WIDTH, sortable: false, flush: false, cell: Rc::new(cell) }
     }
 
     /// Use an arbitrary `Element` as the column header instead of plain text.
     /// The factory is called on every render, so the element can depend on signals.
     pub fn new_with_header(id: &'static str, header: impl Fn() -> Element + 'static, initial_width: impl IntoWidth, cell: impl Fn(&T) -> Element + 'static) -> Self {
-        Self { id, header: Rc::new(header), initial_width: initial_width.into_width(), min_width: MIN_COLUMN_WIDTH, sortable: false, cell: Rc::new(cell) }
+        Self { id, header: Rc::new(header), initial_width: initial_width.into_width(), min_width: MIN_COLUMN_WIDTH, sortable: false, flush: false, cell: Rc::new(cell) }
     }
 
     /// Sets the minimum width enforced by the resize handle.
@@ -53,6 +55,20 @@ impl<T> ColumnSpec<T> {
         self.sortable = true;
         self
     }
+
+    /// Drops [`CELL_HORIZONTAL_PADDING`] for this column, header and body
+    /// alike, so its content starts at the column's own left edge.
+    ///
+    /// For a column that reserves its own left gutter - a tree column with a
+    /// chevron slot, say - the shared inset is a second gutter on top of the
+    /// first, and the two of them push the content visibly off the table's
+    /// edge. Per-column rather than global because the *other* columns still
+    /// want it: without the inset, adjacent cells with a background (a heat
+    /// wash) run into one another.
+    pub fn flush(mut self) -> Self {
+        self.flush = true;
+        self
+    }
 }
 
 struct ResolvedColumn<T> {
@@ -61,6 +77,7 @@ struct ResolvedColumn<T> {
     width: Signal<u64>,
     min_width: f64,
     sortable: bool,
+    flush: bool,
     cell: Rc<dyn Fn(&T) -> Element>,
 }
 
@@ -101,6 +118,7 @@ pub fn table_with_sort_indicator<T: 'static>(
                     header: spec.header,
                     min_width: spec.min_width,
                     sortable: spec.sortable,
+                    flush: spec.flush,
                     cell: spec.cell,
                 })
                 .collect(),
@@ -176,7 +194,10 @@ fn header_cell<T>(
         }
         _ => content,
     };
-    cell.padding(Thickness::xy(CELL_HORIZONTAL_PADDING, HEADER_VERTICAL_PADDING))
+    cell.padding(Thickness::xy(
+        if c.flush { 0.0 } else { CELL_HORIZONTAL_PADDING },
+        HEADER_VERTICAL_PADDING,
+    ))
         .width(c.width.get() as f64)
 }
 
@@ -195,7 +216,10 @@ fn row_view<T>(row: &T, columns: &[ResolvedColumn<T>]) -> Element {
         .map(|c| {
             let width = c.width.get() as f64;
             (c.cell)(row)
-                .padding(Thickness::xy(CELL_HORIZONTAL_PADDING, 0.0))
+                .padding(Thickness::xy(
+                    if c.flush { 0.0 } else { CELL_HORIZONTAL_PADDING },
+                    0.0,
+                ))
                 .width(width)
         })
         .collect();
