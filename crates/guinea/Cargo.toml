@@ -26,6 +26,10 @@ windows-canvas = { workspace = true, optional = true }
 # only need routing/actors don't want.
 widgets = ["windows-reactor/canvas", "dep:windows-canvas"]
 
+# `app::TestApp` - an application without a window, for crates that write
+# plugins or features out of tree and need to install them in a test.
+test-utils = []
+
 [lints]
 workspace = true
 

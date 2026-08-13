@@ -4,8 +4,14 @@ mod plugin;
 mod registry;
 mod runtime;
 
+#[cfg(any(test, feature = "test-utils"))]
+mod harness;
+
 pub use builder::{FeatureBuilder, PluginBuilder};
 pub use plugin::{AppFeature, Plugin};
+
+#[cfg(any(test, feature = "test-utils"))]
+pub use harness::TestApp;
 
 pub(crate) use runtime::route_changed;
 

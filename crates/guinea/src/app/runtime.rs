@@ -43,12 +43,19 @@ pub(crate) fn shutdown_current() {
         return;
     };
 
-    let lifecycle = runtime.builder.lifecycle().clone();
+    teardown(&runtime.token, &runtime.builder);
+}
+
+pub(crate) fn teardown(
+    token: &UiThreadToken,
+    builder: &FeatureBuilder,
+) -> Vec<(&'static str, usize)> {
+    let lifecycle = builder.lifecycle().clone();
     let mut ctx = AppFeatureDeinitContext {
-        token: runtime.token.clone(),
-        reactor: crate::feature::FeatureContext::reactor(&*runtime.builder),
-        shared: crate::feature::FeatureContext::shared(&*runtime.builder),
+        token: token.clone(),
+        reactor: crate::feature::FeatureContext::reactor(&**builder),
+        shared: crate::feature::FeatureContext::shared(&**builder),
     };
 
-    lifecycle.shutdown(&runtime.token, &mut ctx);
+    lifecycle.shutdown(token, &mut ctx)
 }
