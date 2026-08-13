@@ -6,6 +6,7 @@ use guinea::feature::{ContextActorExt, ContextReactorExt};
 use guinea_core::actor::Context;
 use guinea_core::messages;
 use guinea_macros::{actor, handler};
+use guinea_plugin_store::{Store, amethystate::Store as _};
 
 use crate::events::ProcessKilled;
 
@@ -36,6 +37,11 @@ impl AppFeature for Startup {
     fn install(self, app: &mut FeatureBuilder) -> anyhow::Result<()> {
         app.provide(StartedAt(Instant::now()));
         let started: Arc<StartedAt> = app.require()?;
+
+        let store = app.require::<Store>()?;
+        let launches = store.get::<u64>("app.launches")?.unwrap_or_default() + 1;
+        store.set("app.launches", &launches)?;
+        tracing::info!(launches, "started");
 
         let addr = app.spawn(Housekeeping::default());
         app.spawn_heartbeat(&addr, || 5_000, || Sweep);

@@ -10,7 +10,7 @@ publish = false
 guinea = { path = "../../crates/guinea", features = ["widgets"] }
 guinea-core = { path = "../../crates/guinea-core" }
 guinea-macros = { path = "../../crates/guinea-macros" }
-amethystate = "0.9.4"
+guinea-plugin-store = { git = "https://github.com/uniproc-dev/guinea-plugins", rev = "1d5ff7a" }
 anyhow = "1.0"
 inventory = "0.3"
 fluent-templates = "0.14.0"
@@ -21,6 +21,13 @@ tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 windows-reactor = { git = "https://github.com/Tam1SH/windows-rs", rev = "d0fd3ce88" }
 windows-canvas = { git = "https://github.com/Tam1SH/windows-rs", rev = "d0fd3ce88" }
+
+# The plugin depends on guinea from git; without this the example would build
+# two copies of guinea and the plugin's `PluginBuilder` would be a different
+# type from this application's.
+[patch."https://github.com/uniproc-dev/guinea"]
+guinea = { path = "../../crates/guinea" }
+guinea-core = { path = "../../crates/guinea-core" }
 
 [build-dependencies]
 windows-reactor-setup = { git = "https://github.com/Tam1SH/windows-rs", rev = "d0fd3ce88" }

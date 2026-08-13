@@ -30,14 +30,13 @@ fn main() -> anyhow::Result<()> {
     let runtime = tokio::runtime::Runtime::new()?;
     let _guard = runtime.enter();
 
-    amethystate::init_global(
-        amethystate::StoreBuilder::for_app("guinea-processes-app-example", "settings")
-            .expect("resolve app config dir"),
-    );
-
     guinea_core::l10n::L10n::<l10n::L10n>::load(l10n::L10n::new(unic_langid::langid!("en")));
 
     guinea::app::App::new()
+        .plugin(guinea_plugin_store::StorePlugin::for_app(
+            "guinea-processes-app-example",
+            "settings",
+        ))
         .feature(startup::Startup)
         .on_route_change(|from, to| tracing::debug!(?from, to, "route"))
         .run(
