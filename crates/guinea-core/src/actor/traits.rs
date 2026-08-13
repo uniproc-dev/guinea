@@ -21,6 +21,8 @@ pub trait ManagedActor: Sized + 'static {
     type Bus: EventSubscription<Self>;
     type Handlers: DirectHandler<Self>;
     type Signals;
+    /// Declared outgoing messages per handler, or `Open` when undeclared.
+    type Flow;
 }
 
 pub trait AllowedSignal<M: Message> {}

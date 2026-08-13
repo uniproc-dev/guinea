@@ -22,7 +22,9 @@ messages! { Tick }
 
 actor! {
     MetricsActor<P: MetricsPort + 'static> {
-        handlers { Tick }
+        handlers {
+            Tick => { bg Tick loop }
+        }
     }
 }
 

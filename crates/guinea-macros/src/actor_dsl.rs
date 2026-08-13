@@ -13,9 +13,29 @@ struct Manifest {
     ident: Ident,
     generics: syn::Generics,
     self_ty: syn::Type,
-    handlers: Vec<syn::Type>,
+    handlers: Vec<HandlerDecl>,
     publishes: Vec<syn::Type>,
     subscribes: Vec<syn::Type>,
+}
+
+struct HandlerDecl {
+    msg: syn::Type,
+    /// `None` when the handler declares no outgoing messages at all, which is
+    /// different from declaring an empty set.
+    edges: Option<Vec<Edge>>,
+}
+
+struct Edge {
+    channel: Channel,
+    target: syn::Type,
+}
+
+#[derive(PartialEq)]
+enum Channel {
+    Send,
+    Bg,
+    Emit,
+    Ask,
 }
 
 pub fn actor_impl(input: TokenStream1) -> TokenStream1 {
@@ -113,12 +133,10 @@ fn parse_sections(tokens: &[TokenTree], manifest: &mut Manifest) -> syn::Result<
             .parse_next(&mut slice)
             .map_err(|_| syn::Error::new(name.span(), "expected `{ .. }` after the section name"))?;
 
-        let types = parse_type_list(&body)?;
-
         match name.to_string().as_str() {
-            "handlers" => manifest.handlers = types,
-            "publishes" => manifest.publishes = types,
-            "subscribes" => manifest.subscribes = types,
+            "handlers" => manifest.handlers = parse_handlers(&body)?,
+            "publishes" => manifest.publishes = parse_type_list(&body)?,
+            "subscribes" => manifest.subscribes = parse_type_list(&body)?,
             other => {
                 return Err(syn::Error::new(
                     name.span(),
@@ -129,6 +147,138 @@ fn parse_sections(tokens: &[TokenTree], manifest: &mut Manifest) -> syn::Result<
     }
 
     Ok(())
+}
+
+/// `Msg` or `Msg => { send Other, bg Third }`, comma-separated; the comma
+/// after a block is optional, as with match arms.
+fn parse_handlers(tokens: &[TokenTree]) -> syn::Result<Vec<HandlerDecl>> {
+    let mut decls = Vec::new();
+    let mut pending: Vec<TokenTree> = Vec::new();
+    let mut iter = tokens.iter().peekable();
+
+    while let Some(tt) = iter.next() {
+        match tt {
+            TokenTree::Punct(p) if p.as_char() == ',' => {
+                if !pending.is_empty() {
+                    decls.push(HandlerDecl {
+                        msg: parse_one_type(&mut pending)?,
+                        edges: None,
+                    });
+                }
+            }
+            TokenTree::Punct(p) if p.as_char() == '=' => {
+                let arrow = matches!(iter.peek(), Some(TokenTree::Punct(g)) if g.as_char() == '>');
+                if !arrow {
+                    pending.push(tt.clone());
+                    continue;
+                }
+                iter.next();
+
+                let Some(TokenTree::Group(body)) = iter.next() else {
+                    return Err(syn::Error::new(p.span(), "expected `{ .. }` after `=>`"));
+                };
+                if body.delimiter() != Delimiter::Brace {
+                    return Err(syn::Error::new(body.span(), "expected `{ .. }` after `=>`"));
+                }
+
+                let msg = parse_one_type(&mut pending)?;
+                let edges = parse_edges(&body.stream().into_iter().collect::<Vec<_>>())?;
+                decls.push(HandlerDecl {
+                    msg,
+                    edges: Some(edges),
+                });
+
+                if matches!(iter.peek(), Some(TokenTree::Punct(p)) if p.as_char() == ',') {
+                    iter.next();
+                }
+            }
+            other => pending.push(other.clone()),
+        }
+    }
+
+    if !pending.is_empty() {
+        decls.push(HandlerDecl {
+            msg: parse_one_type(&mut pending)?,
+            edges: None,
+        });
+    }
+
+    Ok(decls)
+}
+
+fn parse_edges(tokens: &[TokenTree]) -> syn::Result<Vec<Edge>> {
+    let mut edges = Vec::new();
+
+    for chunk in split_on_commas(tokens) {
+        let mut slice: Tokens = &chunk;
+        let Some(TokenTree::Ident(head)) = slice.first().cloned() else {
+            return Err(syn::Error::new(
+                span_of(&chunk),
+                "expected `send`, `bg`, `emit` or `ask` before the message type",
+            ));
+        };
+
+        let channel = match head.to_string().as_str() {
+            "send" => Channel::Send,
+            "bg" => Channel::Bg,
+            "emit" => Channel::Emit,
+            "ask" => Channel::Ask,
+            other => {
+                return Err(syn::Error::new(
+                    head.span(),
+                    format!("unknown channel `{other}`; expected send, bg, emit or ask"),
+                ));
+            }
+        };
+        slice = &slice[1..];
+
+        if channel == Channel::Emit {
+            if let Some(TokenTree::Ident(scope)) = slice.first() {
+                let scope = scope.to_string();
+                if scope == "local" || scope == "global" {
+                    slice = &slice[1..];
+                }
+            }
+        }
+
+        let mut rest: Vec<TokenTree> = slice.to_vec();
+        if let Some(TokenTree::Ident(last)) = rest.last() {
+            if last == "loop" {
+                rest.pop();
+            }
+        }
+
+        edges.push(Edge {
+            channel,
+            target: parse_one_type(&mut rest)?,
+        });
+    }
+
+    Ok(edges)
+}
+
+fn split_on_commas(tokens: &[TokenTree]) -> Vec<Vec<TokenTree>> {
+    let mut out = Vec::new();
+    let mut current = Vec::new();
+    for tt in tokens {
+        if matches!(tt, TokenTree::Punct(p) if p.as_char() == ',') {
+            if !current.is_empty() {
+                out.push(std::mem::take(&mut current));
+            }
+        } else {
+            current.push(tt.clone());
+        }
+    }
+    if !current.is_empty() {
+        out.push(current);
+    }
+    out
+}
+
+fn parse_one_type(tokens: &mut Vec<TokenTree>) -> syn::Result<syn::Type> {
+    let span = span_of(tokens);
+    let ts: TokenStream = tokens.drain(..).collect();
+    syn::parse2(ts).map_err(|e| syn::Error::new(span, format!("expected a type: {e}")))
 }
 
 fn parse_type_list(tokens: &[TokenTree]) -> syn::Result<Vec<syn::Type>> {
@@ -181,9 +331,42 @@ fn expand(manifest: Manifest) -> syn::Result<TokenStream> {
     let signals_marker = format_ident!("__Signals_{}", ident);
     let bus_marker = format_ident!("__Bus_{}", ident);
 
-    let handler_asserts = handlers.iter().map(|msg| {
+    let handler_asserts = handlers.iter().map(|decl| {
+        let msg = &decl.msg;
         quote! { assert_handler::<#self_ty, #msg>(); }
     });
+
+    let flow_marker = format_ident!("__Flow_{}", ident);
+    let declares_flow = handlers.iter().any(|decl| decl.edges.is_some());
+
+    let mut seen = std::collections::HashSet::new();
+    let allow_impls: Vec<TokenStream> = handlers
+        .iter()
+        .filter_map(|decl| decl.edges.as_ref().map(|edges| (&decl.msg, edges)))
+        .flat_map(|(msg, edges)| edges.iter().map(move |edge| (msg, edge)))
+        .filter(|(_, edge)| matches!(edge.channel, Channel::Send | Channel::Bg))
+        .filter_map(|(msg, edge)| {
+            let target = &edge.target;
+            let key = quote!(#msg => #target).to_string();
+            if !seen.insert(key) {
+                return None;
+            }
+            Some(quote! { impl #gc::actor::flow::Allows<#msg, #target> for #flow_marker {} })
+        })
+        .collect();
+
+    let (flow_ty, flow_decl) = if declares_flow {
+        (
+            quote!(#flow_marker),
+            quote! {
+                #[doc(hidden)]
+                pub struct #flow_marker;
+                #(#allow_impls)*
+            },
+        )
+    } else {
+        (quote!(#gc::actor::flow::Open), quote!())
+    };
 
     let signal_impls = publishes.iter().map(|msg| {
         quote! { impl #gc::actor::traits::AllowedSignal<#msg> for #signals_marker {} }
@@ -233,6 +416,8 @@ fn expand(manifest: Manifest) -> syn::Result<TokenStream> {
 
         #bus_impl
 
+        #flow_decl
+
         impl #impl_generics #gc::actor::traits::DirectHandler<#self_ty>
             for #handlers_marker #where_clause {}
 
@@ -242,6 +427,7 @@ fn expand(manifest: Manifest) -> syn::Result<TokenStream> {
             type Bus = #bus_ty;
             type Handlers = #handlers_marker;
             type Signals = #signals_marker;
+            type Flow = #flow_ty;
         }
 
         const _: () = {

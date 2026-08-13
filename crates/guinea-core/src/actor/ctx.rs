@@ -33,7 +33,8 @@ impl<A: 'static, M> Context<A, M> {
     pub fn send<Out>(&self, msg: Out)
     where
         Out: Message,
-        A: Handler<Out>,
+        A: Handler<Out> + ManagedActor,
+        A::Flow: crate::actor::flow::Allows<M, Out>,
     {
         self.addr.send(msg);
     }
@@ -59,7 +60,8 @@ impl<A: 'static, M> Context<A, M> {
     pub fn spawn_bg<Out, Fut>(&self, fut: Fut)
     where
         Out: Message + 'static + Send,
-        A: Handler<Out>,
+        A: Handler<Out> + ManagedActor,
+        A::Flow: crate::actor::flow::Allows<M, Out>,
         Fut: Future<Output = Out> + 'static + Send,
     {
         let id = self.addr.id;
@@ -247,6 +249,15 @@ mod tests {
 
     struct Chain {
         log: Rc<RefCell<Vec<&'static str>>>,
+    }
+
+    guinea_macros::actor! {
+        Chain {
+            handlers {
+                First => { send Second }
+                Second
+            }
+        }
     }
 
     impl Handler<First> for Chain {
