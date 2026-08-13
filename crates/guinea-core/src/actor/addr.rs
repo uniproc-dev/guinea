@@ -223,11 +223,9 @@ impl<A: 'static> Addr<A> {
                 }
             };
 
-            let ctx = Context { addr: self.clone() };
-
             {
                 let mut state_guard = self.state.borrow_mut();
-                Envelope::<A>::handle(envelope.as_mut(), &mut *state_guard, &ctx);
+                Envelope::<A>::handle(envelope.as_mut(), &mut *state_guard, self);
             }
         }
 

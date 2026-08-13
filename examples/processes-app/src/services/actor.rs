@@ -1,4 +1,4 @@
-use guinea_core::actor::ManagedActor;
+use guinea_core::actor::{Context, ManagedActor};
 use guinea_macros::{actor_manifest, handler};
 
 use super::contracts::{ServicesMessages, ServicesPort};
@@ -19,7 +19,7 @@ impl<P: ServicesPort + 'static> ManagedActor for ServiceActor<P> {
 }
 
 #[handler]
-fn refresh<P: ServicesPort + 'static>(this: &mut ServiceActor<P>, _: Refresh) {
+fn refresh<P: ServicesPort + 'static>(this: &mut ServiceActor<P>, _ctx: Context<ServiceActor<P>, Refresh>) {
     this.ui_port.send(ServicesMessages::SetItems(vec![
         "sshd.service".to_string(),
         "docker.service".to_string(),

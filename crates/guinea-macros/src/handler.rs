@@ -33,7 +33,23 @@ fn expand_handler(item: ItemFn) -> Result<TokenStream> {
         extract_actor_from_ref(inputs.get(0))?
     };
 
-    let (msg_ty, _msg_name) = extract_msg_info(inputs.get(1))?;
+    let (msg_ty, takes_ctx) = if is_async {
+        let (ty, _) = extract_msg_info(inputs.get(1))?;
+        (ty.clone(), false)
+    } else {
+        extract_sync_msg(inputs.get(1))?
+    };
+    let msg_ty = &msg_ty;
+
+    if takes_ctx && inputs.len() != 2 {
+        return Err(Error::new(
+            item.sig.span(),
+            format!(
+                "Handler for actor '{}' taking Context<_, Msg> must have exactly 2 arguments: (actor: &mut {}, ctx: Context<{}, Msg>)",
+                actor_name, actor_name, actor_name
+            ),
+        ));
+    }
 
     // A return type is the signal that this handler answers an
     // `AsyncBus::request` rather than reacting to a fire-and-forget event.
@@ -61,15 +77,11 @@ fn expand_handler(item: ItemFn) -> Result<TokenStream> {
                     ),
                 ));
             }
-            let call_args = if inputs.len() == 3 {
-                quote! { self, msg, ctx }
-            } else {
-                quote! { self, msg }
-            };
+            let body = sync_call_body(fn_name, takes_ctx, inputs.len());
             quote! {
                 impl #impl_generics #gc::actor::Handler<#msg_ty> for #actor_ty #where_clause {
-                    fn handle(&mut self, msg: #msg_ty, ctx: &#gc::actor::Context<Self>) {
-                        #fn_name(#call_args);
+                    fn handle(&mut self, ctx: #gc::actor::Context<Self, #msg_ty>) {
+                        #body;
                     }
                 }
             }
@@ -89,15 +101,11 @@ fn expand_handler(item: ItemFn) -> Result<TokenStream> {
                     ),
                 ));
             }
-            let call_args = if inputs.len() == 3 {
-                quote! { self, msg, ctx }
-            } else {
-                quote! { self, msg }
-            };
+            let body = sync_call_body(fn_name, takes_ctx, inputs.len());
             quote! {
                 impl #impl_generics #gc::actor::event_bus::rpc::RpcHandler<#msg_ty> for #actor_ty #where_clause {
-                    fn handle_rpc(&mut self, msg: #msg_ty, ctx: &#gc::actor::Context<Self>) -> #ret_ty {
-                        #fn_name(#call_args)
+                    fn handle_rpc(&mut self, ctx: #gc::actor::Context<Self, #msg_ty>) -> #ret_ty {
+                        #body
                     }
                 }
             }
@@ -117,8 +125,9 @@ fn expand_handler(item: ItemFn) -> Result<TokenStream> {
             }
             quote! {
                 impl #impl_generics #gc::actor::Handler<#msg_ty> for #actor_ty #where_clause {
-                    fn handle(&mut self, msg: #msg_ty, ctx: &#gc::actor::Context<Self>) {
+                    fn handle(&mut self, ctx: #gc::actor::Context<Self, #msg_ty>) {
                         let actx = ctx.async_ctx();
+                        let msg = ctx.msg;
                         tokio::spawn(async move {
                             #fn_name(actx, msg).await;
                         });
@@ -150,11 +159,11 @@ fn expand_handler(item: ItemFn) -> Result<TokenStream> {
             }
             quote! {
                 impl #impl_generics #gc::actor::Handler<#gc::actor::event_bus::RpcRequest<#msg_ty>> for #actor_ty #where_clause {
-                    fn handle(&mut self, msg: #gc::actor::event_bus::RpcRequest<#msg_ty>, ctx: &#gc::actor::Context<Self>) {
-                        let correlation_id = msg.correlation_id;
-                        let chain = msg.chain;
-                        let msg = msg.payload;
+                    fn handle(&mut self, ctx: #gc::actor::Context<Self, #gc::actor::event_bus::RpcRequest<#msg_ty>>) {
                         let actx = ctx.async_ctx();
+                        let correlation_id = ctx.msg.correlation_id;
+                        let chain = ctx.msg.chain;
+                        let msg = ctx.msg.payload;
                         #gc::actor::event_bus::AsyncBus::spawn_reply::<#ret_ty, _>(
                             correlation_id,
                             chain,
@@ -175,6 +184,59 @@ fn expand_handler(item: ItemFn) -> Result<TokenStream> {
 
 fn type_to_string(ty: &Type) -> String {
     quote!(#ty).to_string().replace(' ', "")
+}
+
+/// The second argument is either `Context<Actor, Msg>` - message inside - or
+/// the message itself, which is the pre-`Context<A, M>` form.
+fn extract_sync_msg(arg: Option<&FnArg>) -> Result<(Type, bool)> {
+    let (ty, _) = extract_msg_info(arg)?;
+
+    if let Type::Path(path) = ty {
+        if let Some(last) = path.path.segments.last() {
+            if last.ident == "Context" {
+                let syn::PathArguments::AngleBracketed(args) = &last.arguments else {
+                    return Err(Error::new(
+                        ty.span(),
+                        "Context in a handler must name the message: Context<Actor, Msg>",
+                    ));
+                };
+                let types: Vec<Type> = args
+                    .args
+                    .iter()
+                    .filter_map(|arg| match arg {
+                        syn::GenericArgument::Type(ty) => Some(ty.clone()),
+                        _ => None,
+                    })
+                    .collect();
+                return match types.len() {
+                    0 | 1 => Err(Error::new(
+                        ty.span(),
+                        "Context in a handler must name the message: Context<Actor, Msg>",
+                    )),
+                    _ => Ok((types[1].clone(), true)),
+                };
+            }
+        }
+    }
+
+    Ok((ty.clone(), false))
+}
+
+fn sync_call_body(
+    fn_name: &syn::Ident,
+    takes_ctx: bool,
+    arity: usize,
+) -> proc_macro2::TokenStream {
+    if takes_ctx {
+        quote! { #fn_name(self, ctx) }
+    } else if arity == 3 {
+        quote! {{
+            let __ctx = ctx.detach();
+            #fn_name(self, ctx.msg, &__ctx)
+        }}
+    } else {
+        quote! { #fn_name(self, ctx.msg) }
+    }
 }
 
 fn extract_msg_info(arg: Option<&FnArg>) -> Result<(&Type, String)> {

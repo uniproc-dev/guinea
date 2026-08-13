@@ -1,10 +1,11 @@
+use crate::actor::addr::Addr;
 use crate::actor::traits::{Handler, Message};
 use crate::actor::{Context, short_type_name};
 use crate::trace::{DispatchMeta, install_current_meta, is_message_enabled, is_scope_enabled};
 use std::marker::PhantomData;
 
 pub trait Envelope<A> {
-    fn handle(&mut self, actor: &mut A, ctx: &Context<A>);
+    fn handle(&mut self, actor: &mut A, addr: &Addr<A>);
 }
 
 pub struct MessageEnvelope<M: Message> {
@@ -16,7 +17,7 @@ impl<A, M: Message> Envelope<A> for MessageEnvelope<M>
 where
     A: Handler<M>,
 {
-    fn handle(&mut self, actor: &mut A, ctx: &Context<A>) {
+    fn handle(&mut self, actor: &mut A, addr: &Addr<A>) {
         if let Some(m) = self.message.take() {
             let _meta_guard = install_current_meta(self.meta.clone());
             let message_name = short_type_name::<M>();
@@ -40,7 +41,7 @@ where
             );
             let _enter = span.enter();
 
-            actor.handle(m, ctx);
+            actor.handle(Context::new(addr.clone(), m));
         }
     }
 }
@@ -58,11 +59,11 @@ impl<A, F> Envelope<A> for FnEnvelope<A, F>
 where
     F: FnOnce(&mut A, &Context<A>) + Send + 'static,
 {
-    fn handle(&mut self, actor: &mut A, ctx: &Context<A>) {
+    fn handle(&mut self, actor: &mut A, addr: &Addr<A>) {
         if let Some(f) = self.func.take() {
             let _meta_guard = install_current_meta(self.meta.clone());
             let _enter = self.meta.span.enter();
-            f(actor, ctx);
+            f(actor, &Context::new(addr.clone(), ()));
         }
     }
 }

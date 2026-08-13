@@ -169,13 +169,13 @@ mod tests {
     }
 
     impl Handler<Ping> for Counter {
-        fn handle(&mut self, msg: Ping, _ctx: &Context<Self>) {
-            self.log.borrow_mut().push(format!("ping:{}", msg.0));
+        fn handle(&mut self, ctx: Context<Self, Ping>) {
+            self.log.borrow_mut().push(format!("ping:{}", ctx.msg.0));
         }
     }
 
     impl Handler<Reset> for Counter {
-        fn handle(&mut self, _msg: Reset, _ctx: &Context<Self>) {
+        fn handle(&mut self, _ctx: Context<Self, Reset>) {
             self.log.borrow_mut().push("reset".to_string());
         }
     }

@@ -4,7 +4,7 @@ use crate::actor::event_bus::builder::EventSubscription;
 pub trait Message: 'static {}
 
 pub trait Handler<M: Message>: 'static {
-    fn handle(&mut self, msg: M, ctx: &Context<Self>)
+    fn handle(&mut self, ctx: Context<Self, M>)
     where
         Self: Sized;
 }

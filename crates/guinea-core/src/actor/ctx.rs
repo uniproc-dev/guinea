@@ -7,38 +7,60 @@ use crate::trace::{DispatchMeta, current_meta, install_current_meta};
 use std::marker::PhantomData;
 use tokio::sync::oneshot;
 
-pub struct Context<A: 'static> {
+pub struct Context<A: 'static, M = ()> {
     pub(super) addr: Addr<A>,
+    pub msg: M,
 }
 
-impl<A: 'static> Context<A> {
+impl<A: 'static, M> Context<A, M> {
+    pub(crate) fn new(addr: Addr<A>, msg: M) -> Self {
+        Self { addr, msg }
+    }
+
     pub fn addr(&self) -> Addr<A> {
         self.addr.clone()
     }
 
-    pub fn publish<M>(&self, msg: M)
+    /// The same context without its message.
+    pub fn detach(&self) -> Context<A, ()> {
+        Context {
+            addr: self.addr.clone(),
+            msg: (),
+        }
+    }
+
+    /// Sends to this actor's own queue; drained by the same `process_queue`.
+    pub fn send<Out>(&self, msg: Out)
+    where
+        Out: Message,
+        A: Handler<Out>,
+    {
+        self.addr.send(msg);
+    }
+
+    pub fn publish<E>(&self, msg: E)
     where
         A: ManagedActor,
-        M: Event,
-        A::Signals: AllowedSignal<M>,
+        E: Event,
+        A::Signals: AllowedSignal<E>,
     {
         GlobalEventBus::instance().publish(msg);
     }
 
-    pub fn publish_local<M>(&self, bus: &EventBus, msg: M)
+    pub fn publish_local<E>(&self, bus: &EventBus, msg: E)
     where
         A: ManagedActor,
-        M: Event,
-        A::Signals: AllowedSignal<M>,
+        E: Event,
+        A::Signals: AllowedSignal<E>,
     {
         bus.publish(msg);
     }
 
-    pub fn spawn_bg<M, Fut>(&self, fut: Fut)
+    pub fn spawn_bg<Out, Fut>(&self, fut: Fut)
     where
-        M: Message + 'static + Send,
-        A: Handler<M>,
-        Fut: Future<Output = M> + 'static + Send,
+        Out: Message + 'static + Send,
+        A: Handler<Out>,
+        Fut: Future<Output = Out> + 'static + Send,
     {
         let id = self.addr.id;
         let meta = current_meta().unwrap_or_else(|| DispatchMeta::capture_or_root("core.actor.bg"));
@@ -46,7 +68,7 @@ impl<A: 'static> Context<A> {
             parent: &meta.span,
             "actor.bg",
             actor = short_type_name::<A>(),
-            result = short_type_name::<M>(),
+            result = short_type_name::<Out>(),
             op_id = meta.op_id,
             correlation_id = meta.correlation_id.as_deref().unwrap_or(""),
         );
@@ -208,8 +230,62 @@ impl<A: 'static> AsyncContext<A> {
     }
 }
 
-impl<A: 'static> Context<A> {
+impl<A: 'static, M> Context<A, M> {
     pub fn async_ctx(&self) -> AsyncContext<A> {
         AsyncContext::new(self.addr.id)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::actor::UiThreadToken;
+    use std::cell::RefCell;
+    use std::rc::Rc;
+
+    crate::messages! { First, Second }
+
+    struct Chain {
+        log: Rc<RefCell<Vec<&'static str>>>,
+    }
+
+    impl Handler<First> for Chain {
+        fn handle(&mut self, ctx: Context<Self, First>) {
+            self.log.borrow_mut().push("first");
+            ctx.send(Second);
+        }
+    }
+
+    impl Handler<Second> for Chain {
+        fn handle(&mut self, _ctx: Context<Self, Second>) {
+            self.log.borrow_mut().push("second");
+        }
+    }
+
+    #[test]
+    fn send_from_a_handler_is_drained_by_the_same_queue() {
+        let log = Rc::new(RefCell::new(Vec::new()));
+        let addr = Addr::new_scoped(
+            Chain { log: log.clone() },
+            UiThreadToken::dangerously_create_token_unchecked(),
+        );
+
+        addr.send(First);
+
+        assert_eq!(&*log.borrow(), &["first", "second"]);
+    }
+
+    #[test]
+    fn detach_keeps_the_address_and_drops_the_message() {
+        let log = Rc::new(RefCell::new(Vec::new()));
+        let addr = Addr::new_scoped(
+            Chain { log },
+            UiThreadToken::dangerously_create_token_unchecked(),
+        );
+
+        let ctx = Context::new(addr.clone(), First);
+        let bare = ctx.detach();
+
+        assert_eq!(bare.addr().id(), addr.id());
     }
 }

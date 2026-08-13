@@ -23,7 +23,7 @@ impl<P: MetricsPort + 'static> ManagedActor for MetricsActor<P> {
 }
 
 #[handler]
-fn tick<P: MetricsPort + 'static>(this: &mut MetricsActor<P>, _: Tick, ctx: &Context<MetricsActor<P>>) {
+fn tick<P: MetricsPort + 'static>(this: &mut MetricsActor<P>, ctx: Context<MetricsActor<P>, Tick>) {
     this.tick += 1;
     let t = this.tick as f32;
 

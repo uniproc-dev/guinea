@@ -73,7 +73,7 @@ impl<Req: RpcCall> RpcRequest<Req> {
 /// exclusive for a given `Req` (implementing both would conflict on the
 /// same `Handler<RpcRequest<Req>>` impl).
 pub trait RpcHandler<Req: RpcCall>: 'static {
-    fn handle_rpc(&mut self, req: Req, ctx: &Context<Self>) -> Req::Response
+    fn handle_rpc(&mut self, ctx: Context<Self, Req>) -> Req::Response
     where
         Self: Sized;
 }
@@ -83,9 +83,10 @@ where
     A: RpcHandler<Req> + 'static,
     Req: RpcCall,
 {
-    fn handle(&mut self, msg: RpcRequest<Req>, ctx: &Context<Self>) {
-        let correlation_id = msg.correlation_id;
-        let response = self.handle_rpc(msg.payload, ctx);
+    fn handle(&mut self, ctx: Context<Self, RpcRequest<Req>>) {
+        let addr = ctx.addr();
+        let correlation_id = ctx.msg.correlation_id;
+        let response = self.handle_rpc(Context::new(addr, ctx.msg.payload));
         AsyncBus::reply(correlation_id, response);
     }
 }
@@ -259,8 +260,8 @@ mod tests {
 
         struct EchoActor;
         impl RpcHandler<Echo> for EchoActor {
-            fn handle_rpc(&mut self, req: Echo, _ctx: &Context<Self>) -> Echoed {
-                Echoed(req.0 * 2)
+            fn handle_rpc(&mut self, ctx: Context<Self, Echo>) -> Echoed {
+                Echoed(ctx.msg.0 * 2)
             }
         }
 
@@ -539,8 +540,8 @@ mod tests {
 
         struct AddActor;
         impl RpcHandler<Add> for AddActor {
-            fn handle_rpc(&mut self, req: Add, _ctx: &Context<Self>) -> Sum {
-                Sum(req.0 + req.1)
+            fn handle_rpc(&mut self, ctx: Context<Self, Add>) -> Sum {
+                Sum(ctx.msg.0 + ctx.msg.1)
             }
         }
 

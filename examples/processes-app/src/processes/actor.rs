@@ -36,8 +36,8 @@ impl<P: ProcessesPort + 'static> ManagedActor for ProcessActor<P> {
 }
 
 #[handler]
-fn kill<P: ProcessesPort + 'static>(this: &mut ProcessActor<P>, msg: Kill, ctx: &Context<ProcessActor<P>>) {
-    let needle = format!("(pid {})", msg.0);
+fn kill<P: ProcessesPort + 'static>(this: &mut ProcessActor<P>, ctx: Context<ProcessActor<P>, Kill>) {
+    let needle = format!("(pid {})", ctx.msg.0);
     let killed = this.items.iter().find(|row| row.ends_with(&needle)).cloned();
     this.items.retain(|row| !row.ends_with(&needle));
     this.publish();
@@ -52,7 +52,7 @@ fn kill<P: ProcessesPort + 'static>(this: &mut ProcessActor<P>, msg: Kill, ctx: 
 }
 
 #[handler]
-fn refresh<P: ProcessesPort + 'static>(this: &mut ProcessActor<P>, _: Refresh) {
+fn refresh<P: ProcessesPort + 'static>(this: &mut ProcessActor<P>, _ctx: Context<ProcessActor<P>, Refresh>) {
     this.items = vec![
         "systemd (pid 1)".to_string(),
         "sshd (pid 42)".to_string(),
