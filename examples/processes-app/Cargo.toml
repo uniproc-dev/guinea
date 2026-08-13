@@ -10,8 +10,8 @@ publish = false
 guinea = { path = "../../crates/guinea", features = ["widgets"] }
 guinea-core = { path = "../../crates/guinea-core" }
 guinea-macros = { path = "../../crates/guinea-macros" }
-guinea-plugin-store = { git = "https://github.com/uniproc-dev/guinea-plugins", rev = "b59312e" }
-guinea-plugin-l10n = { git = "https://github.com/uniproc-dev/guinea-plugins", rev = "b59312e" }
+guinea-plugin-store = { git = "https://github.com/uniproc-dev/guinea-plugins", rev = "ccc5020" }
+guinea-plugin-l10n = { git = "https://github.com/uniproc-dev/guinea-plugins", rev = "ccc5020" }
 anyhow = "1.0"
 inventory = "0.3"
 fluent-templates = "0.14.0"

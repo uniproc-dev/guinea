@@ -13,13 +13,13 @@ dependencies = [
 
 [[package]]
 name = "amethystate"
-version = "0.9.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ad6f1a6fdf23993e3b42487493ff3282897dfbd257c349b5bb6a29a48ae63b9b"
+version = "0.11.0"
+source = "git+https://github.com/uniproc-dev/amethystate?tag=v0.11.0#826b2cc5d96125717dba4e3fbdefc20a0124e673"
 dependencies = [
  "amethystate-core",
  "amethystate-macros",
  "etcetera",
+ "futures-core",
  "inventory",
  "parking_lot",
  "petgraph",
@@ -34,9 +34,8 @@ dependencies = [
 
 [[package]]
 name = "amethystate-core"
-version = "0.9.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "20d8ee69279360d9a35ce31a372d07d4d8de5c30ecafeab12a65cc02fa7009e7"
+version = "0.11.0"
+source = "git+https://github.com/uniproc-dev/amethystate?tag=v0.11.0#826b2cc5d96125717dba4e3fbdefc20a0124e673"
 dependencies = [
  "arc-swap",
  "inventory",
@@ -48,9 +47,8 @@ dependencies = [
 
 [[package]]
 name = "amethystate-macros"
-version = "0.9.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6f151d9e24db495b5d55ae319e4aa250bfc8d9f5e7cbf568ab7d7249da0e15a9"
+version = "0.11.0"
+source = "git+https://github.com/uniproc-dev/amethystate?tag=v0.11.0#826b2cc5d96125717dba4e3fbdefc20a0124e673"
 dependencies = [
  "amethystate-macros-core",
  "darling",
@@ -62,9 +60,8 @@ dependencies = [
 
 [[package]]
 name = "amethystate-macros-core"
-version = "0.9.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d49ee1a89aca14be6d3c3bd119dfcd7428f625313baa9cb634b27b71bdba8c51"
+version = "0.11.0"
+source = "git+https://github.com/uniproc-dev/amethystate?tag=v0.11.0#826b2cc5d96125717dba4e3fbdefc20a0124e673"
 dependencies = [
  "darling",
  "proc-macro2",
@@ -345,9 +342,9 @@ checksum = "d9c4f5dac5e15c24eb999c26181a6ca40b39fe946cbe4c263c7209467bc83af2"
 
 [[package]]
 name = "futures-core"
-version = "0.3.33"
+version = "0.3.34"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2cd50c473c80f6d7c3670a752354b8e569b1a7cbfdc0419ec88e5edad85e0dc7"
+checksum = "92d699e522242e69e3003b94ecc1f960f3a5e015aa7c5d7486e65ad01dd94f5e"
 
 [[package]]
 name = "futures-task"
@@ -474,7 +471,7 @@ dependencies = [
 [[package]]
 name = "guinea-plugin-l10n"
 version = "0.1.0"
-source = "git+https://github.com/uniproc-dev/guinea-plugins?rev=b59312e#b59312e536bfeea0eec8f4c94f49a5164c87368b"
+source = "git+https://github.com/uniproc-dev/guinea-plugins?rev=ccc5020#ccc5020f646ebd5d218ed771a3fc05d803aeb287"
 dependencies = [
  "anyhow",
  "guinea",
@@ -486,7 +483,7 @@ dependencies = [
 [[package]]
 name = "guinea-plugin-store"
 version = "0.1.0"
-source = "git+https://github.com/uniproc-dev/guinea-plugins?rev=b59312e#b59312e536bfeea0eec8f4c94f49a5164c87368b"
+source = "git+https://github.com/uniproc-dev/guinea-plugins?rev=ccc5020#ccc5020f646ebd5d218ed771a3fc05d803aeb287"
 dependencies = [
  "amethystate",
  "anyhow",
