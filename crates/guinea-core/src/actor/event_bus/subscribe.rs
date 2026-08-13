@@ -39,10 +39,8 @@ where
                     "bus.deliver"
                 );
             }
-            self.addr.send_with_meta(
-                (*concrete_msg).clone(),
-                meta.child("core.bus.deliver", None, None),
-            );
+            self.addr
+                .send_with_meta(*concrete_msg, meta.child("core.bus.deliver", None, None));
         }
     }
     fn id(&self) -> SubscriptionId {
@@ -58,7 +56,7 @@ pub struct FnSubscriber<M: Event> {
 impl<M: Event> UntypedSubscriber for FnSubscriber<M> {
     fn deliver(&self, msg: Box<dyn Any>, _: DispatchMeta) {
         if let Ok(concrete_msg) = msg.downcast::<M>() {
-            (self.callback)((*concrete_msg).clone());
+            (self.callback)(*concrete_msg);
         }
     }
 

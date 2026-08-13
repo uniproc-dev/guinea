@@ -122,7 +122,7 @@ impl EventBus {
             current_meta().unwrap_or_else(|| DispatchMeta::capture_or_root("core.bus.publish"));
 
         if !self.has_subscribers::<M>() {
-            warn!(
+            debug!(
                 parent: &meta.span,
                 event = short_type_name::<M>(),
                 op_id = meta.op_id,
