@@ -474,7 +474,7 @@ dependencies = [
 [[package]]
 name = "guinea-plugin-l10n"
 version = "0.1.0"
-source = "git+https://github.com/uniproc-dev/guinea-plugins?rev=32ed336#32ed336f5735e67a597f19a1d0f9cdce7b70a04f"
+source = "git+https://github.com/uniproc-dev/guinea-plugins?rev=b59312e#b59312e536bfeea0eec8f4c94f49a5164c87368b"
 dependencies = [
  "anyhow",
  "guinea",
@@ -486,7 +486,7 @@ dependencies = [
 [[package]]
 name = "guinea-plugin-store"
 version = "0.1.0"
-source = "git+https://github.com/uniproc-dev/guinea-plugins?rev=32ed336#32ed336f5735e67a597f19a1d0f9cdce7b70a04f"
+source = "git+https://github.com/uniproc-dev/guinea-plugins?rev=b59312e#b59312e536bfeea0eec8f4c94f49a5164c87368b"
 dependencies = [
  "amethystate",
  "anyhow",
