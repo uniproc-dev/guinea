@@ -1,6 +1,6 @@
 use std::rc::Rc;
 
-use guinea_core::actor::{Context, ManagedActor};
+use guinea_core::actor::Context;
 use guinea_core::actor::event_bus::EventBus;
 use guinea_macros::{actor, handler};
 
