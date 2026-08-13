@@ -1,11 +1,9 @@
 pub mod addr;
 pub mod feature;
-pub mod into_signal;
 pub mod l10n;
 pub mod lifecycle_tracker;
 pub mod reactor;
 pub mod router;
-pub mod settings;
 #[cfg(feature = "widgets")]
 pub mod widgets;
 

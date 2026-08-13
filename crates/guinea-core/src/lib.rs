@@ -5,7 +5,6 @@ pub mod load;
 pub mod page_status;
 pub mod ratelimit_tracing;
 pub mod shared_state;
-pub mod signal;
 pub mod scope;
 #[cfg(feature = "test-utils")]
 pub mod test_kit;

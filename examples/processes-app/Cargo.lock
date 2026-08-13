@@ -395,7 +395,6 @@ dependencies = [
 name = "guinea"
 version = "0.1.0"
 dependencies = [
- "amethystate",
  "anyhow",
  "derive_more",
  "guinea-codegen",
@@ -431,7 +430,6 @@ dependencies = [
 name = "guinea-core"
 version = "0.1.0"
 dependencies = [
- "amethystate",
  "anyhow",
  "arc-swap",
  "derive_more",

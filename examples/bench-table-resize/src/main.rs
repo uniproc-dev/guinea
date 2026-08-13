@@ -3,7 +3,7 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use guinea::widgets::table::{ColumnSpec, table};
-use guinea_core::signal::Signal;
+use guinea::widgets::table::Width;
 use guinea_core::{UiDispatcher, UiTask, invoke_on_ui, set_ui_dispatcher};
 use windows_reactor::{App, Backdrop, Element, RenderCx, SetState, UiMarshaller, WinUIDispatcher, text_block};
 
@@ -21,6 +21,7 @@ struct BenchStats {
 
 thread_local! {
     static REQUEST_RERENDER: RefCell<Option<SetState<()>>> = const { RefCell::new(None) };
+    static WIDTH: RefCell<Option<Width>> = const { RefCell::new(None) };
 }
 
 struct ReactorDispatcher(UiMarshaller);
@@ -47,7 +48,7 @@ fn bench_root(cx: &mut RenderCx) -> Element {
         set_ui_dispatcher(ReactorDispatcher(dispatcher.marshaller()));
     });
 
-    let width = cx.use_ref(Signal::new(120u64));
+    let width = cx.use_ref(Width::fixed(120));
     let width = width.borrow().clone();
 
     let (_, request_rerender) = cx.use_state(());
@@ -59,6 +60,7 @@ fn bench_root(cx: &mut RenderCx) -> Element {
         *initialized.borrow_mut() = true;
 
         REQUEST_RERENDER.with(|r| *r.borrow_mut() = Some(request_rerender.clone()));
+        WIDTH.with(|w| *w.borrow_mut() = Some(width.clone()));
 
         // Install render_complete
         let stats_for_render = stats.clone();
@@ -76,15 +78,17 @@ fn bench_root(cx: &mut RenderCx) -> Element {
         });
 
         // Bench thread
-        let width_for_bench = width.clone();
         let stats_for_bench = stats.clone();
         std::thread::spawn(move || {
             std::thread::sleep(Duration::from_secs(1));
             for i in 0..200 {
                 let w = 120 + (i % 50);
-                let width = width_for_bench.clone();
                 invoke_on_ui(move || {
-                    width.set(w, None);
+                    WIDTH.with(|width| {
+                        if let Some(width) = width.borrow().as_ref() {
+                            width.set(w);
+                        }
+                    });
                     REQUEST_RERENDER.with(|r| {
                         if let Some(request) = r.borrow().as_ref() {
                             request.call(());

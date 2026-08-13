@@ -2,9 +2,8 @@ mod flow;
 mod layout;
 
 pub use flow::{SortState, TableDataBuilder, TableFlowState, TableNode};
-pub use layout::{IntoWidth, TableLayout};
+pub use layout::{IntoWidth, TableLayout, Width};
 
-use guinea_core::signal::Signal;
 use std::rc::Rc;
 use windows_reactor::{grid, hstack, Color, Element, ElementExt, GridLength, RenderCx, SetState, Shape, Thickness};
 
@@ -24,7 +23,7 @@ const HEADER_VERTICAL_PADDING: f64 = 8.0;
 pub struct ColumnSpec<T> {
     pub id: &'static str,
     pub header: Rc<dyn Fn() -> Element>,
-    pub initial_width: Signal<u64>,
+    pub initial_width: Width,
     pub min_width: f64,
     pub sortable: bool,
     pub flush: bool,
@@ -74,7 +73,7 @@ impl<T> ColumnSpec<T> {
 struct ResolvedColumn<T> {
     id: &'static str,
     header: Rc<dyn Fn() -> Element>,
-    width: Signal<u64>,
+    width: Width,
     min_width: f64,
     sortable: bool,
     flush: bool,
@@ -201,10 +200,10 @@ fn header_cell<T>(
         .width(c.width.get() as f64)
 }
 
-fn column_resize_handle(cx: &mut RenderCx, width: Signal<u64>, min_width: f64, request_rerender: SetState<()>) -> Element {
+fn column_resize_handle(cx: &mut RenderCx, width: Width, min_width: f64, request_rerender: SetState<()>) -> Element {
     let current = width.get() as f64;
     let set = SetState::new(move |w: f64| {
-        width.set(w as u64, None);
+        width.set(w as u64);
         request_rerender.call(());
     });
     resize_handle(cx, current, set).min(min_width).build()

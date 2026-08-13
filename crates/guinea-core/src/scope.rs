@@ -281,11 +281,6 @@ impl<A: 'static> Teardown for Addr<A> {
     }
 }
 
-impl Teardown for crate::signal::SignalSubscription {
-    fn teardown(self) {
-        drop(self);
-    }
-}
 
 /// Blanket teardown for resources that just need dropping
 /// (`scope.own(DropGuard(resource))` when no specialized impl exists).

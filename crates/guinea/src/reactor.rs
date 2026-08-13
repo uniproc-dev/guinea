@@ -1,6 +1,4 @@
-use crate::into_signal::IntoSignal;
 use guinea_core::actor::invoke_on_ui;
-use guinea_core::signal::Signal;
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
@@ -9,8 +7,8 @@ use std::sync::Arc;
 use std::time::Duration;
 
 struct LoopState {
-    interval: Signal<u64>,
-    active: Signal<bool>,
+    interval: Box<dyn Fn() -> u64>,
+    active: Box<dyn Fn() -> bool>,
     f: Box<dyn FnMut()>,
 }
 
@@ -49,19 +47,19 @@ impl Reactor {
 
     pub fn add_loop(
         &self,
-        interval: impl IntoSignal<u64>,
-        active: impl IntoSignal<bool>,
+        interval: impl Fn() -> u64 + 'static,
+        active: impl Fn() -> bool + 'static,
         f: impl FnMut() + 'static,
     ) -> LoopHandle {
         let id = NEXT_ID.fetch_add(1, Ordering::Relaxed);
         let running = Arc::new(AtomicBool::new(true));
 
         let state = Rc::new(RefCell::new(LoopState {
-            interval: interval.into_signal(),
-            active: active.into_signal(),
+            interval: Box::new(interval),
+            active: Box::new(active),
             f: Box::new(f),
         }));
-        let delay = Duration::from_millis(state.borrow().interval.get());
+        let delay = Duration::from_millis((state.borrow().interval)());
         LOOPS.with(|loops| {
             loops.borrow_mut().insert(id, state);
         });
@@ -72,10 +70,10 @@ impl Reactor {
 
     pub fn add_heartbeat(
         &self,
-        interval: impl IntoSignal<u64>,
+        interval: impl Fn() -> u64 + 'static,
         f: impl FnMut() + 'static,
     ) -> LoopHandle {
-        self.add_loop(interval, Signal::new(true), f)
+        self.add_loop(interval, || true, f)
     }
 }
 
@@ -106,10 +104,10 @@ fn wake(id: u64, running: Arc<AtomicBool>) {
 
     let next_delay = {
         let mut state = state.borrow_mut();
-        if state.active.get() {
+        if (state.active)() {
             (state.f)();
         }
-        Duration::from_millis(state.interval.get())
+        Duration::from_millis((state.interval)())
     };
 
     schedule_wake(id, next_delay, running);
@@ -147,7 +145,7 @@ mod tests {
         let counter = Arc::new(AtomicUsize::new(0));
 
         let c = counter.clone();
-        let _h = reactor.add_loop(Signal::new(30), Signal::new(true), move || {
+        let _h = reactor.add_loop(|| 30, || true, move || {
             c.fetch_add(1, Ordering::SeqCst);
         });
 
@@ -166,7 +164,7 @@ mod tests {
 
         {
             let c = counter.clone();
-            let _h = reactor.add_loop(Signal::new(30), Signal::new(true), move || {
+            let _h = reactor.add_loop(|| 30, || true, move || {
                 c.fetch_add(1, Ordering::SeqCst);
             });
             wait(60);
@@ -181,22 +179,23 @@ mod tests {
     fn loop_respects_active_signal() {
         let _guard = TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let reactor = Reactor::new();
-        let active = Signal::new(false);
+        let active = Arc::new(AtomicBool::new(false));
         let counter = Arc::new(AtomicUsize::new(0));
 
         let c = counter.clone();
-        let _h = reactor.add_loop(Signal::new(30), active.clone(), move || {
+        let a = active.clone();
+        let _h = reactor.add_loop(|| 30, move || a.load(Ordering::SeqCst), move || {
             c.fetch_add(1, Ordering::SeqCst);
         });
 
         wait(60);
         assert_eq!(counter.load(Ordering::SeqCst), 0);
 
-        active.set(true, None);
+        active.store(true, Ordering::SeqCst);
         wait(60);
         assert_eq!(counter.load(Ordering::SeqCst), 1);
 
-        active.set(false, None);
+        active.store(false, Ordering::SeqCst);
         wait(60);
         assert_eq!(counter.load(Ordering::SeqCst), 1);
     }
@@ -209,7 +208,7 @@ mod tests {
 
         {
             let c = counter.clone();
-            let _h = reactor.add_loop(Signal::new(200), Signal::new(true), move || {
+            let _h = reactor.add_loop(|| 200, || true, move || {
                 c.fetch_add(1, Ordering::SeqCst);
             });
         }
@@ -225,7 +224,7 @@ mod tests {
         let counter = Arc::new(AtomicUsize::new(0));
 
         let c = counter.clone();
-        let _h = reactor.add_heartbeat(Signal::new(30), move || {
+        let _h = reactor.add_heartbeat(|| 30, move || {
             c.fetch_add(1, Ordering::SeqCst);
         });
 
@@ -243,7 +242,7 @@ mod tests {
 
         {
             let c = counter.clone();
-            let _h = reactor.add_heartbeat(Signal::new(30), move || {
+            let _h = reactor.add_heartbeat(|| 30, move || {
                 c.fetch_add(1, Ordering::SeqCst);
             });
             wait(60);

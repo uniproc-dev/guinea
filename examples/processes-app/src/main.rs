@@ -47,7 +47,6 @@ pub(crate) fn root(cx: &mut RenderCx) -> Element {
         Route::Processes {
             context: "ubuntu".to_string(),
         },
-        amethystate::global_store(),
     )
 }
 

@@ -29,7 +29,6 @@ pub struct FeatureInitContext {
     pub ancestors: Rc<[Rc<Scope>]>,
     pub token: UiThreadToken,
     pub event_bus: Rc<EventBus>,
-    pub store: amethystate::DefaultStore,
     pub debug_registry: Rc<DebugRegistry>,
 }
 

@@ -1,25 +1,61 @@
-use guinea_core::signal::Signal;
+use std::cell::Cell;
 use std::collections::HashMap;
 use std::hash::Hash;
+use std::rc::Rc;
 
-pub trait IntoWidth {
-    fn into_width(self) -> Signal<u64>;
+/// A column width the table reads and writes. `Width::bound` lets the caller
+/// keep it wherever it likes - a settings cell, for instance - instead of the
+/// table owning it.
+#[derive(Clone)]
+pub struct Width {
+    get: Rc<dyn Fn() -> u64>,
+    set: Rc<dyn Fn(u64)>,
 }
 
-impl IntoWidth for u64 {
-    fn into_width(self) -> Signal<u64> {
-        Signal::new(self)
+impl Width {
+    pub fn fixed(initial: u64) -> Self {
+        let cell = Rc::new(Cell::new(initial));
+        let read = cell.clone();
+        Self {
+            get: Rc::new(move || read.get()),
+            set: Rc::new(move |v| cell.set(v)),
+        }
+    }
+
+    pub fn bound(get: impl Fn() -> u64 + 'static, set: impl Fn(u64) + 'static) -> Self {
+        Self {
+            get: Rc::new(get),
+            set: Rc::new(set),
+        }
+    }
+
+    pub fn get(&self) -> u64 {
+        (self.get)()
+    }
+
+    pub fn set(&self, value: u64) {
+        (self.set)(value)
     }
 }
 
-impl IntoWidth for Signal<u64> {
-    fn into_width(self) -> Signal<u64> {
+pub trait IntoWidth {
+    fn into_width(self) -> Width;
+}
+
+impl IntoWidth for u64 {
+    fn into_width(self) -> Width {
+        Width::fixed(self)
+    }
+}
+
+impl IntoWidth for Width {
+    fn into_width(self) -> Width {
         self
     }
 }
 
 pub struct TableLayout<ID> {
-    widths: HashMap<ID, Signal<u64>>,
+    widths: HashMap<ID, Width>,
 }
 
 impl<ID> Default for TableLayout<ID>
@@ -39,14 +75,14 @@ where
         Self { widths: HashMap::new() }
     }
 
-    pub fn add_column(&mut self, id: ID, initial_width: impl IntoWidth) -> Signal<u64> {
+    pub fn add_column(&mut self, id: ID, initial_width: impl IntoWidth) -> Width {
         self.widths
             .entry(id)
             .or_insert_with(|| initial_width.into_width())
             .clone()
     }
 
-    pub fn width(&self, id: &ID) -> Option<Signal<u64>> {
+    pub fn width(&self, id: &ID) -> Option<Width> {
         self.widths.get(id).cloned()
     }
 
@@ -56,7 +92,7 @@ where
 
     pub fn set_width(&self, id: &ID, new_width: u64) {
         if let Some(sig) = self.widths.get(id) {
-            sig.set(new_width, None);
+            sig.set(new_width);
         }
     }
 }
@@ -66,18 +102,18 @@ mod tests {
     use super::*;
 
     #[test]
-    fn add_column_is_idempotent_and_reuses_the_same_signal() {
+    fn add_column_is_idempotent_and_reuses_the_same_width() {
         let mut layout = TableLayout::<String>::new();
         let a = layout.add_column("name".into(), 200);
         let b = layout.add_column("name".into(), 999); // second call: initial_width ignored
 
-        a.set(111, None);
-        assert_eq!(b.get(), 111, "a/b are clones of the same underlying signal");
+        a.set(111);
+        assert_eq!(b.get(), 111, "a/b are clones of the same underlying width");
         assert_eq!(layout.get_width(&"name".to_string()), 111);
     }
 
     #[test]
-    fn set_width_is_visible_through_the_returned_signal() {
+    fn set_width_is_visible_through_the_returned_width() {
         let mut layout = TableLayout::<String>::new();
         let width = layout.add_column("pid".into(), 80);
 
@@ -94,13 +130,21 @@ mod tests {
     }
 
     #[test]
-    fn add_column_accepts_an_existing_signal_and_reuses_it_as_is() {
+    fn add_column_accepts_a_caller_owned_width_and_reuses_it_as_is() {
         let mut layout = TableLayout::<String>::new();
-        let shared = Signal::new(42u64);
+        let cell = Rc::new(Cell::new(42u64));
 
-        let returned = layout.add_column("shared".into(), shared.clone());
+        let read = cell.clone();
+        let write = cell.clone();
+        let returned = layout.add_column(
+            "shared".into(),
+            Width::bound(move || read.get(), move |v| write.set(v)),
+        );
 
-        shared.set(7, None);
-        assert_eq!(returned.get(), 7, "the caller's own Signal is used directly, not copied");
+        cell.set(7);
+        assert_eq!(returned.get(), 7, "the caller's own storage is used directly, not copied");
+
+        returned.set(9);
+        assert_eq!(cell.get(), 9, "writes go back to the caller's storage");
     }
 }

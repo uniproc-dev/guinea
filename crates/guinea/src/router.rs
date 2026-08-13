@@ -213,13 +213,12 @@ fn route_context<R: 'static>() -> windows_reactor::Context<Option<R>> {
 fn scoped_router(
     cx: &mut windows_reactor::RenderCx,
     token: guinea_core::actor::UiThreadToken,
-    store: amethystate::DefaultStore,
 ) -> Rc<Router> {
     let slot = cx.use_ref(None::<Rc<Router>>);
     {
         let mut slot = slot.borrow_mut();
         if slot.is_none() {
-            *slot = Some(Rc::new(Router::new(token, store)));
+            *slot = Some(Rc::new(Router::new(token)));
         }
     }
     slot.borrow().clone().expect("just initialized above")
@@ -231,7 +230,7 @@ impl<R> RouterRx<R>
 where
     R: RouteChain + ToUri + Clone + PartialEq + 'static,
 {
-    pub fn render(cx: &mut windows_reactor::RenderCx, initial: R, store: amethystate::DefaultStore) -> windows_reactor::Element {
+    pub fn render(cx: &mut windows_reactor::RenderCx, initial: R) -> windows_reactor::Element {
         use windows_reactor::ElementExt;
 
         // Genuinely on the UI thread here - `root()` render callbacks always
@@ -239,7 +238,7 @@ where
         let token = guinea_core::actor::UiThreadToken::dangerously_create_token_unchecked();
 
         let (route, set_route) = cx.use_state(initial);
-        let router = scoped_router(cx, token, store);
+        let router = scoped_router(cx, token);
         router.navigate(route.clone(), &route.to_uri()).expect("navigate");
 
         let nav = NavigateHandle::new(router.clone(), set_route);
@@ -502,19 +501,17 @@ pub struct Router {
     /// this `Router`, so actors in different features of the same window can
     /// reach each other. See `FeatureInitContext::event_bus`.
     event_bus: Rc<guinea_core::actor::event_bus::EventBus>,
-    store: amethystate::DefaultStore,
     debug_registry: Rc<guinea_core::actor::registry::DebugRegistry>,
     state_cache: RefCell<StateCache>,
 }
 
 impl Router {
-    pub fn new(token: guinea_core::actor::UiThreadToken, store: amethystate::DefaultStore) -> Self {
+    pub fn new(token: guinea_core::actor::UiThreadToken) -> Self {
         Self {
             active: RefCell::new(None),
             prev_route: RefCell::new(None),
             token,
             event_bus: Rc::new(guinea_core::actor::event_bus::EventBus::new()),
-            store,
             debug_registry: Rc::new(guinea_core::actor::registry::DebugRegistry::new()),
             state_cache: RefCell::new(StateCache::new()),
         }
@@ -614,7 +611,6 @@ impl Router {
                 ancestors: Rc::from(scopes.clone()),
                 token: self.token.clone(),
                 event_bus: self.event_bus.clone(),
-                store: self.store.clone(),
                 debug_registry: self.debug_registry.clone(),
             };
             (entry.install)(&ctx, uri)?;
@@ -696,12 +692,12 @@ mod tests {
 
         let mut cx1 = windows_reactor::RenderCx::new(Rc::new(|| {}));
         cx1.begin_render();
-        let router_a = scoped_router(&mut cx1, token.clone(), amethystate::test_utils::unique_store("router-test"));
+        let router_a = scoped_router(&mut cx1, token.clone());
 
         // A second render pass of the *same* window (hook slots realign) -
         // must resolve the same Router, not a fresh one.
         cx1.begin_render();
-        let router_a2 = scoped_router(&mut cx1, token.clone(), amethystate::test_utils::unique_store("router-test"));
+        let router_a2 = scoped_router(&mut cx1, token.clone());
         assert!(
             Rc::ptr_eq(&router_a, &router_a2),
             "re-rendering the same window must reuse its own Router"
@@ -712,7 +708,7 @@ mod tests {
         // process-wide sharing.
         let mut cx2 = windows_reactor::RenderCx::new(Rc::new(|| {}));
         cx2.begin_render();
-        let router_b = scoped_router(&mut cx2, token, amethystate::test_utils::unique_store("router-test"));
+        let router_b = scoped_router(&mut cx2, token);
         assert!(
             !Rc::ptr_eq(&router_a, &router_b),
             "a different render root must get its own Router, not the first one's"
@@ -736,7 +732,7 @@ mod tests {
     #[test]
     fn activating_a_page_runs_install_and_view_can_use_it() {
         let token = UiThreadToken::dangerously_create_token_unchecked();
-        let router = Router::new(token, amethystate::test_utils::unique_store("router-test"));
+        let router = Router::new(token);
         let uri = AppUri::parse("/ubuntu/processes").unwrap();
 
         let scope = router.activate::<Processes>(&uri).expect("activate");
@@ -766,7 +762,7 @@ mod tests {
     #[test]
     fn push_after_first_render_requests_a_rerender() {
         let token = UiThreadToken::dangerously_create_token_unchecked();
-        let router = Router::new(token, amethystate::test_utils::unique_store("router-test"));
+        let router = Router::new(token);
         let uri = AppUri::parse("/ubuntu/processes").unwrap();
         let scope = router.activate::<Processes>(&uri).expect("activate");
 
@@ -800,7 +796,7 @@ mod tests {
         // `Router::navigate` on *every* render, not just when the route
         // value changes (the caller doesn't know whether it changed).
         let token = UiThreadToken::dangerously_create_token_unchecked();
-        let router = Router::new(token, amethystate::test_utils::unique_store("router-test"));
+        let router = Router::new(token);
         let uri = AppUri::parse("/ubuntu/processes").unwrap();
         let route = AppRoute::Processes { context: "ubuntu".to_string() };
 
@@ -870,7 +866,7 @@ mod tests {
     #[test]
     fn navigating_between_siblings_keeps_the_shared_ancestor_scope() {
         let token = UiThreadToken::dangerously_create_token_unchecked();
-        let router = Router::new(token, amethystate::test_utils::unique_store("router-test"));
+        let router = Router::new(token);
         let uri = AppUri::parse("/ubuntu/processes").unwrap();
 
         router
@@ -918,7 +914,7 @@ mod tests {
     #[test]
     fn navigating_to_the_same_leaf_type_with_different_params_reinstalls_only_the_leaf() {
         let token = UiThreadToken::dangerously_create_token_unchecked();
-        let router = Router::new(token, amethystate::test_utils::unique_store("router-test"));
+        let router = Router::new(token);
 
         router
             .navigate(
@@ -1145,7 +1141,7 @@ mod tests {
         }
 
         let token = UiThreadToken::dangerously_create_token_unchecked();
-        let router = Router::new(token, amethystate::test_utils::unique_store("router-test"));
+        let router = Router::new(token);
 
         router
             .navigate(ProbeRoute::ProbePage {}, &AppUri::parse("/probe").unwrap())
