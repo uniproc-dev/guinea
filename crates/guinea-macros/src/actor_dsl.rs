@@ -426,6 +426,7 @@ fn expand(manifest: Manifest) -> syn::Result<TokenStream> {
             quote!(#flow_marker),
             quote! {
                 #[doc(hidden)]
+                #[allow(non_camel_case_types)]
                 pub struct #flow_marker;
                 #(#allow_impls)*
             },
@@ -458,6 +459,7 @@ fn expand(manifest: Manifest) -> syn::Result<TokenStream> {
     } else {
         quote! {
             #[doc(hidden)]
+            #[allow(non_camel_case_types)]
             pub struct #bus_marker;
 
             impl #impl_generics #gc::actor::event_bus::builder::EventSubscription<#self_ty>
@@ -475,9 +477,11 @@ fn expand(manifest: Manifest) -> syn::Result<TokenStream> {
 
     Ok(quote! {
         #[doc(hidden)]
+        #[allow(non_camel_case_types)]
         pub struct #handlers_marker;
 
         #[doc(hidden)]
+        #[allow(non_camel_case_types)]
         pub struct #signals_marker;
 
         #bus_impl
