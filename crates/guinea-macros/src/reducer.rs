@@ -41,15 +41,14 @@ fn expand_reducer(mut func: ItemFn) -> syn::Result<TokenStream> {
     // param 1: `msg: Push` -> Push
     let push_ty = arg_type(&func.sig.inputs[1])?.clone();
 
-    // `type Actions` from a sibling `#[dispatch(Trait)]`, else NoopActions.
     let dispatch = extract_dispatch(&func.attrs)?;
     func.attrs.retain(|a| !a.path().is_ident("dispatch"));
-    let actions_ty = match dispatch {
-        Some(trait_path) => {
-            let adapter = dispatch_adapter_path(trait_path);
-            quote!(#adapter)
-        }
-        None => quote!(guinea_core::scope::NoopActions),
+    let (group_ty, actions_ty) = match dispatch {
+        Some(group) => (
+            quote!(#group),
+            quote!(<#group as guinea_core::actor::group::ActionsGroup>::Dispatch),
+        ),
+        None => (quote!(()), quote!(guinea_core::scope::NoopActions)),
     };
 
     let fn_name = &func.sig.ident;
@@ -64,6 +63,7 @@ fn expand_reducer(mut func: ItemFn) -> syn::Result<TokenStream> {
         impl guinea_core::scope::Reducer for #marker {
             type State = #state_ty;
             type Push = #push_ty;
+            type Group = #group_ty;
             type Actions = #actions_ty;
 
             fn reduce(state: &mut Self::State, msg: Self::Push) {
@@ -91,15 +91,6 @@ fn extract_dispatch(attrs: &[syn::Attribute]) -> syn::Result<Option<Path>> {
         }
     }
     Ok(None)
-}
-
-fn dispatch_adapter_path(mut path: Path) -> Path {
-    if let Some(last) = path.segments.last_mut() {
-        let name = last.ident.to_string();
-        let base = name.strip_suffix("Actions").unwrap_or(&name);
-        last.ident = format_ident!("{}Dispatch", base);
-    }
-    path
 }
 
 pub fn reducer_state_derive_impl(input: TokenStream) -> TokenStream {

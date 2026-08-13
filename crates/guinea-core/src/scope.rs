@@ -47,6 +47,8 @@ impl<T> From<Rc<RefCell<T>>> for StateHandle<T> {
 pub trait Reducer: 'static {
     type State: Default + 'static;
     type Push: 'static;
+    /// The feature's UI contract, or `()` when it has none.
+    type Group: crate::actor::group::ActionsGroup;
     type Actions: Default + 'static;
 
     fn reduce(state: &mut Self::State, msg: Self::Push);
@@ -326,6 +328,7 @@ mod tests {
     impl Reducer for Counter {
         type State = CounterState;
         type Push = CounterMsg;
+        type Group = ();
         type Actions = NoopActions;
 
         fn reduce(state: &mut Self::State, msg: Self::Push) {

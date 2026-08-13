@@ -4,6 +4,7 @@ use std::sync::RwLock;
 pub mod addr;
 pub mod ctx;
 pub mod envelope;
+pub mod group;
 pub mod traits;
 
 pub use addr::*;

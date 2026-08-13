@@ -111,6 +111,17 @@ impl FeatureInitContext {
         self.scope.own(GlobalEventBusSubscription(id));
     }
 
+    /// Wires every message of `R`'s group to `addr`.
+    pub fn wire<R, A>(&self, addr: &Addr<A>)
+    where
+        R: Reducer,
+        R::Actions: guinea_core::actor::group::WireTarget<A, R::Group>,
+        A: 'static,
+    {
+        use guinea_core::actor::group::WireTarget;
+        self.actions::<R>().wire_all(addr);
+    }
+
     pub fn spawn_actor<A: ManagedActor + Debug + 'static>(&self, actor: A) -> Addr<A> {
         let addr = Addr::new_managed_scoped(actor, self.token.clone());
         let id = addr.id();

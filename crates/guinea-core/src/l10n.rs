@@ -6,6 +6,7 @@ struct Marker<S>(PhantomData<S>);
 impl<S: Clone + Default + 'static> Reducer for Marker<S> {
     type State = S;
     type Push = S;
+    type Group = ();
     type Actions = NoopActions;
 
     fn reduce(state: &mut Self::State, msg: Self::Push) {
