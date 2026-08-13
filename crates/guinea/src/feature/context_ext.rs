@@ -1,4 +1,3 @@
-use crate::addr::{AddrBuilder, UiAutoWire};
 use crate::feature::AppFeatureInitContext;
 use crate::into_signal::IntoSignal;
 use crate::lifecycle_tracker::AppLifecycle;
@@ -39,33 +38,10 @@ pub struct ActorBuilder<'a, Ctx: FeatureContext, A: ManagedActor> {
 }
 
 impl<'a, Ctx: FeatureContext, A: ManagedActor> ActorBuilder<'a, Ctx, A> {
-    pub fn ui_bind<P>(self, port: &P) -> Addr<A>
-    where
-        A: UiAutoWire<P>,
-    {
-        let addr = AddrBuilder::new(self.ctx.token(), self.ctx.tracker())
-            .managed(self.actor)
-            .ui_bind(port);
-        post_spawn(self.ctx, &addr);
-        addr
-    }
-
     pub fn build(self) -> Addr<A> {
         let addr = Addr::new_managed(self.actor, self.ctx.token(), self.ctx.tracker());
         self.ctx.tracker().track_actor(&addr);
-        post_spawn(self.ctx, &addr);
         addr
-    }
-}
-
-fn post_spawn<Ctx: FeatureContext, A: ManagedActor>(ctx: &mut Ctx, addr: &Addr<A>) {
-    //TODO remove flag for introspection
-    #[cfg(feature = "test-utils")]
-    if let Some(reg) = ctx
-        .shared()
-        .get::<guinea_core::actor::registry::ActorRegistry>()
-    {
-        reg.register(addr.clone());
     }
 }
 

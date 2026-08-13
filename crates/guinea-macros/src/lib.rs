@@ -2,8 +2,6 @@ use proc_macro::TokenStream;
 use syn::{ItemFn, ItemTrait, parse_macro_input};
 
 mod actor_dsl;
-mod binder_gen;
-mod capability;
 mod contract_macros;
 mod features;
 mod handler;
@@ -14,12 +12,6 @@ mod routes_dsl;
 pub fn port(_attr: TokenStream, item: TokenStream) -> TokenStream {
     let trait_item = parse_macro_input!(item as ItemTrait);
     contract_macros::port_impl(trait_item)
-}
-
-#[proc_macro_attribute]
-pub fn actions(_attr: TokenStream, item: TokenStream) -> TokenStream {
-    let trait_item = parse_macro_input!(item as ItemTrait);
-    contract_macros::actions_impl(trait_item)
 }
 
 /// Declares an actor's manifest:
@@ -36,11 +28,6 @@ pub fn actions(_attr: TokenStream, item: TokenStream) -> TokenStream {
 #[proc_macro]
 pub fn actor(input: TokenStream) -> TokenStream {
     actor_dsl::actor_impl(input)
-}
-
-#[proc_macro_attribute]
-pub fn capability(attr: TokenStream, item: TokenStream) -> TokenStream {
-    capability::capability_impl(attr, item)
 }
 
 #[proc_macro_attribute]

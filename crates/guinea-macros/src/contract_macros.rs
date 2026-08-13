@@ -1,9 +1,7 @@
 use proc_macro::TokenStream;
 use syn::ItemTrait;
 
-use crate::binder_gen;
-
-const HELPER_ATTRS: &[&str] = &["manual", "tracing", "slint"];
+const HELPER_ATTRS: &[&str] = &["manual", "tracing"];
 
 fn strip_helper_attrs(attrs: &mut Vec<syn::Attribute>) {
     attrs.retain(|attr| {
@@ -14,7 +12,6 @@ fn strip_helper_attrs(attrs: &mut Vec<syn::Attribute>) {
 }
 
 pub fn port_impl(mut trait_item: ItemTrait) -> TokenStream {
-    let registration = guinea_codegen::contracts::emit_port_registration(&trait_item);
     let trait_ident = &trait_item.ident;
 
     for item in &mut trait_item.items {
@@ -49,28 +46,6 @@ pub fn port_impl(mut trait_item: ItemTrait) -> TokenStream {
     quote::quote! {
         #trait_item
         #blanket_impl
-        #registration
-    }
-    .into()
-}
-
-pub fn actions_impl(mut trait_item: ItemTrait) -> TokenStream {
-    let registration = guinea_codegen::contracts::emit_binding_registration(&trait_item);
-    let binder_code = binder_gen::generate_binder(&trait_item);
-
-    let store_adapter = guinea_codegen::contracts::emit_store_dispatch_adapter(&trait_item);
-
-    for item in &mut trait_item.items {
-        if let syn::TraitItem::Fn(method) = item {
-            strip_helper_attrs(&mut method.attrs);
-        }
-    }
-
-    quote::quote! {
-        #trait_item
-        #binder_code
-        #store_adapter
-        #registration
     }
     .into()
 }

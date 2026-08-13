@@ -9,14 +9,12 @@ pub mod group;
 pub mod traits;
 
 pub use addr::*;
-pub use binder::*;
 pub use ctx::*;
 pub use envelope::*;
 pub use traits::*;
 
 pub mod event_bus;
 
-pub mod binder;
 mod macros;
 pub mod registry;
 
