@@ -1,7 +1,8 @@
 use std::time::{Duration, Instant};
 
-use guinea_core::actor::{Context, ManagedActor};
-use guinea_macros::{actor_manifest, handler};
+use guinea_core::actor::Context;
+use guinea_core::messages;
+use guinea_macros::{actor, handler};
 
 use super::contracts::{MetricsMsg, MetricsPort};
 
@@ -17,9 +18,12 @@ impl<P: MetricsPort> MetricsActor<P> {
     }
 }
 
-#[actor_manifest]
-impl<P: MetricsPort + 'static> ManagedActor for MetricsActor<P> {
-    type Handlers = handlers!(Tick);
+messages! { Tick }
+
+actor! {
+    MetricsActor<P: MetricsPort + 'static> {
+        handlers { Tick }
+    }
 }
 
 #[handler]

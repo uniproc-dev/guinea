@@ -1,5 +1,6 @@
-use guinea_core::actor::{Context, ManagedActor};
-use guinea_macros::{actor_manifest, handler};
+use guinea_core::actor::Context;
+use guinea_core::messages;
+use guinea_macros::{actor, handler};
 
 use super::contracts::{ServicesMessages, ServicesPort};
 
@@ -13,9 +14,12 @@ impl<P: ServicesPort> ServiceActor<P> {
     }
 }
 
-#[actor_manifest]
-impl<P: ServicesPort + 'static> ManagedActor for ServiceActor<P> {
-    type Handlers = handlers!(Refresh);
+messages! { Refresh }
+
+actor! {
+    ServiceActor<P: ServicesPort + 'static> {
+        handlers { Refresh }
+    }
 }
 
 #[handler]

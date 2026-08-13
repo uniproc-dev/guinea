@@ -2,7 +2,7 @@ use std::rc::Rc;
 
 use guinea_core::actor::{Context, ManagedActor};
 use guinea_core::actor::event_bus::EventBus;
-use guinea_macros::{actor_manifest, handler};
+use guinea_macros::{actor, handler};
 
 use crate::events::ProcessKilled;
 
@@ -29,10 +29,11 @@ impl<P: ProcessesPort> ProcessActor<P> {
     }
 }
 
-#[actor_manifest]
-impl<P: ProcessesPort + 'static> ManagedActor for ProcessActor<P> {
-    type Handlers = handlers!(@Kill, @Refresh);
-    type Signals = bus!(ProcessKilled);
+actor! {
+    ProcessActor<P: ProcessesPort + 'static> {
+        handlers  { Kill, Refresh }
+        publishes { ProcessKilled }
+    }
 }
 
 #[handler]

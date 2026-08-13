@@ -1,6 +1,7 @@
 use proc_macro::TokenStream;
 use syn::{ItemFn, ItemImpl, ItemTrait, parse_macro_input};
 
+mod actor_dsl;
 mod binder_gen;
 mod capability;
 mod contract_macros;
@@ -21,11 +22,20 @@ pub fn actions(_attr: TokenStream, item: TokenStream) -> TokenStream {
     contract_macros::actions_impl(trait_item)
 }
 
-#[proc_macro_attribute]
-pub fn actor_manifest(attr: TokenStream, item: TokenStream) -> TokenStream {
-    let impl_block = parse_macro_input!(item as ItemImpl);
-    guinea_codegen::actor_manifest::actor_manifest_impl(attr.into(), impl_block, std::iter::empty())
-        .into()
+/// Declares an actor's manifest:
+///
+/// ```ignore
+/// actor! {
+///     ProcessActor<P: ProcessesPort + 'static> {
+///         handlers   { Kill, Refresh }
+///         publishes  { ProcessKilled }
+///         subscribes { SettingsChanged }
+///     }
+/// }
+/// ```
+#[proc_macro]
+pub fn actor(input: TokenStream) -> TokenStream {
+    actor_dsl::actor_impl(input)
 }
 
 #[proc_macro_attribute]

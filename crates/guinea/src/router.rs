@@ -1044,10 +1044,10 @@ mod tests {
 
     #[test]
     fn navigating_away_from_page_disposes_actor_subscribed_to_global_bus() {
-        use guinea_core::actor::{Context, ManagedActor};
+        use guinea_core::actor::Context;
         use guinea_core::actor::event_bus::GlobalEventBus;
         use guinea_core::actor::Message;
-        use guinea_macros::{actor_manifest, handler};
+        use guinea_macros::{actor, handler};
         use std::cell::RefCell;
         use std::rc::Rc;
 
@@ -1076,15 +1076,15 @@ mod tests {
             }
         }
 
-        #[actor_manifest]
-        impl ManagedActor for ProbeActor {
-            type Handlers = handlers!(@ProbeEvent);
-            type Signals = ();
+        actor! {
+            ProbeActor {
+                handlers { ProbeEvent }
+            }
         }
 
         #[handler]
-        fn on_probe(this: &mut ProbeActor, msg: ProbeEvent, _ctx: &Context<ProbeActor>) {
-            this.seen.borrow_mut().push(msg.0);
+        fn on_probe(this: &mut ProbeActor, ctx: Context<ProbeActor, ProbeEvent>) {
+            this.seen.borrow_mut().push(ctx.msg.0);
         }
 
         thread_local! {

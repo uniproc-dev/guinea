@@ -10,7 +10,7 @@ pub fn generate_standalone_handler(item: ItemFn) -> TokenStream {
     expand_handler(item).unwrap_or_else(|err| err.to_compile_error().into())
 }
 
-fn guinea_core_crate_path() -> proc_macro2::TokenStream {
+pub(crate) fn guinea_core_crate_path() -> proc_macro2::TokenStream {
     match crate_name("guinea-core") {
         Ok(FoundCrate::Itself) => quote!(crate),
         Ok(FoundCrate::Name(name)) => {
