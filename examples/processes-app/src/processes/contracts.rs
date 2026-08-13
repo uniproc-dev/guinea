@@ -1,4 +1,12 @@
-use guinea_macros::{ReducerState, actions, port, reducer};
+use guinea_core::messages;
+use guinea_macros::{ReducerState, port, reducer};
+
+messages! {
+    pub Processes {
+        Kill(u32),
+        Refresh,
+    }
+}
 
 #[derive(Clone)]
 pub enum ProcessesMessages {
@@ -10,20 +18,13 @@ pub trait ProcessesPort {
     fn send(&self, msg: ProcessesMessages);
 }
 
-#[actions]
-pub trait ProcessesActions {
-    fn on_kill<F>(&self, handler: F)
-    where
-        F: Fn(u32) + 'static;
-}
-
 #[derive(ReducerState)]
 pub struct ProcessesViewState {
     pub items: Vec<String>,
 }
 
 #[reducer]
-#[dispatch(ProcessesActions)]
+#[dispatch(Processes)]
 pub fn processes_reducer(state: &mut ProcessesViewState, msg: ProcessesMessages) {
     match msg {
         ProcessesMessages::SetItems(items) => state.items = items,

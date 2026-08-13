@@ -6,10 +6,10 @@ edition = "2024"
 [dependencies]
 guinea = { path = "../../crates/guinea", features = ["widgets"] }
 guinea-core = { path = "../../crates/guinea-core" }
-windows-reactor = { git = "https://github.com/Tam1SH/windows-rs", rev = "ab3d2a793560287c572ff9964856c43fd0ce9af7" }
+windows-reactor = { git = "https://github.com/Tam1SH/windows-rs", rev = "d0fd3ce88" }
 anyhow = "1.0.100"
 
 [build-dependencies]
-windows-reactor-setup = { git = "https://github.com/Tam1SH/windows-rs", rev = "ab3d2a793560287c572ff9964856c43fd0ce9af7" }
+windows-reactor-setup = { git = "https://github.com/Tam1SH/windows-rs", rev = "d0fd3ce88" }
 
 [workspace]

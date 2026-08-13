@@ -6,7 +6,7 @@ use guinea_macros::{actor_manifest, handler};
 
 use crate::events::ProcessKilled;
 
-use super::contracts::{ProcessesMessages, ProcessesPort};
+use super::contracts::{Kill, ProcessesMessages, ProcessesPort, Refresh};
 
 pub struct ProcessActor<P: ProcessesPort> {
     ui_port: P,
@@ -31,12 +31,7 @@ impl<P: ProcessesPort> ProcessActor<P> {
 
 #[actor_manifest]
 impl<P: ProcessesPort + 'static> ManagedActor for ProcessActor<P> {
-    type Handlers = handlers!(
-        bind {
-            Kill(pub u32)
-        },
-        Refresh
-    );
+    type Handlers = handlers!(@Kill, @Refresh);
     type Signals = bus!(ProcessKilled);
 }
 

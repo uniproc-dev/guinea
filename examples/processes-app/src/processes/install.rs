@@ -2,8 +2,8 @@ use guinea::feature::FeatureInitContext;
 use guinea::uri::AppUri;
 use guinea_core::actor::Addr;
 
-use super::actor::{Kill, ProcessActor, Refresh};
-use super::contracts::{ProcessesBinder, ProcessesReducer};
+use super::actor::ProcessActor;
+use super::contracts::{ProcessesReducer, Refresh};
 
 pub fn install(ctx: &FeatureInitContext, uri: &AppUri) -> anyhow::Result<()> {
 
@@ -16,9 +16,7 @@ pub fn install(ctx: &FeatureInitContext, uri: &AppUri) -> anyhow::Result<()> {
         ctx.token.clone(),
     );
 
-    ProcessesBinder::new(&addr, &ctx.actions::<ProcessesReducer>())
-        .on_kill::<Kill>()
-        .build();
+    ctx.wire::<ProcessesReducer, _>(&addr);
 
     addr.send(Refresh);
 

@@ -4,7 +4,7 @@ use guinea::uri::AppUri;
 use guinea::widgets::table::{ColumnSpec, table};
 use windows_reactor::{Element, button, text_block, title, vstack};
 
-use super::contracts::ProcessesReducer;
+use super::contracts::{Kill, ProcessesReducer};
 
 pub struct Processes;
 
@@ -34,12 +34,12 @@ impl Page for Processes {
                 move |row: &Row| {
                     let pid = row.pid;
                     let dispatch = dispatch.clone();
-                    button("Kill").on_click(move || dispatch.emit_on_kill(pid)).into()
+                    button("Kill").on_click(move || dispatch.emit(Kill(pid))).into()
                 }
             }),
         ];
 
-        vstack((title("Processes"), table(cx, rows, columns, |row: &Row| row.pid.to_string(), None)))
+        vstack((title("Processes"), table(cx, rows, columns, |row: &Row| row.pid.to_string(), None, None)))
             .spacing(16.0)
             .into()
     }

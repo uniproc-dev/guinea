@@ -1,7 +1,5 @@
 use guinea::feature::FeatureInitContext;
 use guinea::uri::AppUri;
-use guinea_core::actor::event_bus::GlobalEventBus;
-
 use crate::events::ProcessKilled;
 
 use super::contracts::{TabsMsg, TabsReducer};
@@ -16,10 +14,9 @@ pub fn install(ctx: &FeatureInitContext, _uri: &AppUri) -> anyhow::Result<()> {
     });
     
     let scope = ctx.scope.clone();
-    let id = GlobalEventBus::instance().subscribe_fn(move |_: ProcessKilled| {
+    ctx.subscribe_global::<ProcessKilled>(move |_| {
         scope.push::<TabsReducer>(TabsMsg::GlobalKill);
     });
-    ctx.scope.own_subscription(GlobalEventBus::instance(), id);
 
     Ok(())
 }

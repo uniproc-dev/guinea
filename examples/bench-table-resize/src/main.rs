@@ -143,5 +143,5 @@ fn bench_root(cx: &mut RenderCx) -> Element {
         }),
     ];
 
-    table(cx, rows, columns, |r: &Row| r.id.to_string(), None)
+    table(cx, rows, columns, |r: &Row| r.id.to_string(), None, None)
 }
