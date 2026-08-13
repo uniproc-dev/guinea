@@ -14,8 +14,7 @@ where
     A: Handler<M> + 'static,
 {
     fn subscribe_into(addr: Addr<A>, tracker: &impl LifecycleTracker) {
-        let id = GlobalEventBus::instance().subscribe::<A, M>(addr);
-        tracker.track_sub(id);
+        tracker.track_sub(GlobalEventBus::instance().subscribe::<A, M>(addr));
     }
 }
 
@@ -45,8 +44,8 @@ impl<'a, A: 'static, L: LifecycleTracker> EventBusBuilder<'a, A, L> {
         M: Event,
         A: Handler<M> + 'static,
     {
-        let id = GlobalEventBus::instance().subscribe::<A, M>(self.addr.clone());
-        self.tracker.track_sub(id);
+        self.tracker
+            .track_sub(GlobalEventBus::instance().subscribe::<A, M>(self.addr.clone()));
         self
     }
 
@@ -55,8 +54,9 @@ impl<'a, A: 'static, L: LifecycleTracker> EventBusBuilder<'a, A, L> {
         Req: RpcCall,
         A: Handler<RpcRequest<Req>> + 'static,
     {
-        let id = GlobalEventBus::instance().subscribe::<A, RpcRequest<Req>>(self.addr.clone());
-        self.tracker.track_sub(id);
+        self.tracker.track_sub(
+            GlobalEventBus::instance().subscribe::<A, RpcRequest<Req>>(self.addr.clone()),
+        );
         self
     }
 }

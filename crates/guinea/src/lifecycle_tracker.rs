@@ -1,8 +1,7 @@
 use crate::feature::AppFeatureDeinitContext;
 use guinea_core::actor::UiThreadToken;
 use guinea_core::actor::addr::Addr;
-use guinea_core::actor::event_bus::GlobalEventBus;
-use guinea_core::actor::event_bus::subscribe::SubscriptionId;
+use guinea_core::actor::event_bus::subscribe::BusSubscription;
 use guinea_core::lifecycle_tracker::LifecycleTracker;
 use std::any::Any;
 use std::cell::RefCell;
@@ -10,7 +9,7 @@ use std::rc::Rc;
 
 #[derive(Default)]
 struct LifecycleCore {
-    subs: Vec<SubscriptionId>,
+    subs: Vec<BusSubscription>,
     actor_counters: Vec<Rc<&'static str>>,
     owned: Vec<Box<dyn FnOnce()>>,
     anchors: Vec<Box<dyn Any>>,
@@ -30,14 +29,12 @@ impl LifecycleCore {
         self.owned.push(Box::new(move || addr.dispose()));
     }
 
-    fn track_sub(&mut self, id: SubscriptionId) {
-        self.subs.push(id);
+    fn track_sub(&mut self, subscription: BusSubscription) {
+        self.subs.push(subscription);
     }
 
     fn shutdown(&mut self) -> Vec<(&'static str, usize)> {
-        for sub_id in self.subs.drain(..) {
-            GlobalEventBus::unsubscribe(sub_id);
-        }
+        self.subs.clear();
         for teardown in self.owned.drain(..).rev() {
             teardown();
         }
@@ -112,8 +109,8 @@ impl AppLifecycle {
         self.inner.borrow_mut().core.own_actor(addr);
     }
 
-    pub fn track_sub(&self, id: SubscriptionId) {
-        self.inner.borrow_mut().core.track_sub(id);
+    pub fn track_sub(&self, subscription: BusSubscription) {
+        self.inner.borrow_mut().core.track_sub(subscription);
     }
 }
 
@@ -124,8 +121,8 @@ impl LifecycleTracker for AppLifecycle {
     fn track_actor<A: 'static>(&self, addr: &Addr<A>) {
         self.track_actor(addr);
     }
-    fn track_sub(&self, id: SubscriptionId) {
-        self.track_sub(id);
+    fn track_sub(&self, subscription: BusSubscription) {
+        self.track_sub(subscription);
     }
     fn own_actor<A: 'static>(&self, addr: &Addr<A>) {
         self.own_actor(addr);
@@ -139,6 +136,7 @@ mod tests {
     use crate::reactor::Reactor;
     use guinea_core::SharedState;
     use guinea_core::actor::UiThreadToken;
+    use guinea_core::actor::event_bus::GlobalEventBus;
     use std::sync::Arc;
     use std::sync::atomic::{AtomicUsize, Ordering};
 
@@ -235,15 +233,12 @@ mod tests {
     }
 
     #[test]
-    fn test_lifecycle_subs_drain() {
+    fn tracked_subscriptions_end_with_the_application() {
         let lifecycle = AppLifecycle::new();
-        lifecycle.track_sub(1);
-        lifecycle.track_sub(2);
+        lifecycle.track_sub(GlobalEventBus::subscribe_fn(|_: Ping| {}));
+        lifecycle.track_sub(GlobalEventBus::subscribe_fn(|_: Ping| {}));
 
-        {
-            let inner = lifecycle.inner.borrow();
-            assert_eq!(inner.core.subs.len(), 2);
-        }
+        assert_eq!(GlobalEventBus::count_subscribers::<Ping>(), 2);
 
         let token = UiThreadToken::dangerously_create_token_unchecked();
         let reactor = Reactor::new();
@@ -256,9 +251,10 @@ mod tests {
 
         lifecycle.clone().shutdown(&token, &mut ctx);
 
-        {
-            let inner = lifecycle.inner.borrow();
-            assert_eq!(inner.core.subs.len(), 0);
-        }
+        assert_eq!(
+            GlobalEventBus::count_subscribers::<Ping>(),
+            0,
+            "the bus itself must be left empty, not merely the tracker"
+        );
     }
 }

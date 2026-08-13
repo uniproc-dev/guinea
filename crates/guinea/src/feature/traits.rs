@@ -5,7 +5,7 @@ use crate::reactor::Reactor;
 use guinea_core::SharedState;
 use guinea_core::actor::registry::DebugRegistry;
 use guinea_core::actor::{Addr, Handler, ManagedActor, UiThreadToken};
-use guinea_core::actor::event_bus::{EventBus, GlobalEventBus, GlobalEventBusSubscription};
+use guinea_core::actor::event_bus::{EventBus, GlobalEventBus};
 use guinea_core::actor::event_bus::subscribe::Event;
 use guinea_core::scope::{Reducer, Scope, Teardown};
 
@@ -84,13 +84,12 @@ impl FeatureInitContext {
     }
 
     pub fn subscribe<M: Event>(&self, callback: impl Fn(M) + 'static) {
-        let id = self.event_bus.subscribe_fn(callback);
-        self.scope.own_subscription(self.event_bus.clone(), id);
+        self.scope
+            .own_subscription(self.event_bus.subscribe_fn(callback));
     }
 
     pub fn subscribe_global<M: Event>(&self, callback: impl Fn(M) + 'static) {
-        let id = GlobalEventBus::subscribe_fn(callback);
-        self.scope.own(GlobalEventBusSubscription(id));
+        self.scope.own(GlobalEventBus::subscribe_fn(callback));
     }
 
     pub fn subscribe_on_global_bus<A, M>(&self, addr: Addr<A>)
@@ -98,8 +97,7 @@ impl FeatureInitContext {
         A: Handler<M> + 'static,
         M: Event,
     {
-        let id = GlobalEventBus::subscribe(addr);
-        self.scope.own(GlobalEventBusSubscription(id));
+        self.scope.own(GlobalEventBus::subscribe::<A, M>(addr));
     }
 
     /// Wires every message of `R`'s group to `addr`.

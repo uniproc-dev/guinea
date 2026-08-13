@@ -1,5 +1,7 @@
 use crate::actor::addr::Addr;
-use crate::actor::event_bus::subscribe::{Event, FnSubscriber, Subscriber, SubscriptionId, UntypedSubscriber};
+use crate::actor::event_bus::subscribe::{
+    BusSubscription, Event, FnSubscriber, Subscriber, SubscriptionId, UntypedSubscriber,
+};
 use crate::actor::invoke_on_ui;
 use crate::actor::short_type_name;
 use crate::actor::traits::Handler;
@@ -10,7 +12,7 @@ use std::collections::HashMap;
 use std::rc::Rc;
 use std::sync::Arc;
 
-use tracing::{debug, warn};
+use tracing::debug;
 
 pub mod builder;
 pub mod rpc;
@@ -27,7 +29,7 @@ pub static ACTIVE_TASKS: std::sync::atomic::AtomicUsize = std::sync::atomic::Ato
 pub struct EventBus {
     subscribers: RefCell<HashMap<TypeId, Vec<Box<dyn UntypedSubscriber>>>>,
     counts: RefCell<HashMap<TypeId, usize>>,
-    next_id: Cell<SubscriptionId>,
+    next_id: Cell<u64>,
 }
 
 impl Default for EventBus {
@@ -45,33 +47,18 @@ impl EventBus {
         }
     }
 
-    fn next_id(&self) -> SubscriptionId {
+    fn next_id(&self) -> u64 {
         let id = self.next_id.get();
         self.next_id.set(id + 1);
         id
     }
 
-    pub fn subscribe<A, M>(&self, addr: Addr<A>) -> SubscriptionId
+    pub fn subscribe<A, M>(self: &Rc<Self>, addr: Addr<A>) -> BusSubscription
     where
         A: Handler<M> + 'static,
         M: Event,
     {
-        let type_id = TypeId::of::<M>();
-        let id = self.next_id();
-
-        *self.counts.borrow_mut().entry(type_id).or_insert(0) += 1;
-
-        let subscriber = Box::new(Subscriber {
-            id,
-            addr,
-            _marker: std::marker::PhantomData,
-        });
-
-        self.subscribers
-            .borrow_mut()
-            .entry(type_id)
-            .or_insert_with(Vec::new)
-            .push(subscriber);
+        let seq = self.next_id();
 
         if is_scope_enabled("core.bus.subscribe") {
             debug!(
@@ -81,31 +68,47 @@ impl EventBus {
             );
         }
 
-        id
+        self.insert::<M>(Box::new(Subscriber {
+            seq,
+            addr,
+            _marker: std::marker::PhantomData,
+        }))
     }
 
-    pub fn subscribe_fn<M: Event>(&self, callback: impl Fn(M) + 'static) -> SubscriptionId {
-        let type_id = TypeId::of::<M>();
-        let id = self.next_id();
-
-        *self.counts.borrow_mut().entry(type_id).or_insert(0) += 1;
-
-        let subscriber = Box::new(FnSubscriber {
-            id,
-            callback: Arc::new(callback),
-        });
-
-        self.subscribers
-            .borrow_mut()
-            .entry(type_id)
-            .or_insert_with(Vec::new)
-            .push(subscriber);
+    pub fn subscribe_fn<M: Event>(
+        self: &Rc<Self>,
+        callback: impl Fn(M) + 'static,
+    ) -> BusSubscription {
+        let seq = self.next_id();
 
         if is_scope_enabled("core.bus.subscribe") {
             debug!(event = short_type_name::<M>(), "bus.subscribe_fn");
         }
 
-        id
+        self.insert::<M>(Box::new(FnSubscriber {
+            seq,
+            callback: Arc::new(callback),
+        }))
+    }
+
+    fn insert<M: Event>(self: &Rc<Self>, subscriber: Box<dyn UntypedSubscriber>) -> BusSubscription {
+        let event = TypeId::of::<M>();
+        let id = SubscriptionId {
+            seq: subscriber.seq(),
+            event,
+        };
+
+        *self.counts.borrow_mut().entry(event).or_insert(0) += 1;
+        self.subscribers
+            .borrow_mut()
+            .entry(event)
+            .or_default()
+            .push(subscriber);
+
+        BusSubscription {
+            bus: Rc::downgrade(self),
+            id,
+        }
     }
 
     pub fn count_subscribers<M: Event>(&self) -> usize {
@@ -153,26 +156,20 @@ impl EventBus {
         }
     }
 
-    pub fn unsubscribe(&self, id: SubscriptionId) {
+    pub(super) fn remove(&self, id: SubscriptionId) {
         let mut subscribers = self.subscribers.borrow_mut();
-        let mut found = false;
+        let Some(list) = subscribers.get_mut(&id.event) else {
+            return;
+        };
 
-        for (type_id, list) in subscribers.iter_mut() {
-            let start_len = list.len();
-            list.retain(|sub| sub.id() != id);
-            let removed = start_len - list.len();
+        let before = list.len();
+        list.retain(|sub| sub.seq() != id.seq);
+        let removed = before - list.len();
 
-            if removed > 0 {
-                found = true;
-                let mut counts = self.counts.borrow_mut();
-                if let Some(count) = counts.get_mut(type_id) {
-                    *count = count.saturating_sub(removed);
-                }
-            }
-        }
-
-        if !found {
-            warn!(subscription_id = id, "unsubscribe: subscription not found");
+        if removed > 0
+            && let Some(count) = self.counts.borrow_mut().get_mut(&id.event)
+        {
+            *count = count.saturating_sub(removed);
         }
     }
 }
@@ -197,7 +194,7 @@ impl GlobalEventBus {
         });
     }
 
-    pub fn subscribe<A, M>(addr: Addr<A>) -> SubscriptionId
+    pub fn subscribe<A, M>(addr: Addr<A>) -> BusSubscription
     where
         A: Handler<M> + 'static,
         M: Event,
@@ -205,7 +202,7 @@ impl GlobalEventBus {
         Self::instance().subscribe(addr)
     }
 
-    pub fn subscribe_fn<M: Event>(callback: impl Fn(M) + 'static) -> SubscriptionId {
+    pub fn subscribe_fn<M: Event>(callback: impl Fn(M) + 'static) -> BusSubscription {
         Self::instance().subscribe_fn(callback)
     }
 
@@ -217,19 +214,80 @@ impl GlobalEventBus {
         Self::instance().has_subscribers::<M>()
     }
 
-    pub fn unsubscribe(id: SubscriptionId) {
-        Self::instance().unsubscribe(id);
-    }
 }
 
-/// A scope-owned handle to a `GlobalEventBus` subscription. Dropping/teardown
-/// unsubscribes automatically, so business code does not have to remember to
-/// call `GlobalEventBus::unsubscribe` manually.
-pub struct GlobalEventBusSubscription(pub SubscriptionId);
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::cell::Cell as StdCell;
 
-impl crate::scope::Teardown for GlobalEventBusSubscription {
-    fn teardown(self) {
-        GlobalEventBus::unsubscribe(self.0);
+    crate::messages! { Ping, Pong }
+
+    #[test]
+    fn dropping_the_handle_ends_the_subscription() {
+        let bus = Rc::new(EventBus::new());
+        let seen = Rc::new(StdCell::new(0));
+
+        let counter = seen.clone();
+        let sub = bus.subscribe_fn(move |_: Ping| counter.set(counter.get() + 1));
+
+        bus.publish(Ping);
+        assert_eq!(seen.get(), 1);
+
+        drop(sub);
+        assert_eq!(bus.count_subscribers::<Ping>(), 0);
+
+        bus.publish(Ping);
+        assert_eq!(seen.get(), 1, "no delivery after the handle is dropped");
+    }
+
+    #[test]
+    fn removal_only_touches_its_own_event() {
+        let bus = Rc::new(EventBus::new());
+
+        let ping = bus.subscribe_fn(|_: Ping| {});
+        let _pong = bus.subscribe_fn(|_: Pong| {});
+
+        drop(ping);
+
+        assert_eq!(bus.count_subscribers::<Ping>(), 0);
+        assert_eq!(bus.count_subscribers::<Pong>(), 1);
+    }
+
+    #[test]
+    fn a_handle_from_one_bus_cannot_disturb_another() {
+        let first = Rc::new(EventBus::new());
+        let second = Rc::new(EventBus::new());
+
+        let sub = first.subscribe_fn(|_: Ping| {});
+        let _same_seq_elsewhere = second.subscribe_fn(|_: Ping| {});
+
+        drop(sub);
+
+        assert_eq!(first.count_subscribers::<Ping>(), 0);
+        assert_eq!(
+            second.count_subscribers::<Ping>(),
+            1,
+            "both subscriptions were the first on their own bus, and once shared a raw id"
+        );
+    }
+
+    #[test]
+    fn a_handle_outliving_its_bus_is_harmless() {
+        let sub = {
+            let bus = Rc::new(EventBus::new());
+            bus.subscribe_fn(|_: Ping| {})
+        };
+
+        drop(sub);
+    }
+
+    #[test]
+    fn leak_keeps_the_subscription() {
+        let bus = Rc::new(EventBus::new());
+        bus.subscribe_fn(|_: Ping| {}).leak();
+
+        assert_eq!(bus.count_subscribers::<Ping>(), 1);
     }
 }
 

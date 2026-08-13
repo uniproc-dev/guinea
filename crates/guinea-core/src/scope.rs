@@ -7,8 +7,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use tokio::task::JoinHandle;
 
 use crate::actor::Addr;
-use crate::actor::event_bus::EventBus;
-use crate::actor::event_bus::subscribe::SubscriptionId;
+use crate::actor::event_bus::subscribe::BusSubscription;
 
 static NEXT_SUBSCRIBER_ID: AtomicU64 = AtomicU64::new(0);
 
@@ -219,10 +218,10 @@ impl Scope {
         }
     }
 
-    pub fn own_subscription(&self, bus: Rc<EventBus>, id: SubscriptionId) {
+    pub fn own_subscription(&self, subscription: BusSubscription) {
         self.teardowns
             .borrow_mut()
-            .push(Box::new(move || bus.unsubscribe(id)));
+            .push(Box::new(move || drop(subscription)));
     }
 
     /// Returns a shallow clone of every reducer state currently held by this
