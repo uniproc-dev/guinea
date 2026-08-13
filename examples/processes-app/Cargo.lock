@@ -13,13 +13,13 @@ dependencies = [
 
 [[package]]
 name = "amethystate"
-version = "0.11.0"
-source = "git+https://github.com/uniproc-dev/amethystate?tag=v0.11.0#826b2cc5d96125717dba4e3fbdefc20a0124e673"
+version = "0.9.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ad6f1a6fdf23993e3b42487493ff3282897dfbd257c349b5bb6a29a48ae63b9b"
 dependencies = [
  "amethystate-core",
  "amethystate-macros",
  "etcetera",
- "futures-core",
  "inventory",
  "parking_lot",
  "petgraph",
@@ -34,8 +34,9 @@ dependencies = [
 
 [[package]]
 name = "amethystate-core"
-version = "0.11.0"
-source = "git+https://github.com/uniproc-dev/amethystate?tag=v0.11.0#826b2cc5d96125717dba4e3fbdefc20a0124e673"
+version = "0.9.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "20d8ee69279360d9a35ce31a372d07d4d8de5c30ecafeab12a65cc02fa7009e7"
 dependencies = [
  "arc-swap",
  "inventory",
@@ -47,8 +48,9 @@ dependencies = [
 
 [[package]]
 name = "amethystate-macros"
-version = "0.11.0"
-source = "git+https://github.com/uniproc-dev/amethystate?tag=v0.11.0#826b2cc5d96125717dba4e3fbdefc20a0124e673"
+version = "0.9.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6f151d9e24db495b5d55ae319e4aa250bfc8d9f5e7cbf568ab7d7249da0e15a9"
 dependencies = [
  "amethystate-macros-core",
  "darling",
@@ -60,8 +62,9 @@ dependencies = [
 
 [[package]]
 name = "amethystate-macros-core"
-version = "0.11.0"
-source = "git+https://github.com/uniproc-dev/amethystate?tag=v0.11.0#826b2cc5d96125717dba4e3fbdefc20a0124e673"
+version = "0.9.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d49ee1a89aca14be6d3c3bd119dfcd7428f625313baa9cb634b27b71bdba8c51"
 dependencies = [
  "darling",
  "proc-macro2",
@@ -471,7 +474,7 @@ dependencies = [
 [[package]]
 name = "guinea-plugin-l10n"
 version = "0.1.0"
-source = "git+https://github.com/uniproc-dev/guinea-plugins?rev=ccc5020#ccc5020f646ebd5d218ed771a3fc05d803aeb287"
+source = "git+https://github.com/uniproc-dev/guinea-plugins?rev=4bf8b88#4bf8b88236d40aa954581b0d32efe313bdfabcae"
 dependencies = [
  "anyhow",
  "guinea",
@@ -483,7 +486,7 @@ dependencies = [
 [[package]]
 name = "guinea-plugin-store"
 version = "0.1.0"
-source = "git+https://github.com/uniproc-dev/guinea-plugins?rev=ccc5020#ccc5020f646ebd5d218ed771a3fc05d803aeb287"
+source = "git+https://github.com/uniproc-dev/guinea-plugins?rev=4bf8b88#4bf8b88236d40aa954581b0d32efe313bdfabcae"
 dependencies = [
  "amethystate",
  "anyhow",
