@@ -375,9 +375,9 @@ mod tests {
 
         // Sync branch: a plain return type, no `.reply()` anywhere in sight.
         #[handler]
-        fn double(this: &mut MathActor, req: Double) -> Doubled {
+        fn double(this: &mut MathActor, ctx: Context<MathActor, Double>) -> Doubled {
             let _ = this;
-            Doubled(req.0 * 2)
+            Doubled(ctx.msg.0 * 2)
         }
 
         // Async branch: `.await`s before producing the value the macro

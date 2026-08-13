@@ -33,23 +33,13 @@ fn expand_handler(item: ItemFn) -> Result<TokenStream> {
         extract_actor_from_ref(inputs.get(0))?
     };
 
-    let (msg_ty, takes_ctx) = if is_async {
+    let msg_ty = if is_async {
         let (ty, _) = extract_msg_info(inputs.get(1))?;
-        (ty.clone(), false)
+        ty.clone()
     } else {
         extract_sync_msg(inputs.get(1))?
     };
     let msg_ty = &msg_ty;
-
-    if takes_ctx && inputs.len() != 2 {
-        return Err(Error::new(
-            item.sig.span(),
-            format!(
-                "Handler for actor '{}' taking Context<_, Msg> must have exactly 2 arguments: (actor: &mut {}, ctx: Context<{}, Msg>)",
-                actor_name, actor_name, actor_name
-            ),
-        ));
-    }
 
     // A return type is the signal that this handler answers an
     // `AsyncBus::request` rather than reacting to a fire-and-forget event.
@@ -68,20 +58,19 @@ fn expand_handler(item: ItemFn) -> Result<TokenStream> {
         // Fire-and-forget sync handler - unchanged from before the RPC
         // heuristic existed.
         (false, None) => {
-            if inputs.len() < 2 || inputs.len() > 3 {
+            if inputs.len() != 2 {
                 return Err(Error::new(
                     item.sig.span(),
                     format!(
-                        "Sync handler for actor '{}' must have 2 or 3 arguments: (actor: &{} or &mut {}, msg: _, [ctx: &Context<{}>])",
-                        actor_name, actor_name, actor_name, actor_name
+                        "Sync handler for actor '{}' must have exactly 2 arguments: (actor: &mut {}, ctx: Context<{}, Msg>)",
+                        actor_name, actor_name, actor_name
                     ),
                 ));
             }
-            let body = sync_call_body(fn_name, takes_ctx, inputs.len());
             quote! {
                 impl #impl_generics #gc::actor::Handler<#msg_ty> for #actor_ty #where_clause {
                     fn handle(&mut self, ctx: #gc::actor::Context<Self, #msg_ty>) {
-                        #body;
+                        #fn_name(self, ctx);
                     }
                 }
             }
@@ -92,20 +81,19 @@ fn expand_handler(item: ItemFn) -> Result<TokenStream> {
         // returns, so the value just needs to flow back out as an
         // expression.
         (false, Some(ret_ty)) => {
-            if inputs.len() < 2 || inputs.len() > 3 {
+            if inputs.len() != 2 {
                 return Err(Error::new(
                     item.sig.span(),
                     format!(
-                        "Sync RPC handler for actor '{}' must have 2 or 3 arguments: (actor: &{} or &mut {}, req: _, [ctx: &Context<{}>])",
-                        actor_name, actor_name, actor_name, actor_name
+                        "Sync RPC handler for actor '{}' must have exactly 2 arguments: (actor: &mut {}, ctx: Context<{}, Req>)",
+                        actor_name, actor_name, actor_name
                     ),
                 ));
             }
-            let body = sync_call_body(fn_name, takes_ctx, inputs.len());
             quote! {
                 impl #impl_generics #gc::actor::event_bus::rpc::RpcHandler<#msg_ty> for #actor_ty #where_clause {
                     fn handle_rpc(&mut self, ctx: #gc::actor::Context<Self, #msg_ty>) -> #ret_ty {
-                        #body
+                        #fn_name(self, ctx)
                     }
                 }
             }
@@ -186,56 +174,43 @@ fn type_to_string(ty: &Type) -> String {
     quote!(#ty).to_string().replace(' ', "")
 }
 
-/// The second argument is either `Context<Actor, Msg>` - message inside - or
-/// the message itself, which is the pre-`Context<A, M>` form.
-fn extract_sync_msg(arg: Option<&FnArg>) -> Result<(Type, bool)> {
+/// The message type is read off the second argument, which must be
+/// `Context<Actor, Msg>`.
+fn extract_sync_msg(arg: Option<&FnArg>) -> Result<Type> {
     let (ty, _) = extract_msg_info(arg)?;
 
-    if let Type::Path(path) = ty {
-        if let Some(last) = path.path.segments.last() {
-            if last.ident == "Context" {
-                let syn::PathArguments::AngleBracketed(args) = &last.arguments else {
-                    return Err(Error::new(
-                        ty.span(),
-                        "Context in a handler must name the message: Context<Actor, Msg>",
-                    ));
-                };
-                let types: Vec<Type> = args
-                    .args
-                    .iter()
-                    .filter_map(|arg| match arg {
-                        syn::GenericArgument::Type(ty) => Some(ty.clone()),
-                        _ => None,
-                    })
-                    .collect();
-                return match types.len() {
-                    0 | 1 => Err(Error::new(
-                        ty.span(),
-                        "Context in a handler must name the message: Context<Actor, Msg>",
-                    )),
-                    _ => Ok((types[1].clone(), true)),
-                };
-            }
-        }
+    let malformed = || {
+        Error::new(
+            ty.span(),
+            "a handler's second argument must be `Context<Actor, Msg>`",
+        )
+    };
+
+    let Type::Path(path) = ty else {
+        return Err(malformed());
+    };
+    let Some(last) = path.path.segments.last() else {
+        return Err(malformed());
+    };
+    if last.ident != "Context" {
+        return Err(malformed());
     }
+    let syn::PathArguments::AngleBracketed(args) = &last.arguments else {
+        return Err(malformed());
+    };
 
-    Ok((ty.clone(), false))
-}
+    let types: Vec<Type> = args
+        .args
+        .iter()
+        .filter_map(|arg| match arg {
+            syn::GenericArgument::Type(ty) => Some(ty.clone()),
+            _ => None,
+        })
+        .collect();
 
-fn sync_call_body(
-    fn_name: &syn::Ident,
-    takes_ctx: bool,
-    arity: usize,
-) -> proc_macro2::TokenStream {
-    if takes_ctx {
-        quote! { #fn_name(self, ctx) }
-    } else if arity == 3 {
-        quote! {{
-            let __ctx = ctx.detach();
-            #fn_name(self, ctx.msg, &__ctx)
-        }}
-    } else {
-        quote! { #fn_name(self, ctx.msg) }
+    match types.len() {
+        0 | 1 => Err(malformed()),
+        _ => Ok(types[1].clone()),
     }
 }
 

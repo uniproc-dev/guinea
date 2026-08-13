@@ -1,5 +1,5 @@
 use proc_macro::TokenStream;
-use syn::{ItemFn, ItemImpl, ItemTrait, parse_macro_input};
+use syn::{ItemFn, ItemTrait, parse_macro_input};
 
 mod actor_dsl;
 mod binder_gen;

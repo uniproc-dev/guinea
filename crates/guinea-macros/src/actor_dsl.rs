@@ -28,6 +28,8 @@ struct HandlerDecl {
 struct Edge {
     channel: Channel,
     target: syn::Type,
+    is_loop: bool,
+    span: Span,
 }
 
 #[derive(PartialEq)]
@@ -242,8 +244,10 @@ fn parse_edges(tokens: &[TokenTree]) -> syn::Result<Vec<Edge>> {
         }
 
         let mut rest: Vec<TokenTree> = slice.to_vec();
+        let mut is_loop = false;
         if let Some(TokenTree::Ident(last)) = rest.last() {
             if last == "loop" {
+                is_loop = true;
                 rest.pop();
             }
         }
@@ -251,6 +255,8 @@ fn parse_edges(tokens: &[TokenTree]) -> syn::Result<Vec<Edge>> {
         edges.push(Edge {
             channel,
             target: parse_one_type(&mut rest)?,
+            is_loop,
+            span: head.span(),
         });
     }
 
@@ -314,7 +320,67 @@ fn span_of(tokens: &[TokenTree]) -> Span {
         .unwrap_or_else(Span::call_site)
 }
 
+/// A cycle among an actor's own messages is legal - self-restarting timers are
+/// the usual case - but only when said out loud with `loop` on one of its
+/// edges.
+fn check_cycles(handlers: &[HandlerDecl]) -> syn::Result<()> {
+    let key = |ty: &syn::Type| quote!(#ty).to_string();
+
+    let mut graph: std::collections::HashMap<String, Vec<&Edge>> =
+        std::collections::HashMap::new();
+    for decl in handlers {
+        let edges = decl.edges.iter().flatten().collect::<Vec<_>>();
+        graph.insert(key(&decl.msg), edges);
+    }
+
+    let mut done: std::collections::HashSet<String> = std::collections::HashSet::new();
+
+    for decl in handlers {
+        let start = key(&decl.msg);
+        if done.contains(&start) {
+            continue;
+        }
+
+        let mut stack = vec![(start.clone(), Vec::<&Edge>::new())];
+        let mut on_path: std::collections::HashSet<String> = std::collections::HashSet::new();
+
+        while let Some((node, path)) = stack.pop() {
+            if !on_path.insert(node.clone()) {
+                continue;
+            }
+            done.insert(node.clone());
+
+            for edge in graph.get(&node).into_iter().flatten() {
+                let target = key(&edge.target);
+                let mut next = path.clone();
+                next.push(edge);
+
+                if target == start {
+                    if !next.iter().any(|e| e.is_loop) {
+                        return Err(syn::Error::new(
+                            edge.span,
+                            format!(
+                                "`{}` can send its way back to itself; mark one edge of the cycle with `loop` if that is intended",
+                                start
+                            ),
+                        ));
+                    }
+                    continue;
+                }
+
+                if graph.contains_key(&target) {
+                    stack.push((target, next));
+                }
+            }
+        }
+    }
+
+    Ok(())
+}
+
 fn expand(manifest: Manifest) -> syn::Result<TokenStream> {
+    check_cycles(&manifest.handlers)?;
+
     let gc = guinea_core_crate_path();
     let Manifest {
         ident,
