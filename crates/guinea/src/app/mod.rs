@@ -12,7 +12,6 @@ pub(crate) use runtime::route_changed;
 use guinea_core::actor::UiThreadToken;
 
 use crate::lifecycle_tracker::AppLifecycle;
-use crate::router::{RouteChain, RouterRx, ToUri};
 
 type Registration = Box<dyn FnOnce(&mut FeatureBuilder) -> anyhow::Result<()> + Send>;
 type ReadyHook = Box<dyn FnOnce(&mut FeatureBuilder) + Send>;
@@ -62,14 +61,18 @@ impl App {
         self
     }
 
-    /// Takes over the window: installs everything on the UI thread, renders the
-    /// router, and tears the application down on exit.
+    /// Takes over the window: installs everything on the UI thread, renders
+    /// `root`, and tears the application down on exit.
+    ///
+    /// `root` is built on the UI thread, after installation. Pass
+    /// [`crate::router::RouterRoot::at`] for a route-based UI, or any other
+    /// component - `run` itself knows nothing about routing.
     ///
     /// Does not return - the reactor exits the process once the last window
     /// closes.
-    pub fn run<R>(self, window: windows_reactor::App, initial: R) -> anyhow::Result<()>
+    pub fn run<C>(self, window: windows_reactor::App, root: C) -> anyhow::Result<()>
     where
-        R: RouteChain + ToUri + Clone + PartialEq + Send + 'static,
+        C: windows_reactor::Component + Send + 'static,
     {
         let App {
             registrations,
@@ -104,26 +107,9 @@ impl App {
                     last_route: Default::default(),
                 });
 
-                RouterRoot { initial }
+                root
             })
             .map_err(|e| anyhow::anyhow!("windows-reactor app failed: {e:?}"))
-    }
-}
-
-struct RouterRoot<R> {
-    initial: R,
-}
-
-impl<R> windows_reactor::Component for RouterRoot<R>
-where
-    R: RouteChain + ToUri + Clone + PartialEq + 'static,
-{
-    fn render(
-        &self,
-        _props: &(),
-        cx: &mut windows_reactor::RenderCx,
-    ) -> windows_reactor::Element {
-        RouterRx::<R>::render(cx, self.initial.clone())
     }
 }
 

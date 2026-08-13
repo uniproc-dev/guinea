@@ -250,6 +250,33 @@ where
     }
 }
 
+/// The router as a root component, for [`crate::app::App::run`].
+///
+/// An application whose UI is not route-based passes its own component
+/// instead - `run` does not know about routing.
+pub struct RouterRoot<R> {
+    initial: R,
+}
+
+impl<R> RouterRoot<R> {
+    pub fn at(initial: R) -> Self {
+        Self { initial }
+    }
+}
+
+impl<R> windows_reactor::Component for RouterRoot<R>
+where
+    R: RouteChain + ToUri + Clone + PartialEq + 'static,
+{
+    fn render(
+        &self,
+        _props: &(),
+        cx: &mut windows_reactor::RenderCx,
+    ) -> windows_reactor::Element {
+        RouterRx::<R>::render(cx, self.initial.clone())
+    }
+}
+
 pub trait UseNavigate {
     fn use_navigate<R>(&self) -> NavigateHandle<R>
     where
