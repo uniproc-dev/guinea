@@ -183,13 +183,8 @@ mod tests {
         let lifecycle = AppLifecycle::new();
 
         {
-            let mut ctx = crate::feature::AppFeatureInitContext {
-                token: token.clone(),
-                reactor: &reactor,
-                shared: &shared,
-                tracker: &lifecycle,
-            };
-            let _addr = crate::feature::ContextActorExt::spawn(&mut ctx, Probe);
+            let mut app = crate::app::PluginBuilder::new(token.clone(), lifecycle.clone());
+            let _addr = crate::feature::ContextActorExt::spawn(&mut app, Probe);
         }
 
         let mut ctx = deinit(&token, &reactor, &shared);
@@ -204,13 +199,8 @@ mod tests {
         let lifecycle = AppLifecycle::new();
 
         let kept = {
-            let mut ctx = crate::feature::AppFeatureInitContext {
-                token: token.clone(),
-                reactor: &reactor,
-                shared: &shared,
-                tracker: &lifecycle,
-            };
-            crate::feature::ContextActorExt::spawn(&mut ctx, Probe)
+            let mut app = crate::app::PluginBuilder::new(token.clone(), lifecycle.clone());
+            crate::feature::ContextActorExt::spawn(&mut app, Probe)
         };
 
         let mut ctx = deinit(&token, &reactor, &shared);

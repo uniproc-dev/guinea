@@ -3,7 +3,6 @@ use syn::{ItemFn, ItemTrait, parse_macro_input};
 
 mod actor_dsl;
 mod contract_macros;
-mod features;
 mod handler;
 mod reducer;
 mod routes_dsl;
@@ -28,11 +27,6 @@ pub fn port(_attr: TokenStream, item: TokenStream) -> TokenStream {
 #[proc_macro]
 pub fn actor(input: TokenStream) -> TokenStream {
     actor_dsl::actor_impl(input)
-}
-
-#[proc_macro_attribute]
-pub fn app_feature(args: TokenStream, input: TokenStream) -> TokenStream {
-    features::app_feature_impl(args, input)
 }
 
 /// `routes! { Route { layout(TabsLayout) { page(Processes, "/:context/processes")

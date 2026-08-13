@@ -1,7 +1,6 @@
 use std::fmt::Debug;
 use std::rc::Rc;
 
-use crate::lifecycle_tracker::AppLifecycle;
 use crate::reactor::Reactor;
 use guinea_core::SharedState;
 use guinea_core::actor::registry::DebugRegistry;
@@ -9,13 +8,6 @@ use guinea_core::actor::{Addr, Handler, ManagedActor, UiThreadToken};
 use guinea_core::actor::event_bus::{EventBus, GlobalEventBus, GlobalEventBusSubscription};
 use guinea_core::actor::event_bus::subscribe::Event;
 use guinea_core::scope::{Reducer, Scope, Teardown};
-
-pub struct AppFeatureInitContext<'a> {
-    pub token: UiThreadToken,
-    pub reactor: &'a Reactor,
-    pub shared: &'a SharedState,
-    pub tracker: &'a AppLifecycle,
-}
 
 pub struct AppFeatureDeinitContext<'a> {
     pub token: UiThreadToken,
@@ -145,38 +137,5 @@ struct DebugRegistration {
 impl Teardown for DebugRegistration {
     fn teardown(self) {
         self.registry.unregister(self.id);
-    }
-}
-
-pub trait AppFeature {
-    fn install(&mut self, ctx: &mut AppFeatureInitContext) -> anyhow::Result<()>;
-}
-
-pub trait IntoAppFeature {
-    type Feature: AppFeature + 'static;
-    fn into_feature(self) -> Self::Feature;
-}
-
-pub struct AppFeatureFn {
-    f: fn(&mut AppFeatureInitContext) -> anyhow::Result<()>,
-}
-
-impl<T: AppFeature + 'static> IntoAppFeature for T {
-    type Feature = T;
-    fn into_feature(self) -> Self::Feature {
-        self
-    }
-}
-
-impl AppFeature for AppFeatureFn {
-    fn install(&mut self, ctx: &mut AppFeatureInitContext) -> anyhow::Result<()> {
-        (self.f)(ctx)
-    }
-}
-
-impl IntoAppFeature for fn(&mut AppFeatureInitContext) -> anyhow::Result<()> {
-    type Feature = AppFeatureFn;
-    fn into_feature(self) -> Self::Feature {
-        AppFeatureFn { f: self }
     }
 }

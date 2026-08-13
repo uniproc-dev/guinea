@@ -8,7 +8,6 @@ use guinea_core::SharedState;
 use guinea_core::actor::event_bus::GlobalEventBus;
 use guinea_core::actor::event_bus::subscribe::Event;
 use guinea_core::actor::{Addr, Handler, UiThreadToken};
-use guinea_core::lifecycle_tracker::LifecycleTracker;
 
 use crate::feature::{AppFeatureDeinitContext, FeatureContext};
 use crate::lifecycle_tracker::AppLifecycle;

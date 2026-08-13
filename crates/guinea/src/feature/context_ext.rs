@@ -1,5 +1,3 @@
-use crate::feature::AppFeatureInitContext;
-use crate::lifecycle_tracker::AppLifecycle;
 use crate::reactor::{LoopHandle, Reactor};
 use guinea_core::SharedState;
 use guinea_core::actor::{Addr, Handler, ManagedActor, Message, UiThreadToken};
@@ -13,21 +11,6 @@ pub trait FeatureContext {
     fn shared(&self) -> &SharedState;
 }
 
-impl FeatureContext for AppFeatureInitContext<'_> {
-    type Tracker = AppLifecycle;
-    fn token(&self) -> UiThreadToken {
-        self.token.clone()
-    }
-    fn tracker(&self) -> &Self::Tracker {
-        self.tracker
-    }
-    fn reactor(&self) -> &Reactor {
-        self.reactor
-    }
-    fn shared(&self) -> &SharedState {
-        self.shared
-    }
-}
 
 pub struct ActorBuilder<'a, Ctx: FeatureContext, A: ManagedActor> {
     ctx: &'a mut Ctx,

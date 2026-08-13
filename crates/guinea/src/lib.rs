@@ -1,4 +1,3 @@
-pub mod addr;
 pub mod app;
 pub mod feature;
 pub mod l10n;
