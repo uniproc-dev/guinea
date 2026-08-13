@@ -12,6 +12,7 @@ use std::rc::Rc;
 struct LifecycleCore {
     subs: Vec<SubscriptionId>,
     actor_counters: Vec<Rc<&'static str>>,
+    owned: Vec<Box<dyn FnOnce()>>,
     anchors: Vec<Box<dyn Any>>,
 }
 
@@ -24,26 +25,32 @@ impl LifecycleCore {
         self.actor_counters.push(addr.strong_count_ptr());
     }
 
+    fn own_actor<A: 'static>(&mut self, addr: &Addr<A>) {
+        let addr = addr.clone();
+        self.owned.push(Box::new(move || addr.dispose()));
+    }
+
     fn track_sub(&mut self, id: SubscriptionId) {
         self.subs.push(id);
     }
 
-    fn shutdown(&mut self) {
+    fn shutdown(&mut self) -> Vec<(&'static str, usize)> {
         for sub_id in self.subs.drain(..) {
             GlobalEventBus::unsubscribe(sub_id);
         }
+        for teardown in self.owned.drain(..).rev() {
+            teardown();
+        }
         let counters = std::mem::take(&mut self.actor_counters);
         self.anchors.clear();
-        for counter in counters {
-            let count = Rc::strong_count(&counter);
-            if count > 1 {
-                tracing::error!(
-                    "LEAK: Actor<{}> still alive (refs: {})",
-                    *counter,
-                    count - 1
-                );
-            }
-        }
+
+        counters
+            .into_iter()
+            .filter_map(|counter| {
+                let held = Rc::strong_count(&counter) - 1;
+                (held > 0).then_some((*counter, held))
+            })
+            .collect()
     }
 }
 
@@ -72,7 +79,12 @@ impl AppLifecycle {
         self.inner.borrow_mut().cleanups.push(Box::new(f));
     }
 
-    pub fn shutdown(self, token: &UiThreadToken, ctx: &mut AppFeatureDeinitContext<'_>) {
+    /// Returns the actors still referenced after teardown.
+    pub fn shutdown(
+        self,
+        token: &UiThreadToken,
+        ctx: &mut AppFeatureDeinitContext<'_>,
+    ) -> Vec<(&'static str, usize)> {
         let mut inner = self.inner.borrow_mut();
         for cleanup in inner.cleanups.drain(..).rev() {
             if let Err(e) = cleanup(ctx) {
@@ -80,7 +92,12 @@ impl AppLifecycle {
             }
         }
         let _ = token;
-        inner.core.shutdown();
+
+        let leaked = inner.core.shutdown();
+        for (actor, refs) in &leaked {
+            tracing::error!("LEAK: Actor<{}> still alive (refs: {})", actor, refs);
+        }
+        leaked
     }
 
     pub fn track_loop<T: 'static>(&self, handle: T) {
@@ -89,6 +106,10 @@ impl AppLifecycle {
 
     pub fn track_actor<A: 'static>(&self, addr: &Addr<A>) {
         self.inner.borrow_mut().core.track_actor(addr);
+    }
+
+    pub fn own_actor<A: 'static>(&self, addr: &Addr<A>) {
+        self.inner.borrow_mut().core.own_actor(addr);
     }
 
     pub fn track_sub(&self, id: SubscriptionId) {
@@ -105,6 +126,9 @@ impl LifecycleTracker for AppLifecycle {
     }
     fn track_sub(&self, id: SubscriptionId) {
         self.track_sub(id);
+    }
+    fn own_actor<A: 'static>(&self, addr: &Addr<A>) {
+        self.own_actor(addr);
     }
 }
 
@@ -123,6 +147,79 @@ mod tests {
         fn drop(&mut self) {
             self.0.fetch_add(1, Ordering::SeqCst);
         }
+    }
+
+    guinea_core::messages! { Ping }
+
+    #[derive(Debug)]
+    struct Probe;
+
+    guinea_macros::actor! {
+        Probe {
+            handlers { Ping }
+        }
+    }
+
+    #[guinea_macros::handler]
+    fn probe_ping(_this: &mut Probe, _ctx: guinea_core::actor::Context<Probe, Ping>) {}
+
+    fn deinit<'a>(
+        token: &UiThreadToken,
+        reactor: &'a Reactor,
+        shared: &'a SharedState,
+    ) -> AppFeatureDeinitContext<'a> {
+        AppFeatureDeinitContext {
+            token: token.clone(),
+            reactor,
+            shared,
+        }
+    }
+
+    #[test]
+    fn an_actor_owned_by_the_lifecycle_is_not_reported_as_leaked() {
+        let token = UiThreadToken::dangerously_create_token_unchecked();
+        let reactor = Reactor::new();
+        let shared = SharedState::new();
+        let lifecycle = AppLifecycle::new();
+
+        {
+            let mut ctx = crate::feature::AppFeatureInitContext {
+                token: token.clone(),
+                reactor: &reactor,
+                shared: &shared,
+                tracker: &lifecycle,
+            };
+            let _addr = crate::feature::ContextActorExt::spawn(&mut ctx, Probe);
+        }
+
+        let mut ctx = deinit(&token, &reactor, &shared);
+        assert!(lifecycle.shutdown(&token, &mut ctx).is_empty());
+    }
+
+    #[test]
+    fn an_address_kept_past_shutdown_is_reported_once() {
+        let token = UiThreadToken::dangerously_create_token_unchecked();
+        let reactor = Reactor::new();
+        let shared = SharedState::new();
+        let lifecycle = AppLifecycle::new();
+
+        let kept = {
+            let mut ctx = crate::feature::AppFeatureInitContext {
+                token: token.clone(),
+                reactor: &reactor,
+                shared: &shared,
+                tracker: &lifecycle,
+            };
+            crate::feature::ContextActorExt::spawn(&mut ctx, Probe)
+        };
+
+        let mut ctx = deinit(&token, &reactor, &shared);
+        let leaked = lifecycle.shutdown(&token, &mut ctx);
+
+        assert_eq!(leaked.len(), 1, "one actor, reported once");
+        assert!(leaked[0].0.ends_with("Probe"), "got {}", leaked[0].0);
+        assert_eq!(leaked[0].1, 1);
+        drop(kept);
     }
 
     #[test]

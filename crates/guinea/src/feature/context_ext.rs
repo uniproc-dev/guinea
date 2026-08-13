@@ -37,7 +37,7 @@ pub struct ActorBuilder<'a, Ctx: FeatureContext, A: ManagedActor> {
 impl<'a, Ctx: FeatureContext, A: ManagedActor> ActorBuilder<'a, Ctx, A> {
     pub fn build(self) -> Addr<A> {
         let addr = Addr::new_managed(self.actor, self.ctx.token(), self.ctx.tracker());
-        self.ctx.tracker().track_actor(&addr);
+        self.ctx.tracker().own_actor(&addr);
         addr
     }
 }
