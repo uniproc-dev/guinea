@@ -4,6 +4,18 @@ use std::sync::{Arc, RwLock};
 
 type Service = Arc<dyn Any + Send + Sync>;
 
+/// A lock poisoned by a panic elsewhere - distinct from "no such service".
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Poisoned;
+
+impl std::fmt::Display for Poisoned {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("shared state lock was poisoned by a panic")
+    }
+}
+
+impl std::error::Error for Poisoned {}
+
 #[derive(Clone, Default)]
 pub struct SharedState {
     inner: Arc<RwLock<HashMap<TypeId, Service>>>,
@@ -40,9 +52,19 @@ impl SharedState {
     where
         T: Send + Sync + 'static,
     {
-        let id = TypeId::of::<T>();
-        let map = self.inner.read().ok()?;
-        map.get(&id)?.clone().downcast::<T>().ok()
+        self.try_get().ok().flatten()
+    }
+
+    /// Like [`get`](Self::get), but tells a poisoned lock apart from a missing
+    /// service.
+    pub fn try_get<T>(&self) -> Result<Option<Arc<T>>, Poisoned>
+    where
+        T: Send + Sync + 'static,
+    {
+        let map = self.inner.read().map_err(|_| Poisoned)?;
+        Ok(map
+            .get(&TypeId::of::<T>())
+            .and_then(|svc| svc.clone().downcast::<T>().ok()))
     }
 
     pub fn remove<T>(&self) -> Option<Arc<T>>
@@ -68,7 +90,7 @@ impl SharedState {
 
 #[cfg(test)]
 mod tests {
-    use super::SharedState;
+    use super::{Poisoned, SharedState};
     use std::sync::Arc;
 
     #[test]
@@ -119,5 +141,21 @@ mod tests {
 
         let fetched = shared.get::<usize>().expect("service should exist");
         assert_eq!(Arc::as_ptr(&fetched), ptr);
+    }
+
+    #[test]
+    fn try_get_reports_a_missing_service_and_a_poisoned_lock_differently() {
+        let shared = SharedState::new();
+        assert_eq!(shared.try_get::<u32>().map(|v| v.is_none()), Ok(true));
+
+        let poisoner = shared.clone();
+        let _ = std::thread::spawn(move || {
+            let _guard = poisoner.inner.write().unwrap();
+            panic!("poison the lock");
+        })
+        .join();
+
+        assert_eq!(shared.try_get::<u32>().err(), Some(Poisoned));
+        assert_eq!(shared.get::<u32>().map(|v| *v), None);
     }
 }
