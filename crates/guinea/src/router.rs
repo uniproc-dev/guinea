@@ -161,6 +161,7 @@ where
     pub fn to(&self, route: R) {
         let uri = route.to_uri();
         self.router.navigate(route.clone(), &uri).expect("navigate");
+        crate::app::route_changed(&uri.to_string());
         self.set_route.call(route);
     }
 

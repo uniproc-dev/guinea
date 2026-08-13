@@ -199,3 +199,28 @@ fn subscriptions_taken_during_install_are_dropped_on_shutdown() {
 
     assert_eq!(GlobalEventBus::count_subscribers::<Tick>(), 0);
 }
+
+#[test]
+fn route_hooks_see_the_previous_and_current_path() {
+    let seen: Rc<RefCell<Vec<(Option<String>, String)>>> = Rc::new(RefCell::new(Vec::new()));
+    let token = UiThreadToken::dangerously_create_token_unchecked();
+
+    let recorded = seen.clone();
+    super::runtime::install(super::runtime::AppRuntime {
+        token: token.clone(),
+        builder: FeatureBuilder::new(token, AppLifecycle::new()),
+        route_hooks: vec![Box::new(move |from, to| {
+            recorded
+                .borrow_mut()
+                .push((from.map(str::to_string), to.to_string()));
+        })],
+        last_route: Default::default(),
+    });
+
+    super::runtime::route_changed("/a");
+    super::runtime::route_changed("/b");
+
+    let seen = seen.borrow();
+    assert_eq!(seen[0], (None, "/a".to_string()));
+    assert_eq!(seen[1], (Some("/a".to_string()), "/b".to_string()));
+}
