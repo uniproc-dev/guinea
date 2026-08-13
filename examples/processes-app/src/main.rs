@@ -30,13 +30,12 @@ fn main() -> anyhow::Result<()> {
     let runtime = tokio::runtime::Runtime::new()?;
     let _guard = runtime.enter();
 
-    guinea_core::l10n::L10n::<l10n::L10n>::load(l10n::L10n::new(unic_langid::langid!("en")));
-
     guinea::app::App::new()
         .plugin(guinea_plugin_store::StorePlugin::for_app(
             "guinea-processes-app-example",
             "settings",
         ))
+        .plugin(guinea_plugin_l10n::L10nPlugin::<l10n::L10n>::new("en"))
         .feature(startup::Startup)
         .on_route_change(|from, to| tracing::debug!(?from, to, "route"))
         .run(

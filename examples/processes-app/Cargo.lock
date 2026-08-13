@@ -472,9 +472,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "guinea-plugin-l10n"
+version = "0.1.0"
+source = "git+https://github.com/uniproc-dev/guinea-plugins?rev=32ed336#32ed336f5735e67a597f19a1d0f9cdce7b70a04f"
+dependencies = [
+ "anyhow",
+ "guinea",
+ "guinea-core",
+ "guinea-plugin-store",
+ "tracing",
+]
+
+[[package]]
 name = "guinea-plugin-store"
 version = "0.1.0"
-source = "git+https://github.com/uniproc-dev/guinea-plugins?rev=1d5ff7a#1d5ff7a39b45d5b729421d5b3efaaf0b85dbb49b"
+source = "git+https://github.com/uniproc-dev/guinea-plugins?rev=32ed336#32ed336f5735e67a597f19a1d0f9cdce7b70a04f"
 dependencies = [
  "amethystate",
  "anyhow",
@@ -493,6 +505,7 @@ dependencies = [
  "guinea-codegen",
  "guinea-core",
  "guinea-macros",
+ "guinea-plugin-l10n",
  "guinea-plugin-store",
  "inventory",
  "tokio",
