@@ -14,6 +14,20 @@ impl<S: Clone + Default + 'static> Reducer for Marker<S> {
     }
 }
 
+/// A set of localised strings that can be identified by, and rebuilt from, a
+/// BCP-47 language tag.
+///
+/// Implemented by `guinea::fluent_loader!`. Code that has to handle languages
+/// without knowing the concrete resolver - persisting the choice, offering a
+/// language picker - goes through this; tags rather than
+/// `unic_langid::LanguageIdentifier` keep that dependency out of the core.
+pub trait Localization: Clone + Default + 'static {
+    /// Returns `None` if the tag is malformed.
+    fn for_tag(tag: &str) -> Option<Self>;
+
+    fn tag(&self) -> String;
+}
+
 pub struct L10n<S>(PhantomData<S>);
 
 impl<S: Clone + Default + 'static> L10n<S> {

@@ -1,4 +1,4 @@
-pub use guinea_core::l10n::L10n;
+pub use guinea_core::l10n::{L10n, Localization};
 
 pub fn use_l10n<S>(cx: &mut windows_reactor::RenderCx) -> S
 where
@@ -53,6 +53,16 @@ macro_rules! fluent_loader {
             fn get_raw(&self, id: &str, args: &Args) -> String {
                 use ::fluent_templates::Loader;
                 LOCALES.lookup_with_args(&self.0, id, &args.0)
+            }
+        }
+
+        impl $crate::l10n::Localization for L10n {
+            fn for_tag(tag: &str) -> ::std::option::Option<Self> {
+                tag.parse::<::unic_langid::LanguageIdentifier>().ok().map(Self::new)
+            }
+
+            fn tag(&self) -> ::std::string::String {
+                self.0.to_string()
             }
         }
 
