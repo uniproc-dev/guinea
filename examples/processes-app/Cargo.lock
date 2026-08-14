@@ -394,7 +394,7 @@ dependencies = [
 
 [[package]]
 name = "guinea"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "guinea-app",
  "guinea-codegen",
@@ -406,7 +406,7 @@ dependencies = [
 
 [[package]]
 name = "guinea-app"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "guinea-core",
@@ -416,7 +416,7 @@ dependencies = [
 
 [[package]]
 name = "guinea-codegen"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "guinea-core",
  "guinea-meta-build",
@@ -431,7 +431,7 @@ dependencies = [
 
 [[package]]
 name = "guinea-core"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "arc-swap",
@@ -448,7 +448,7 @@ dependencies = [
 
 [[package]]
 name = "guinea-macros"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "guinea-codegen",
  "heck",
@@ -537,7 +537,7 @@ dependencies = [
 
 [[package]]
 name = "guinea-router"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "guinea-app",
@@ -547,7 +547,7 @@ dependencies = [
 
 [[package]]
 name = "guinea-trace"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "once_cell",
@@ -570,7 +570,7 @@ dependencies = [
 
 [[package]]
 name = "guinea-winui"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "guinea-app",
