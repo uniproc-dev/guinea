@@ -10,9 +10,9 @@ publish = false
 guinea = { path = "../../crates/guinea" }
 guinea-core = { path = "../../crates/guinea-core" }
 guinea-macros = { path = "../../crates/guinea-macros" }
-guinea-plugin-store = { git = "https://github.com/uniproc-dev/guinea-plugins", rev = "38cb363" }
-guinea-widgets = { git = "https://github.com/uniproc-dev/guinea-plugins", rev = "38cb363" }
-guinea-plugin-l10n = { git = "https://github.com/uniproc-dev/guinea-plugins", rev = "38cb363", features = ["winui"] }
+guinea-plugin-store = { git = "https://github.com/uniproc-dev/guinea-plugins", tag = "v0.1.1" }
+guinea-widgets = { git = "https://github.com/uniproc-dev/guinea-plugins", tag = "v0.1.1" }
+guinea-plugin-l10n = { git = "https://github.com/uniproc-dev/guinea-plugins", tag = "v0.1.1", features = ["winui"] }
 anyhow = "1.0"
 inventory = "0.3"
 tokio = { version = "1", features = ["time", "rt-multi-thread"] }
@@ -29,6 +29,6 @@ guinea = { path = "../../crates/guinea" }
 guinea-core = { path = "../../crates/guinea-core" }
 
 [build-dependencies]
-guinea-plugin-l10n-build = { git = "https://github.com/uniproc-dev/guinea-plugins", rev = "38cb363" }
+guinea-plugin-l10n-build = { git = "https://github.com/uniproc-dev/guinea-plugins", tag = "v0.1.1" }
 windows-reactor-setup = { git = "https://github.com/Tam1SH/windows-rs", rev = "d0fd3ce88" }
 guinea-codegen = { path = "../../crates/guinea-codegen" }

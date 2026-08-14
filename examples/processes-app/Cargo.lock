@@ -13,9 +13,9 @@ dependencies = [
 
 [[package]]
 name = "amethystate"
-version = "0.11.0"
+version = "0.12.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "74d528f6ea90fd5c8d8c09a7af8ebc107d2efa1bf5d7710c0d55bd0f472d90e0"
+checksum = "c3a3e89a423df4d9ffa542d2768fd92f42fd5363aaf86332e895450b3f67c67d"
 dependencies = [
  "amethystate-core",
  "amethystate-macros",
@@ -35,9 +35,9 @@ dependencies = [
 
 [[package]]
 name = "amethystate-core"
-version = "0.11.0"
+version = "0.12.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b881b9698750668500ce5be665c4214967d17c4a09c3507533b3fef1a288d2ec"
+checksum = "dc508b9475f4c126e881aa366e71ad6467fec4e8bfd926dc5957d5fbd5f5301d"
 dependencies = [
  "arc-swap",
  "inventory",
@@ -49,9 +49,9 @@ dependencies = [
 
 [[package]]
 name = "amethystate-macros"
-version = "0.11.0"
+version = "0.12.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2cdb4b8febb0dc3c1e7fc4b13f4d9e74eb76daac8b55575b3814fe544547233e"
+checksum = "198559c96574dbb14c7ec01bba6f011992ae8f856fbc527c7241ae2719d4edaa"
 dependencies = [
  "amethystate-macros-core",
  "darling",
@@ -63,9 +63,9 @@ dependencies = [
 
 [[package]]
 name = "amethystate-macros-core"
-version = "0.11.0"
+version = "0.12.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "69394dba32945f59978cd6f101fd8b78b7b213f5e4926d2060824476c15e4a11"
+checksum = "190800f682178147a22636641f207a69a4c66a489d5180674aebe32dad264ea2"
 dependencies = [
  "darling",
  "proc-macro2",
@@ -477,7 +477,7 @@ dependencies = [
 [[package]]
 name = "guinea-plugin-l10n"
 version = "0.1.0"
-source = "git+https://github.com/uniproc-dev/guinea-plugins?rev=38cb363#38cb36330e6e583c19d6d7b7b82c032230697546"
+source = "git+https://github.com/uniproc-dev/guinea-plugins?tag=v0.1.1#71b7e3c1b0e1712f688bc953e05b47ddde9ad9f5"
 dependencies = [
  "anyhow",
  "fluent-bundle",
@@ -493,7 +493,7 @@ dependencies = [
 [[package]]
 name = "guinea-plugin-l10n-build"
 version = "0.1.0"
-source = "git+https://github.com/uniproc-dev/guinea-plugins?rev=38cb363#38cb36330e6e583c19d6d7b7b82c032230697546"
+source = "git+https://github.com/uniproc-dev/guinea-plugins?tag=v0.1.1#71b7e3c1b0e1712f688bc953e05b47ddde9ad9f5"
 dependencies = [
  "fluent-syntax",
  "proc-macro2",
@@ -505,7 +505,7 @@ dependencies = [
 [[package]]
 name = "guinea-plugin-store"
 version = "0.1.0"
-source = "git+https://github.com/uniproc-dev/guinea-plugins?rev=38cb363#38cb36330e6e583c19d6d7b7b82c032230697546"
+source = "git+https://github.com/uniproc-dev/guinea-plugins?tag=v0.1.1#71b7e3c1b0e1712f688bc953e05b47ddde9ad9f5"
 dependencies = [
  "amethystate",
  "anyhow",
@@ -561,7 +561,7 @@ dependencies = [
 [[package]]
 name = "guinea-widgets"
 version = "0.1.0"
-source = "git+https://github.com/uniproc-dev/guinea-plugins?rev=38cb363#38cb36330e6e583c19d6d7b7b82c032230697546"
+source = "git+https://github.com/uniproc-dev/guinea-plugins?tag=v0.1.1#71b7e3c1b0e1712f688bc953e05b47ddde9ad9f5"
 dependencies = [
  "tracing",
  "windows-canvas",
