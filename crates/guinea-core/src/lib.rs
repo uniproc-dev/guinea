@@ -1,5 +1,4 @@
 pub mod actor;
-pub mod l10n;
 pub mod lifecycle_tracker;
 pub mod load;
 pub mod page_status;

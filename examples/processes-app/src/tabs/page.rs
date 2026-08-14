@@ -1,5 +1,5 @@
 use guinea::feature::FeatureInitContext;
-use guinea::l10n::use_l10n;
+use guinea_plugin_l10n::{Localization, ui::use_l10n};
 use guinea::router::{Layout, LayoutCx, UseNavigate};
 use guinea::uri::AppUri;
 use windows_reactor::{Element, ReactorWindow, button, hstack, text_block, vstack};
@@ -21,7 +21,7 @@ impl Layout for TabsLayout {
         let nav = cx.use_navigate::<Route>();
         let l10n = use_l10n::<L10n>(cx);
 
-        let is_russian = *l10n.language() == unic_langid::langid!("ru");
+        let is_russian = l10n.tag() == "ru";
         let lang_button_label = if is_russian { "English" } else { "Русский" };
 
         let tab_bar = hstack((
@@ -45,12 +45,10 @@ impl Layout for TabsLayout {
             // L10n::load re-renders every open window's use_l10n, not just
             // this one - open a second window and flip the language here.
             button(lang_button_label).on_click(move || {
-                let next = if is_russian {
-                    unic_langid::langid!("en")
-                } else {
-                    unic_langid::langid!("ru")
-                };
-                guinea_core::l10n::L10n::<L10n>::load(L10n::new(next));
+                let next = if is_russian { "en" } else { "ru" };
+                if let Some(strings) = L10n::for_tag(next) {
+                    guinea_plugin_l10n::L10n::<L10n>::load(strings);
+                }
             }),
         ))
         .spacing(8.0);

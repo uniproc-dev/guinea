@@ -1,6 +1,5 @@
 pub mod app;
 pub mod feature;
-pub mod l10n;
 pub mod lifecycle_tracker;
 pub mod reactor;
 pub mod router;
