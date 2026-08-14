@@ -16,7 +16,7 @@ fn initial_route() -> Route {
 }
 
 pub(crate) fn root(cx: &mut windows_reactor::RenderCx) -> windows_reactor::Element {
-    guinea::router::RouterRx::<Route>::render(cx, initial_route())
+    guinea::winui::RouterRx::<Route>::render(cx, initial_route())
 }
 
 fn main() -> anyhow::Result<()> {
@@ -42,6 +42,6 @@ fn main() -> anyhow::Result<()> {
         windows_reactor::App::new()
             .title("guinea · processes")
             .inner_size(420.0, 420.0),
-        guinea::router::RouterRoot::at(initial_route()),
+        guinea::winui::RouterRoot::at(initial_route()),
     )
 }

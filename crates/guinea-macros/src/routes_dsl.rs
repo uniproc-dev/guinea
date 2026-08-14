@@ -279,13 +279,21 @@ pub fn routes_impl(input: TokenStream1) -> TokenStream1 {
     let chain_consts = leaves.iter().zip(&variant_idents).map(|(leaf, ident)| {
         let const_name = format_ident!("__routes_chain_{}_{}", enum_ident, ident);
         let leaf_ty = &leaf.ty;
-        let ancestor_entries = leaf.ancestors.iter().map(|ty| quote! { #guinea::router::layout_entry::<#ty>() });
+        let ancestor_entries = leaf.ancestors.iter().map(|ty| {
+            quote! {
+                #guinea::router::layout_entry::<#guinea::Backend, #ty>(
+                    #guinea::winui::mount_layout::<#ty>,
+                )
+            }
+        });
         let len = leaf.ancestors.len() + 1;
         quote! {
             #[allow(non_upper_case_globals)]
-            const #const_name: [#guinea::router::SegmentEntry; #len] = [
+            const #const_name: [#guinea::router::SegmentEntry<#guinea::Backend>; #len] = [
                 #(#ancestor_entries,)*
-                #guinea::router::segment_entry::<#leaf_ty>(),
+                #guinea::router::segment_entry::<#guinea::Backend, #leaf_ty>(
+                    #guinea::winui::mount_page::<#leaf_ty>,
+                ),
             ];
         }
     });
@@ -317,8 +325,8 @@ pub fn routes_impl(input: TokenStream1) -> TokenStream1 {
 
         #(#chain_consts)*
 
-        impl #guinea::router::RouteChain for #enum_ident {
-            fn chain(&self) -> &'static [#guinea::router::SegmentEntry] {
+        impl #guinea::router::RouteChain<#guinea::Backend> for #enum_ident {
+            fn chain(&self) -> &'static [#guinea::router::SegmentEntry<#guinea::Backend>] {
                 match self {
                     #(#chain_arms),*
                 }

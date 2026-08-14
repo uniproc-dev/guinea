@@ -7,7 +7,13 @@
 mod dispatcher;
 mod run;
 
+pub mod headless;
 pub mod router;
+pub mod winui;
+
+/// The backend this build renders with. `routes!` targets this alias, so an
+/// application names it nowhere.
+pub type Backend = winui::WinUi;
 
 pub use run::run;
 

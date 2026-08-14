@@ -1,5 +1,6 @@
 use guinea::feature::FeatureInitContext;
-use guinea::router::{Page, PageCx};
+use guinea::router::Page;
+use guinea::winui::PageCx;
 use guinea::uri::AppUri;
 use guinea_widgets::table::{ColumnSpec, table};
 use windows_reactor::{Element, button, text_block, title, vstack};
@@ -13,7 +14,7 @@ struct Row {
     label: String,
 }
 
-impl Page for Processes {
+impl Page<guinea::Backend> for Processes {
     fn install(ctx: &FeatureInitContext, uri: &AppUri) -> anyhow::Result<()> {
         super::install::install(ctx, uri)
     }

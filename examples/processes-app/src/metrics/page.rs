@@ -1,5 +1,6 @@
 use guinea::feature::FeatureInitContext;
-use guinea::router::{Page, PageCx};
+use guinea::router::Page;
+use guinea::winui::PageCx;
 use guinea::uri::AppUri;
 use guinea_widgets::chart::{HoverInfo, Interpolation, Series, line_chart};
 use guinea_widgets::color::{hex, hex_alpha};
@@ -13,7 +14,7 @@ pub struct Metrics;
 const CPU_COLOR: ColorF = hex(0x3a82f5);
 const MEMORY_COLOR: ColorF = hex(0xf59e0a);
 
-impl Page for Metrics {
+impl Page<guinea::Backend> for Metrics {
     fn install(ctx: &FeatureInitContext, uri: &AppUri) -> anyhow::Result<()> {
         super::install::install(ctx, uri)
     }
