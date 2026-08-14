@@ -332,33 +332,21 @@ impl<'a> SegmentCx<'a> {
         R: Reducer,
         R::State: Clone + PartialEq,
     {
-        let owner = self.resolve_owner::<R>();
-        let initial = owner.state::<R>().borrow().clone();
-        let (current, set_current) = self.cx.use_state(initial);
+        let binding = self.resolve_owner::<R>().binding::<R>();
+        let (current, set_current) = self.cx.use_state(binding.get());
 
-        let owner_for_effect = owner.clone();
+        // The subscription ends with this component instance, not with the
+        // scope: an unmounted component that kept listening would call
+        // `set_current` on a state slot nobody renders.
+        let binding_for_effect = binding.clone();
         self.cx.use_effect_with_cleanup((), move || {
-            // Weak, not a clone of `owner_for_effect`: a strong `Rc<Scope>` here
-            // would close a cycle back to the very `Scope` whose `cells` map
-            // stores this closure (Scope -> cells -> listeners -> closure ->
-            // Rc<Scope>), so the refcount would never reach zero and the scope
-            // (and everything it owns - actors included) would leak forever,
-            // regardless of what the router does on navigation. If the scope is
-            // already gone by the time this fires, there's nothing to notify.
-            let owner_for_callback = Rc::downgrade(&owner_for_effect);
             let set_current = set_current.clone();
-            let subscription = owner_for_effect.subscribe::<R>(move || {
-                let Some(owner) = owner_for_callback.upgrade() else {
-                    return;
-                };
-                let latest = owner.state::<R>().borrow().clone();
-                set_current.call(latest);
-            });
+            let subscription =
+                binding_for_effect.on_change(move |latest| set_current.call(latest.clone()));
             Some(move || drop(subscription))
         });
 
-        let dispatch = owner.actions::<R>();
-        (current, dispatch)
+        (current, binding.actions())
     }
     
     fn resolve_owner<R: Reducer>(&self) -> Rc<Scope> {
