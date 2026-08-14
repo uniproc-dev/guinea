@@ -64,20 +64,43 @@ struct SegmentProps {
     cursor: usize,
 }
 
+/// What makes a mounted segment *this* segment: where it sits in the chain,
+/// what it is, and which scope it runs in.
+///
+/// Data rather than a trait method, because backends need it for different
+/// things - a reconciler compares it to decide whether to re-mount, an
+/// immediate-mode backend ignores it entirely. `derive`d rather than
+/// hand-written so a field added later is compared automatically instead of
+/// being silently forgotten.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
+pub struct SegmentIdentity {
+    pub cursor: usize,
+    pub segment: TypeId,
+    pub scope: usize,
+}
+
+impl SegmentProps {
+    fn identity(&self) -> SegmentIdentity {
+        SegmentIdentity {
+            cursor: self.cursor,
+            segment: (self.chain[self.cursor].type_id)(),
+            scope: Rc::as_ptr(&self.scopes[self.cursor]) as usize,
+        }
+    }
+}
+
 impl PartialEq for SegmentProps {
     fn eq(&self, other: &Self) -> bool {
-        // Not `std::ptr::eq(self.chain, other.chain)`: sibling leaves under the
+        // Compared through `identity`, not field by field. Not
+        // `std::ptr::eq(self.chain, other.chain)`: sibling leaves under the
         // same layout each get their own `const` chain array (see
         // `routes_dsl.rs`), so the two arrays' identity always differs even
         // when the segment at `cursor` (e.g. a shared layout) is unchanged.
         // Not `Rc::ptr_eq(&self.scopes, &other.scopes)` either: `Router::
         // install_from` wraps the whole scope stack in a fresh `Rc` on every
         // navigation, even when the individual `Rc<Scope>` at this cursor is
-        // reused. Compare what actually determines "is this still the same
-        // live segment instance": its type at `cursor`, and its own scope.
-        self.cursor == other.cursor
-            && (self.chain[self.cursor].type_id)() == (other.chain[other.cursor].type_id)()
-            && Rc::ptr_eq(&self.scopes[self.cursor], &other.scopes[other.cursor])
+        // reused.
+        self.identity() == other.identity()
     }
 }
 
@@ -130,16 +153,45 @@ pub trait ToUri {
     fn to_uri(&self) -> AppUri;
 }
 
+/// Where a navigation goes once the router has accepted it - a reconciler's
+/// state setter, a field in a TUI's application struct, a Slint property.
+///
+/// Data, not a trait: the agnostic half publishes the new route, the backend
+/// decides what publishing means.
+pub struct RouteSink<R> {
+    publish: Rc<dyn Fn(R)>,
+}
+
+impl<R> RouteSink<R> {
+    pub fn new(publish: impl Fn(R) + 'static) -> Self {
+        Self {
+            publish: Rc::new(publish),
+        }
+    }
+
+    pub fn publish(&self, route: R) {
+        (self.publish)(route)
+    }
+}
+
+impl<R> Clone for RouteSink<R> {
+    fn clone(&self) -> Self {
+        Self {
+            publish: self.publish.clone(),
+        }
+    }
+}
+
 pub struct NavigateHandle<R> {
     router: Rc<Router>,
-    set_route: windows_reactor::SetState<R>,
+    sink: RouteSink<R>,
 }
 
 impl<R> Clone for NavigateHandle<R> {
     fn clone(&self) -> Self {
         Self {
             router: self.router.clone(),
-            set_route: self.set_route.clone(),
+            sink: self.sink.clone(),
         }
     }
 }
@@ -154,15 +206,15 @@ impl<R> NavigateHandle<R>
 where
     R: RouteChain + ToUri + Clone + PartialEq + 'static,
 {
-    pub fn new(router: Rc<Router>, set_route: windows_reactor::SetState<R>) -> Self {
-        Self { router, set_route }
+    pub fn new(router: Rc<Router>, sink: RouteSink<R>) -> Self {
+        Self { router, sink }
     }
 
     pub fn to(&self, route: R) {
         let uri = route.to_uri();
         self.router.navigate(route.clone(), &uri).expect("navigate");
         crate::app::route_changed(&uri.to_string());
-        self.set_route.call(route);
+        self.sink.publish(route);
     }
 
     /// A parameterless handler that navigates to `route` - sugar for
@@ -242,7 +294,10 @@ where
         let router = scoped_router(cx, token);
         router.navigate(route.clone(), &route.to_uri()).expect("navigate");
 
-        let nav = NavigateHandle::new(router.clone(), set_route);
+        let nav = NavigateHandle::new(
+            router.clone(),
+            RouteSink::new(move |route| set_route.call(route)),
+        );
         router
             .render()
             .provide(&nav_context::<R>(), Some(nav))
