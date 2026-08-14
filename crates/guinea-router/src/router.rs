@@ -224,7 +224,7 @@ where
     pub fn to(&self, route: R) {
         let uri = route.to_uri();
         self.router.navigate(route.clone(), &uri).expect("navigate");
-        guinea_app::app::route_changed(&uri.to_string());
+        self.router.route_changed(&uri.to_string());
         self.sink.publish(route);
     }
 
@@ -321,6 +321,11 @@ pub struct Router<U: Ui> {
     /// keep, which to tear down, and in what order.
     host: FeatureHost,
     state_cache: RefCell<StateCache>,
+    /// Notified after a navigation is applied. Kept here rather than on the
+    /// application, because a route change is something only a router has -
+    /// an application without one has nothing to report.
+    route_hooks: RefCell<Vec<Box<dyn Fn(Option<&str>, &str)>>>,
+    last_route: RefCell<Option<String>>,
 }
 
 impl<U: Ui> Router<U> {
@@ -336,7 +341,25 @@ impl<U: Ui> Router<U> {
             prev_route: RefCell::new(None),
             host,
             state_cache: RefCell::new(StateCache::new()),
+            route_hooks: RefCell::new(Vec::new()),
+            last_route: RefCell::new(None),
         }
+    }
+
+    /// Runs `hook` after each navigation, with the previous path (`None` for
+    /// the first) and the new one.
+    pub fn on_route_change(&self, hook: impl Fn(Option<&str>, &str) + 'static) {
+        self.route_hooks.borrow_mut().push(Box::new(hook));
+    }
+
+    /// Announces a navigation to the hooks. Called by `NavigateHandle::to`
+    /// once the router has accepted the route.
+    pub fn route_changed(&self, to: &str) {
+        let from = self.last_route.borrow().clone();
+        for hook in self.route_hooks.borrow().iter() {
+            hook(from.as_deref(), to);
+        }
+        *self.last_route.borrow_mut() = Some(to.to_string());
     }
 
     pub fn host(&self) -> &FeatureHost {

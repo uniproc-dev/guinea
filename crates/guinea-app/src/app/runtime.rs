@@ -7,15 +7,11 @@ use crate::feature::AppFeatureDeinitContext;
 
 use super::builder::FeatureBuilder;
 
-pub type RouteHook = Box<dyn Fn(Option<&str>, &str)>;
-
 /// An installed application: everything the recipe built, plus the hooks that
 /// outlive installation. Held on the UI thread until the process exits.
 pub struct AppRuntime {
     pub(crate) token: UiThreadToken,
     pub(crate) builder: FeatureBuilder,
-    pub(crate) route_hooks: Vec<RouteHook>,
-    pub(crate) last_route: RefCell<Option<String>>,
 }
 
 thread_local! {
@@ -41,19 +37,6 @@ pub fn app_services() -> SharedState {
             .map(|runtime| crate::feature::FeatureContext::shared(&*runtime.builder).clone())
             .unwrap_or_default()
     })
-}
-
-pub fn route_changed(to: &str) {
-    RUNTIME.with(|slot| {
-        let slot = slot.borrow();
-        let Some(runtime) = slot.as_ref() else { return };
-
-        let from = runtime.last_route.borrow().clone();
-        for hook in &runtime.route_hooks {
-            hook(from.as_deref(), to);
-        }
-        *runtime.last_route.borrow_mut() = Some(to.to_string());
-    });
 }
 
 /// Runs cleanups and reports actors that outlived them. Called from the

@@ -19,7 +19,7 @@ fn initial_route() -> Route {
 }
 
 pub(crate) fn root(cx: &mut windows_reactor::RenderCx) -> windows_reactor::Element {
-    guinea::winui::RouterRx::<Route>::render(cx, initial_route())
+    guinea::winui::RouterRx::<Route>::render(cx, initial_route(), None)
 }
 
 fn main() -> anyhow::Result<()> {
@@ -40,11 +40,12 @@ fn main() -> anyhow::Result<()> {
         ))
         .plugin(guinea_plugin_l10n::L10nPlugin::<l10n::L10n>::new("en"))
         .feature(startup::Startup)
-        .on_route_change(|from, to| tracing::debug!(?from, to, "route"))
         .run(
             windows_reactor::App::new()
                 .title("guinea · processes")
                 .inner_size(420.0, 420.0),
-            RouterRoot::at(initial_route()),
+            RouterRoot::at(initial_route()).setup(|router| {
+                router.on_route_change(|from, to| tracing::debug!(?from, to, "route"));
+            }),
         )
 }

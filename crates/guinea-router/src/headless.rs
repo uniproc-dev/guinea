@@ -97,6 +97,7 @@ mod tests {
     use crate::router::Router;
     use guinea_core::uri::AppUri;
     use guinea_core::actor::UiThreadToken;
+    use std::rc::Rc;
     use guinea_macros::reducer;
 
     #[derive(Clone, Default, PartialEq, Debug)]
@@ -121,6 +122,29 @@ mod tests {
             let (state, _) = cx.read::<Counter>();
             assert_eq!(state.installs, 1);
         }
+    }
+
+    #[test]
+    fn route_hooks_see_the_previous_and_current_path() {
+        use std::cell::RefCell;
+
+        let token = UiThreadToken::dangerously_create_token_unchecked();
+        let router = Router::<Headless>::new(token);
+
+        let seen: Rc<RefCell<Vec<(Option<String>, String)>>> = Rc::new(RefCell::new(Vec::new()));
+        let recorded = seen.clone();
+        router.on_route_change(move |from, to| {
+            recorded
+                .borrow_mut()
+                .push((from.map(str::to_string), to.to_string()));
+        });
+
+        router.route_changed("/a");
+        router.route_changed("/b");
+
+        let seen = seen.borrow();
+        assert_eq!(seen[0], (None, "/a".to_string()));
+        assert_eq!(seen[1], (Some("/a".to_string()), "/b".to_string()));
     }
 
     #[test]
