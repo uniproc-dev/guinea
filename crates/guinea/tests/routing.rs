@@ -296,6 +296,45 @@ mod routing {
     }
 
     #[test]
+    fn a_layout_is_not_the_same_props_when_the_page_under_it_changes() {
+        let token = UiThreadToken::dangerously_create_token_unchecked();
+        let router = Router::<WinUi>::new(token);
+
+        let props_at_layout = |route: TabRoute, path: &str| {
+            let uri = AppUri::parse(path).unwrap();
+            router.navigate(route, &uri).expect("navigate");
+            SegmentProps::<WinUi> {
+                chain: router.active_chain().expect("a chain is active"),
+                scopes: router.active_scopes().expect("scopes are installed"),
+                cursor: 0,
+            }
+        };
+
+        let showing_processes = props_at_layout(
+            TabRoute::Processes {
+                context: "ubuntu".to_string(),
+            },
+            "/tab/processes/ubuntu",
+        );
+        let showing_services = props_at_layout(
+            TabRoute::Services {
+                context: "ubuntu".to_string(),
+            },
+            "/tab/services/ubuntu",
+        );
+
+        // The layout itself is unchanged - same type, same scope, same
+        // cursor - and comparing only that is what used to make a reconciler
+        // skip it. Skipping the layout skips its `outlet()`, so the old page
+        // stayed on screen until something unrelated forced a re-render.
+        assert_eq!(showing_processes.identity(), showing_services.identity());
+        assert!(
+            showing_processes != showing_services,
+            "a layout showing a different page is not the same props"
+        );
+    }
+
+    #[test]
     fn navigating_between_siblings_keeps_the_shared_ancestor_scope() {
         let token = UiThreadToken::dangerously_create_token_unchecked();
         let router = Router::<WinUi>::new(token);

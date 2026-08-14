@@ -67,20 +67,36 @@ pub struct SegmentIdentity {
 
 impl<U: Ui> PartialEq for SegmentProps<U> {
     fn eq(&self, other: &Self) -> bool {
-        // Compared through `identity`, not field by field. Not
+        // A segment is its own identity *and* everything it renders below,
+        // because that is what it draws: a layout emits its child through
+        // `outlet()`. Comparing only this segment would let a reconciler skip
+        // a layout whose own identity is unchanged - and skipping the layout
+        // skips the `outlet()` call, so navigating between two pages under a
+        // shared layout would leave the old page on screen.
+        //
+        // Note what is deliberately not compared. Not
         // `std::ptr::eq(self.chain, other.chain)`: sibling leaves under the
         // same layout each get their own `const` chain array (see
-        // `routes_dsl.rs`), so the two arrays' identity always differs even
-        // when the segment at `cursor` (e.g. a shared layout) is unchanged.
-        // Not `Rc::ptr_eq(&self.scopes, &other.scopes)` either:
-        // `install_from` wraps the whole scope stack in a fresh `Rc` on every
-        // navigation, even when the individual `Rc<Scope>` at this cursor is
-        // reused.
-        self.identity() == other.identity()
+        // `routes_dsl.rs`), so the arrays always differ even when the segment
+        // is unchanged. Not `Rc::ptr_eq(&self.scopes, &other.scopes)` either:
+        // `install_from` wraps the whole stack in a fresh `Rc` on every
+        // navigation, even when the individual scopes are reused.
+        self.cursor == other.cursor && self.tail_identity().eq(other.tail_identity())
     }
 }
 
 impl<U: Ui> SegmentProps<U> {
+    /// This segment's identity, then every segment it renders inside itself.
+    pub fn tail_identity(&self) -> impl Iterator<Item = SegmentIdentity> + '_ {
+        let chain = self.chain;
+        let scopes = &self.scopes;
+        (self.cursor..chain.len().min(scopes.len())).map(move |cursor| SegmentIdentity {
+            cursor,
+            segment: (chain[cursor].type_id)(),
+            scope: Rc::as_ptr(&scopes[cursor]) as usize,
+        })
+    }
+
     pub fn identity(&self) -> SegmentIdentity {
         SegmentIdentity {
             cursor: self.cursor,
@@ -539,6 +555,19 @@ impl<U: Ui> Router<U> {
             .borrow()
             .as_ref()
             .and_then(|active| active.scopes.get(cursor).cloned())
+    }
+
+    /// The chain the active route installed, and the scopes it installed it
+    /// into - what a backend needs to build props for a segment.
+    pub fn active_chain(&self) -> Option<&'static [SegmentEntry<U>]> {
+        self.active.borrow().as_ref().map(|active| active.entries)
+    }
+
+    pub fn active_scopes(&self) -> Option<Rc<Vec<Rc<Scope>>>> {
+        self.active
+            .borrow()
+            .as_ref()
+            .map(|active| active.scopes.clone())
     }
 
     pub fn active_scope(&self) -> Option<Rc<Scope>> {
