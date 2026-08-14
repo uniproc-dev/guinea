@@ -1,7 +1,7 @@
 use guinea::feature::FeatureInitContext;
 use guinea::router::{Page, PageCx};
 use guinea::uri::AppUri;
-use guinea::widgets::table::{ColumnSpec, table};
+use guinea_widgets::table::{ColumnSpec, table};
 use windows_reactor::{Element, button, text_block, title, vstack};
 
 use super::contracts::{Kill, ProcessesReducer};

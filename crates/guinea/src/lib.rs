@@ -3,8 +3,6 @@ pub mod feature;
 pub mod lifecycle_tracker;
 pub mod reactor;
 pub mod router;
-#[cfg(feature = "widgets")]
-pub mod widgets;
 
 pub use guinea_codegen as codegen;
 pub use guinea_core as core;

@@ -407,7 +407,6 @@ dependencies = [
  "tokio",
  "tracing",
  "windows",
- "windows-canvas",
  "windows-reactor",
 ]
 
@@ -474,7 +473,7 @@ dependencies = [
 [[package]]
 name = "guinea-plugin-l10n"
 version = "0.1.0"
-source = "git+https://github.com/uniproc-dev/guinea-plugins?rev=922ade6#922ade63984ffbf3543af5b23f79c138184650b4"
+source = "git+https://github.com/uniproc-dev/guinea-plugins?rev=38cb363#38cb36330e6e583c19d6d7b7b82c032230697546"
 dependencies = [
  "anyhow",
  "fluent-bundle",
@@ -490,7 +489,7 @@ dependencies = [
 [[package]]
 name = "guinea-plugin-l10n-build"
 version = "0.1.0"
-source = "git+https://github.com/uniproc-dev/guinea-plugins?rev=922ade6#922ade63984ffbf3543af5b23f79c138184650b4"
+source = "git+https://github.com/uniproc-dev/guinea-plugins?rev=38cb363#38cb36330e6e583c19d6d7b7b82c032230697546"
 dependencies = [
  "fluent-syntax",
  "proc-macro2",
@@ -502,7 +501,7 @@ dependencies = [
 [[package]]
 name = "guinea-plugin-store"
 version = "0.1.0"
-source = "git+https://github.com/uniproc-dev/guinea-plugins?rev=922ade6#922ade63984ffbf3543af5b23f79c138184650b4"
+source = "git+https://github.com/uniproc-dev/guinea-plugins?rev=38cb363#38cb36330e6e583c19d6d7b7b82c032230697546"
 dependencies = [
  "amethystate",
  "anyhow",
@@ -522,6 +521,7 @@ dependencies = [
  "guinea-plugin-l10n",
  "guinea-plugin-l10n-build",
  "guinea-plugin-store",
+ "guinea-widgets",
  "inventory",
  "tokio",
  "tracing",
@@ -542,6 +542,16 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "uuid",
+]
+
+[[package]]
+name = "guinea-widgets"
+version = "0.1.0"
+source = "git+https://github.com/uniproc-dev/guinea-plugins?rev=38cb363#38cb36330e6e583c19d6d7b7b82c032230697546"
+dependencies = [
+ "tracing",
+ "windows-canvas",
+ "windows-reactor",
 ]
 
 [[package]]
