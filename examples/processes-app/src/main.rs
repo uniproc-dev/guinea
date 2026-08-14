@@ -10,7 +10,7 @@ mod tabs;
 use routes::Route;
 
 use guinea::app::GuineaApp;
-use guinea::winui::{Bootstrap, RouterRoot};
+use guinea::winui::{Bootstrap, WindowExt};
 
 fn initial_route() -> Route {
     Route::Processes {
@@ -43,9 +43,8 @@ fn main() -> anyhow::Result<()> {
         .run(
             windows_reactor::App::new()
                 .title("guinea · processes")
-                .inner_size(420.0, 420.0),
-            RouterRoot::at(initial_route()).setup(|router| {
-                router.on_route_change(|from, to| tracing::debug!(?from, to, "route"));
-            }),
+                .inner_size(420.0, 420.0)
+                .router(initial_route())
+                .on_route_change(|from, to| tracing::debug!(?from, to, "route")),
         )
 }

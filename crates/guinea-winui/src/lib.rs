@@ -3,7 +3,9 @@
 
 mod dispatcher;
 mod run;
+mod window;
 mod winui;
 
 pub use run::{Bootstrap, run};
+pub use window::{RootedWindow, RoutedWindow, WindowExt, Windowed};
 pub use winui::*;

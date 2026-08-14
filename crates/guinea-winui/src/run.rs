@@ -1,6 +1,8 @@
 use guinea_app::app::{GuineaApp, install_runtime, shutdown_current};
 use guinea_core::actor::UiThreadToken;
 
+use crate::window::Windowed;
+
 /// Bootstrapping, as a method on the application that is being bootstrapped.
 ///
 /// An extension trait rather than an inherent method, because `GuineaApp`
@@ -9,34 +11,28 @@ use guinea_core::actor::UiThreadToken;
 /// name and its own window type.
 pub trait Bootstrap: Sized {
     /// Takes over the window: installs the application on the UI thread,
-    /// renders `root`, and tears everything down on exit.
+    /// renders what the window says it renders, and tears everything down on
+    /// exit.
     ///
-    /// `root` is any component - [`crate::RouterRoot::at`] for a route-based
-    /// UI, or a plain view for an application with one screen. Nothing here
-    /// knows about routing.
+    /// The window carries its own root - `.router(initial)` for a route tree,
+    /// `.root(component)` for a single screen - so nothing here knows about
+    /// routing.
     ///
     /// Does not return: the reactor exits the process once the last window
     /// closes.
-    fn run<C>(self, window: windows_reactor::App, root: C) -> anyhow::Result<()>
-    where
-        C: windows_reactor::Component + Send + 'static;
+    fn run(self, window: impl Windowed) -> anyhow::Result<()>;
 }
 
 impl Bootstrap for GuineaApp {
-    fn run<C>(self, window: windows_reactor::App, root: C) -> anyhow::Result<()>
-    where
-        C: windows_reactor::Component + Send + 'static,
-    {
-        run(self, window, root)
+    fn run(self, window: impl Windowed) -> anyhow::Result<()> {
+        run(self, window)
     }
 }
 
 /// The free-function form, for a caller that would rather not import the
 /// trait.
-pub fn run<C>(app: GuineaApp, window: windows_reactor::App, root: C) -> anyhow::Result<()>
-where
-    C: windows_reactor::Component + Send + 'static,
-{
+pub fn run(app: GuineaApp, window: impl Windowed) -> anyhow::Result<()> {
+    let (window, root) = window.into_parts();
     window
         .on_exit(shutdown_current)
         .run(move || {
