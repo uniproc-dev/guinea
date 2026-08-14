@@ -3,37 +3,46 @@ use guinea_core::actor::UiThreadToken;
 
 /// Installs the application, once, from inside the root render function.
 ///
+/// Ends the same chain that describes it:
+///
+/// ```ignore
+/// GuineaApp::new()
+///     .plugin(StorePlugin::for_app("app", "settings"))
+///     .feature(Startup)
+///     .bootstrap(cx);
+/// ```
+///
 /// The same shape windows-reactor itself uses for one-time UI-thread setup:
 /// the reactor owns the window and the run loop, and everything that has to
 /// happen on that thread happens in the first render. guinea does not wrap
 /// `App::run`, so an application builds its window exactly as it would
 /// without guinea:
 ///
-/// ```ignore
-/// fn main() -> anyhow::Result<()> {
-///     windows_reactor::App::new()
-///         .title("app")
-///         .on_exit(guinea::shutdown)
-///         .render(root)
-///         .map_err(|e| anyhow::anyhow!("{e:?}"))
-/// }
-///
-/// fn root(cx: &mut RenderCx) -> Element {
-///     guinea::bootstrap(cx, || GuineaApp::new().plugin(..).feature(..));
-///     RouterRx::<Route>::render(cx, initial_route())
-/// }
-/// ```
-///
-/// `build` runs on the first render and never again. Pair it with
+/// The description is rebuilt on every render of this function and thrown
+/// away after the first - the recipe is cheap, and paying for it buys a call
+/// order that reads the same way the rest of the builder does. Only the first
+/// one is installed. Pair it with
 /// [`shutdown`] on `App::on_exit`, which is where teardown has to hang: the
 /// reactor exits the process rather than unmounting the tree, so a cleanup
 /// effect would never run.
-pub fn bootstrap(cx: &mut windows_reactor::RenderCx, build: impl FnOnce() -> GuineaApp) {
-    let installed = cx.use_ref(false);
-    if *installed.borrow() {
+pub trait Bootstrap {
+    fn bootstrap(self, cx: &mut windows_reactor::RenderCx);
+}
+
+impl Bootstrap for GuineaApp {
+    fn bootstrap(self, cx: &mut windows_reactor::RenderCx) {
+        bootstrap(cx, self);
+    }
+}
+
+fn bootstrap(_cx: &mut windows_reactor::RenderCx, app: GuineaApp) {
+    // Guarded per UI thread, not per component: an application that opens a
+    // second window renders the same root there, and installing twice would
+    // re-run every plugin - opening the store's database a second time, for
+    // one, which fails outright.
+    if guinea_app::app::is_installed() {
         return;
     }
-    *installed.borrow_mut() = true;
 
     crate::dispatcher::install();
 
@@ -42,7 +51,7 @@ pub fn bootstrap(cx: &mut windows_reactor::RenderCx, build: impl FnOnce() -> Gui
 
     // Rendering has no way to report an error - the reactor is mid-frame and
     // the process has no application yet, so there is nothing to fall back to.
-    let runtime = build()
+    let runtime = app
         .install(token)
         .unwrap_or_else(|err| panic!("guinea::bootstrap: install failed: {err:#}"));
 

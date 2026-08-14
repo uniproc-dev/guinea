@@ -7,5 +7,5 @@ mod dispatcher;
 mod bootstrap;
 mod winui;
 
-pub use bootstrap::{bootstrap, shutdown};
+pub use bootstrap::{Bootstrap, shutdown};
 pub use winui::*;

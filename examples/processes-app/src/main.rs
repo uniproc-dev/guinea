@@ -10,6 +10,7 @@ mod tabs;
 use routes::Route;
 
 use guinea::app::GuineaApp;
+use guinea::Bootstrap;
 
 fn initial_route() -> Route {
     Route::Processes {
@@ -18,15 +19,14 @@ fn initial_route() -> Route {
 }
 
 fn root(cx: &mut windows_reactor::RenderCx) -> windows_reactor::Element {
-    guinea::bootstrap(cx, || {
-        GuineaApp::new()
-            .plugin(guinea_plugin_store::StorePlugin::for_app(
-                "guinea-processes-app-example",
-                "settings",
-            ))
-            .plugin(guinea_plugin_l10n::L10nPlugin::<l10n::L10n>::new("en"))
-            .feature(startup::Startup)
-    });
+    GuineaApp::new()
+        .plugin(guinea_plugin_store::StorePlugin::for_app(
+            "guinea-processes-app-example",
+            "settings",
+        ))
+        .plugin(guinea_plugin_l10n::L10nPlugin::<l10n::L10n>::new("en"))
+        .feature(startup::Startup)
+        .bootstrap(cx);
 
     guinea::winui::RouterRx::<Route>::render(cx, initial_route())
 }

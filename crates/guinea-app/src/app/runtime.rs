@@ -24,6 +24,15 @@ pub fn install_runtime(runtime: AppRuntime) {
     RUNTIME.with(|slot| *slot.borrow_mut() = Some(runtime));
 }
 
+/// Whether an application is already installed on this UI thread.
+///
+/// One application per thread, however many windows it opens: a second window
+/// renders its own root, and whatever that root does to bootstrap must be a
+/// no-op the second time.
+pub fn is_installed() -> bool {
+    RUNTIME.with(|slot| slot.borrow().is_some())
+}
+
 /// The services plugins provided during installation.
 ///
 /// Empty when there is no installed application - a router built directly in a

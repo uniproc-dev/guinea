@@ -22,7 +22,7 @@ pub use guinea_winui as backend;
 pub type Backend = guinea_winui::WinUi;
 
 #[cfg(feature = "winui")]
-pub use guinea_winui::{bootstrap, shutdown};
+pub use guinea_winui::{Bootstrap, shutdown};
 
 pub use guinea_app::{app, feature, lifecycle_tracker};
 pub use guinea_app::timers as reactor;
