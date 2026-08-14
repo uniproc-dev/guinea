@@ -1,80 +1,56 @@
 use guinea_app::app::{GuineaApp, install_runtime, shutdown_current};
 use guinea_core::actor::UiThreadToken;
 
-/// Bootstrapping, as a method on the application that is being bootstrapped.
+/// Installs the application, once, from inside the root render function.
 ///
-/// An extension trait rather than an inherent method, because `GuineaApp`
-/// lives in `guinea-app`, which has no backend to run on. The backend brings
-/// the method with it - and a different backend brings its own, with the same
-/// name and its own window type.
-pub trait Bootstrap: Sized {
-    /// Takes over the window: installs the application on the UI thread,
-    /// renders `root`, and tears everything down on exit.
-    ///
-    /// `root` is a render function, the same one `windows_reactor::App::
-    /// render` takes - the application builds its own tree and decides where
-    /// a router, if any, goes inside it.
-    ///
-    /// Does not return: the reactor exits the process once the last window
-    /// closes.
-    fn run<F>(self, window: windows_reactor::App, root: F) -> anyhow::Result<()>
-    where
-        F: Fn(&mut windows_reactor::RenderCx) -> windows_reactor::Element + Send + 'static;
-}
-
-impl Bootstrap for GuineaApp {
-    fn run<F>(self, window: windows_reactor::App, root: F) -> anyhow::Result<()>
-    where
-        F: Fn(&mut windows_reactor::RenderCx) -> windows_reactor::Element + Send + 'static,
-    {
-        run(self, window, root)
+/// The same shape windows-reactor itself uses for one-time UI-thread setup:
+/// the reactor owns the window and the run loop, and everything that has to
+/// happen on that thread happens in the first render. guinea does not wrap
+/// `App::run`, so an application builds its window exactly as it would
+/// without guinea:
+///
+/// ```ignore
+/// fn main() -> anyhow::Result<()> {
+///     windows_reactor::App::new()
+///         .title("app")
+///         .on_exit(guinea::shutdown)
+///         .render(root)
+///         .map_err(|e| anyhow::anyhow!("{e:?}"))
+/// }
+///
+/// fn root(cx: &mut RenderCx) -> Element {
+///     guinea::bootstrap(cx, || GuineaApp::new().plugin(..).feature(..));
+///     RouterRx::<Route>::render(cx, initial_route())
+/// }
+/// ```
+///
+/// `build` runs on the first render and never again. Pair it with
+/// [`shutdown`] on `App::on_exit`, which is where teardown has to hang: the
+/// reactor exits the process rather than unmounting the tree, so a cleanup
+/// effect would never run.
+pub fn bootstrap(cx: &mut windows_reactor::RenderCx, build: impl FnOnce() -> GuineaApp) {
+    let installed = cx.use_ref(false);
+    if *installed.borrow() {
+        return;
     }
+    *installed.borrow_mut() = true;
+
+    crate::dispatcher::install();
+
+    // Genuinely the UI thread: a render function only ever runs there.
+    let token = UiThreadToken::dangerously_create_token_unchecked();
+
+    // Rendering has no way to report an error - the reactor is mid-frame and
+    // the process has no application yet, so there is nothing to fall back to.
+    let runtime = build()
+        .install(token)
+        .unwrap_or_else(|err| panic!("guinea::bootstrap: install failed: {err:#}"));
+
+    install_runtime(runtime);
 }
 
-/// The free-function form, for a caller that would rather not import the
-/// trait.
-pub fn run<F>(
-    app: GuineaApp,
-    window: windows_reactor::App,
-    root: F,
-) -> anyhow::Result<()>
-where
-    F: Fn(&mut windows_reactor::RenderCx) -> windows_reactor::Element + Send + 'static,
-{
-    window
-        .on_exit(shutdown_current)
-        .run(move || {
-            crate::dispatcher::install();
-
-            // Genuinely the UI thread: this is the reactor's own root factory.
-            let token = UiThreadToken::dangerously_create_token_unchecked();
-
-            // The factory's return value goes to WinUI as an HRESULT, so an
-            // installation error cannot be handed back to the caller.
-            let runtime = app
-                .install(token)
-                .unwrap_or_else(|err| panic!("guinea::run: install failed: {err:#}"));
-
-            install_runtime(runtime);
-            RootFn(root)
-        })
-        .map_err(|e| anyhow::anyhow!("windows-reactor app failed: {e:?}"))
-}
-
-/// The same wrapper `windows_reactor::App::render` uses on a render function,
-/// which is private there. `run` needs it because it has its own root factory
-/// - installation has to happen on the UI thread, before the first render.
-struct RootFn<F>(F);
-
-impl<F> windows_reactor::Component for RootFn<F>
-where
-    F: Fn(&mut windows_reactor::RenderCx) -> windows_reactor::Element + 'static,
-{
-    fn render(
-        &self,
-        _props: &(),
-        cx: &mut windows_reactor::RenderCx,
-    ) -> windows_reactor::Element {
-        (self.0)(cx)
-    }
+/// Runs cleanups and reports actors that outlived them. Give this to
+/// `windows_reactor::App::on_exit`.
+pub fn shutdown() {
+    shutdown_current();
 }

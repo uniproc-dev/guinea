@@ -8,6 +8,7 @@ guinea-core.workspace = true
 guinea-app.workspace = true
 guinea-router.workspace = true
 anyhow.workspace = true
+tracing.workspace = true
 
 [target.'cfg(target_os = "windows")'.dependencies]
 windows-reactor.workspace = true

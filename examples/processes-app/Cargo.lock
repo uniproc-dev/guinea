@@ -576,6 +576,7 @@ dependencies = [
  "guinea-app",
  "guinea-core",
  "guinea-router",
+ "tracing",
  "windows-reactor",
 ]
 

@@ -1,9 +1,11 @@
-//! guinea on windows-reactor: what a view is, how a segment is mounted, the
-//! hooks a view reads state through, and the run loop.
+//! guinea on windows-reactor: what a view is, how a segment is mounted, and
+//! the hooks a view reads state through.
+//!
+//! Not the run loop - the reactor keeps that. See [`bootstrap`].
 
 mod dispatcher;
-mod run;
+mod bootstrap;
 mod winui;
 
-pub use run::{Bootstrap, run};
+pub use bootstrap::{bootstrap, shutdown};
 pub use winui::*;

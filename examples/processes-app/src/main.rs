@@ -10,7 +10,6 @@ mod tabs;
 use routes::Route;
 
 use guinea::app::GuineaApp;
-use guinea::winui::Bootstrap;
 
 fn initial_route() -> Route {
     Route::Processes {
@@ -19,6 +18,16 @@ fn initial_route() -> Route {
 }
 
 fn root(cx: &mut windows_reactor::RenderCx) -> windows_reactor::Element {
+    guinea::bootstrap(cx, || {
+        GuineaApp::new()
+            .plugin(guinea_plugin_store::StorePlugin::for_app(
+                "guinea-processes-app-example",
+                "settings",
+            ))
+            .plugin(guinea_plugin_l10n::L10nPlugin::<l10n::L10n>::new("en"))
+            .feature(startup::Startup)
+    });
+
     guinea::winui::RouterRx::<Route>::render(cx, initial_route())
 }
 
@@ -33,17 +42,10 @@ fn main() -> anyhow::Result<()> {
     let runtime = tokio::runtime::Runtime::new()?;
     let _guard = runtime.enter();
 
-    GuineaApp::new()
-        .plugin(guinea_plugin_store::StorePlugin::for_app(
-            "guinea-processes-app-example",
-            "settings",
-        ))
-        .plugin(guinea_plugin_l10n::L10nPlugin::<l10n::L10n>::new("en"))
-        .feature(startup::Startup)
-        .run(
-            windows_reactor::App::new()
-                .title("guinea · processes")
-                .inner_size(420.0, 420.0),
-            root,
-        )
+    windows_reactor::App::new()
+        .title("guinea · processes")
+        .inner_size(420.0, 420.0)
+        .on_exit(guinea::shutdown)
+        .render(root)
+        .map_err(|e| anyhow::anyhow!("windows-reactor app failed: {e:?}"))
 }
