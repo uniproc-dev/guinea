@@ -15,6 +15,14 @@ pub struct Subscription {
     unsubscribe: Option<Box<dyn FnOnce()>>,
 }
 
+impl Subscription {
+    /// A subscription to something that no longer exists - dropping it does
+    /// nothing.
+    pub(crate) fn inert() -> Self {
+        Self { unsubscribe: None }
+    }
+}
+
 impl Drop for Subscription {
     fn drop(&mut self) {
         if let Some(unsubscribe) = self.unsubscribe.take() {
@@ -208,14 +216,21 @@ impl Scope {
             cell.listeners.borrow_mut().push((id, Rc::new(callback)));
         }
 
-        let store = self.clone();
+        let scope = Rc::downgrade(self);
         Subscription {
             unsubscribe: Some(Box::new(move || {
-                if let Some(cell) = store.cells.borrow_mut().get_mut(&TypeId::of::<F>()) {
+                let Some(scope) = scope.upgrade() else { return };
+                if let Some(cell) = scope.cells.borrow_mut().get_mut(&TypeId::of::<F>()) {
                     cell.listeners.borrow_mut().retain(|(lid, _)| *lid != id);
                 }
             })),
         }
+    }
+
+    /// A handle to `R`'s state and actions in this scope, for code that reads
+    /// or watches them without being a UI hook. See [`crate::binding`].
+    pub fn binding<R: Reducer>(self: &Rc<Self>) -> crate::binding::ReducerBinding<R> {
+        crate::binding::ReducerBinding::new(self)
     }
 
     pub fn own_subscription(&self, subscription: BusSubscription) {

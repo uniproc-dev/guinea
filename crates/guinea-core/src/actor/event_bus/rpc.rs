@@ -492,7 +492,11 @@ mod tests {
 
         // Bounded, not open-ended - a regression where the cycle silently
         // stops being detected must fail this test quickly, not hang it.
-        for _ in 0..200 {
+        // Bounded by wall clock rather than by a count of scheduler turns:
+        // 200 turns is a budget that shrinks with machine load, and this test
+        // shares a process (and the task queue) with every other one.
+        let deadline = std::time::Instant::now() + StdDuration::from_secs(5);
+        while std::time::Instant::now() < deadline {
             tokio::task::yield_now().await;
             EventBus::process_queue();
             if panic_message.lock().unwrap().is_some() {
