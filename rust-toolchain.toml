@@ -1,2 +1,9 @@
+# Pinned to a release, and to an exact one.
+#
+# `channel = "nightly"` meant every machine and every CI run could pick up a
+# different compiler on any given day - which is how a cargo change to the
+# build-directory layout arrived unannounced and left the example with a
+# runtime that no longer sat next to the binary. Nothing here needs nightly:
+# there is not a single `#![feature]` in the workspace.
 [toolchain]
-channel = "nightly"
+channel = "1.95.0"
