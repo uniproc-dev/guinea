@@ -1,3 +1,5 @@
+#![cfg(feature = "winui")]
+
 //! The router driven through the facade, the way an application sees it.
 //!
 //! Integration rather than unit tests on purpose: `routes!` resolves paths

@@ -58,3 +58,8 @@ jobs:
           -p guinea-macros
           -p guinea-trace
           -p guinea-codegen
+
+      # The facade itself, with the backend feature off - what a port to
+      # another toolkit starts from.
+      - name: Build the facade without a backend
+        run: cargo build -p guinea --no-default-features

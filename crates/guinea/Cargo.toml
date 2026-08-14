@@ -7,22 +7,22 @@ edition.workspace = true
 guinea-core.workspace = true
 guinea-app.workspace = true
 guinea-router.workspace = true
-guinea-winui.workspace = true
 guinea-codegen.workspace = true
 guinea-meta = { git = "https://github.com/uniproc-dev/guinea-meta", tag = "v0.1.0" }
-tracing.workspace = true
-anyhow.workspace = true
-derive_more.workspace = true
-serde.workspace = true
-serde_json.workspace = true
-raw-window-handle.workspace = true
-tokio.workspace = true
 
+# Nothing else: this crate is re-exports. Anything it appears to need is a
+# sign that something which belongs in a real crate ended up here.
 [target.'cfg(target_os = "windows")'.dependencies]
-windows.workspace = true
-windows-reactor.workspace = true
+guinea-winui = { workspace = true, optional = true }
 
 [features]
+default = ["winui"]
+
+# The windows-reactor backend. On by default because it is the one that
+# exists; off, this crate is the router, the application runtime and the
+# macros, which is what a build for another toolkit starts from.
+winui = ["dep:guinea-winui"]
+
 # `app::TestApp` - an application without a window, for crates that write
 # plugins or features out of tree and need to install them in a test.
 test-utils = ["guinea-app/test-utils"]
@@ -31,10 +31,13 @@ test-utils = ["guinea-app/test-utils"]
 workspace = true
 
 [dev-dependencies]
+anyhow.workspace = true
 guinea-router.workspace = true
-windows-reactor.workspace = true
 tempfile = "3.27.0"
 uuid.workspace = true
 guinea-macros.workspace = true
 inventory.workspace = true
 guinea-core = { workspace = true, features = ["test-utils"] }
+
+[target.'cfg(target_os = "windows")'.dev-dependencies]
+windows-reactor.workspace = true
