@@ -1,14 +1,17 @@
 use std::cell::RefCell;
 
+use guinea_core::SharedState;
 use guinea_core::actor::UiThreadToken;
 
 use crate::feature::AppFeatureDeinitContext;
 
 use super::builder::FeatureBuilder;
 
-pub(crate) type RouteHook = Box<dyn Fn(Option<&str>, &str)>;
+pub type RouteHook = Box<dyn Fn(Option<&str>, &str)>;
 
-pub(crate) struct AppRuntime {
+/// An installed application: everything the recipe built, plus the hooks that
+/// outlive installation. Held on the UI thread until the process exits.
+pub struct AppRuntime {
     pub(crate) token: UiThreadToken,
     pub(crate) builder: FeatureBuilder,
     pub(crate) route_hooks: Vec<RouteHook>,
@@ -19,11 +22,28 @@ thread_local! {
     static RUNTIME: RefCell<Option<AppRuntime>> = const { RefCell::new(None) };
 }
 
-pub(crate) fn install(runtime: AppRuntime) {
+/// Hands the runtime to the thread that will tear it down. Call once, from
+/// the backend adapter, after [`crate::app::App::install`].
+pub fn install_runtime(runtime: AppRuntime) {
     RUNTIME.with(|slot| *slot.borrow_mut() = Some(runtime));
 }
 
-pub(crate) fn route_changed(to: &str) {
+/// The services plugins provided during installation.
+///
+/// Empty when there is no installed application - a router built directly in a
+/// test, say. Callers get "nothing provided that" rather than a panic, which is
+/// the same answer they would get from an application that installed no
+/// plugins.
+pub fn app_services() -> SharedState {
+    RUNTIME.with(|slot| {
+        slot.borrow()
+            .as_ref()
+            .map(|runtime| crate::feature::FeatureContext::shared(&*runtime.builder).clone())
+            .unwrap_or_default()
+    })
+}
+
+pub fn route_changed(to: &str) {
     RUNTIME.with(|slot| {
         let slot = slot.borrow();
         let Some(runtime) = slot.as_ref() else { return };
@@ -38,7 +58,7 @@ pub(crate) fn route_changed(to: &str) {
 
 /// Runs cleanups and reports actors that outlived them. Called from the
 /// reactor's exit callback, on the UI thread.
-pub(crate) fn shutdown_current() {
+pub fn shutdown_current() {
     let Some(runtime) = RUNTIME.with(|slot| slot.borrow_mut().take()) else {
         return;
     };

@@ -138,6 +138,24 @@ mod tests {
         EventBus::process_queue();
     }
 
+    /// Waits for the counter to reach `expected`, or gives up after two
+    /// seconds and lets the assertion report what it actually saw.
+    ///
+    /// For asserting that a tick *did* happen. Sleeping a fixed multiple of
+    /// the interval instead makes the test a bet on scheduler latency - the
+    /// timer thread has to wake, queue through `invoke_on_ui`, and be drained
+    /// here, and a loaded machine loses that bet.
+    fn wait_for(counter: &Arc<AtomicUsize>, expected: usize) {
+        let deadline = std::time::Instant::now() + StdDuration::from_secs(2);
+        while std::time::Instant::now() < deadline {
+            EventBus::process_queue();
+            if counter.load(Ordering::SeqCst) >= expected {
+                return;
+            }
+            std::thread::sleep(StdDuration::from_millis(2));
+        }
+    }
+
     #[test]
     fn loop_fires_on_interval() {
         let _guard = TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
@@ -150,9 +168,9 @@ mod tests {
         });
 
         assert_eq!(counter.load(Ordering::SeqCst), 0);
-        wait(60);
+        wait_for(&counter, 1);
         assert_eq!(counter.load(Ordering::SeqCst), 1);
-        wait(60);
+        wait_for(&counter, 2);
         assert_eq!(counter.load(Ordering::SeqCst), 2);
     }
 
@@ -167,7 +185,7 @@ mod tests {
             let _h = reactor.add_loop(|| 30, || true, move || {
                 c.fetch_add(1, Ordering::SeqCst);
             });
-            wait(60);
+            wait_for(&counter, 1);
             assert_eq!(counter.load(Ordering::SeqCst), 1);
         }
 
@@ -192,7 +210,7 @@ mod tests {
         assert_eq!(counter.load(Ordering::SeqCst), 0);
 
         active.store(true, Ordering::SeqCst);
-        wait(60);
+        wait_for(&counter, 1);
         assert_eq!(counter.load(Ordering::SeqCst), 1);
 
         active.store(false, Ordering::SeqCst);
@@ -228,9 +246,9 @@ mod tests {
             c.fetch_add(1, Ordering::SeqCst);
         });
 
-        wait(60);
+        wait_for(&counter, 1);
         assert_eq!(counter.load(Ordering::SeqCst), 1);
-        wait(60);
+        wait_for(&counter, 2);
         assert_eq!(counter.load(Ordering::SeqCst), 2);
     }
 
@@ -245,7 +263,7 @@ mod tests {
             let _h = reactor.add_heartbeat(|| 30, move || {
                 c.fetch_add(1, Ordering::SeqCst);
             });
-            wait(60);
+            wait_for(&counter, 1);
         }
 
         wait(80);

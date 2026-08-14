@@ -8,6 +8,7 @@ members = [
     "crates/guinea-trace",
     "crates/guinea-codegen",
     "crates/guinea-core",
+    "crates/guinea-app",
     "crates/guinea-macros",
     "crates/guinea",
 ]
@@ -16,6 +17,7 @@ members = [
 guinea-trace = { path = "crates/guinea-trace" }
 guinea-codegen = { path = "crates/guinea-codegen" }
 guinea-core = { path = "crates/guinea-core" }
+guinea-app = { path = "crates/guinea-app" }
 guinea-macros = { path = "crates/guinea-macros" }
 guinea = { path = "crates/guinea" }
 inventory = "0.3"

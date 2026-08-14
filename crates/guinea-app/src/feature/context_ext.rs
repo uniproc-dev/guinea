@@ -1,4 +1,4 @@
-use crate::reactor::{LoopHandle, Reactor};
+use crate::timers::{LoopHandle, Reactor};
 use guinea_core::SharedState;
 use guinea_core::actor::{Addr, Handler, ManagedActor, Message, UiThreadToken};
 use guinea_core::lifecycle_tracker::LifecycleTracker;

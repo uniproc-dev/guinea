@@ -188,7 +188,7 @@ fn subscriptions_taken_during_install_are_dropped_on_shutdown() {
 
     assert_eq!(GlobalEventBus::count_subscribers::<Tick>(), 1);
 
-    let reactor = crate::reactor::Reactor::new();
+    let reactor = crate::timers::Reactor::new();
     let shared = guinea_core::SharedState::new();
     let mut ctx = AppFeatureDeinitContext {
         token: token.clone(),
@@ -206,7 +206,7 @@ fn route_hooks_see_the_previous_and_current_path() {
     let token = UiThreadToken::dangerously_create_token_unchecked();
 
     let recorded = seen.clone();
-    super::runtime::install(super::runtime::AppRuntime {
+    super::runtime::install_runtime(super::runtime::AppRuntime {
         token: token.clone(),
         builder: FeatureBuilder::new(token, AppLifecycle::new()),
         route_hooks: vec![Box::new(move |from, to| {

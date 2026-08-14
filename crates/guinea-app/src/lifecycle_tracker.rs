@@ -133,7 +133,7 @@ impl LifecycleTracker for AppLifecycle {
 mod tests {
     use super::*;
     use crate::feature::AppFeatureDeinitContext;
-    use crate::reactor::Reactor;
+    use crate::timers::Reactor;
     use guinea_core::SharedState;
     use guinea_core::actor::UiThreadToken;
     use guinea_core::actor::event_bus::GlobalEventBus;

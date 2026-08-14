@@ -519,6 +519,9 @@ pub struct Router {
     event_bus: Rc<guinea_core::actor::event_bus::EventBus>,
     debug_registry: Rc<guinea_core::actor::registry::DebugRegistry>,
     state_cache: RefCell<StateCache>,
+    /// Services provided by application-level plugins, handed to every feature
+    /// this router installs. Empty when there is no installed application.
+    services: guinea_core::SharedState,
 }
 
 impl Router {
@@ -530,6 +533,7 @@ impl Router {
             event_bus: Rc::new(guinea_core::actor::event_bus::EventBus::new()),
             debug_registry: Rc::new(guinea_core::actor::registry::DebugRegistry::new()),
             state_cache: RefCell::new(StateCache::new()),
+            services: guinea_app::app::app_services(),
         }
     }
     
@@ -628,6 +632,7 @@ impl Router {
                 token: self.token.clone(),
                 event_bus: self.event_bus.clone(),
                 debug_registry: self.debug_registry.clone(),
+                services: self.services.clone(),
             };
             (entry.install)(&ctx, uri)?;
             scopes.push(scope);
@@ -700,6 +705,68 @@ mod tests {
             assert_eq!(state.seeded_from, "ubuntu");
             windows_reactor::Element::default()
         }
+    }
+
+    struct Greeting(&'static str);
+
+    struct GreetingPlugin;
+
+    impl guinea_app::app::Plugin for GreetingPlugin {
+        const ID: &'static str = "test.greeting";
+
+        fn build(self, app: &mut guinea_app::app::PluginBuilder) -> anyhow::Result<()> {
+            app.provide(Greeting("hello"));
+            Ok(())
+        }
+    }
+
+    struct NeedsAService;
+
+    impl Page for NeedsAService {
+        fn install(ctx: &FeatureInitContext, _uri: &AppUri) -> anyhow::Result<()> {
+            let greeting = ctx.require::<Greeting>()?;
+            assert_eq!(greeting.0, "hello");
+            Ok(())
+        }
+
+        fn view(_cx: &mut PageCx) -> windows_reactor::Element {
+            windows_reactor::Element::default()
+        }
+    }
+
+    #[test]
+    fn a_page_can_read_what_an_application_plugin_provided() {
+        let token = UiThreadToken::dangerously_create_token_unchecked();
+
+        let runtime = guinea_app::app::App::new()
+            .plugin(GreetingPlugin)
+            .install(token.clone())
+            .expect("install");
+        guinea_app::app::install_runtime(runtime);
+
+        let router = Router::new(token);
+        let uri = AppUri::parse("/ubuntu/processes").unwrap();
+
+        router
+            .activate::<NeedsAService>(&uri)
+            .expect("the page's install must find the service the plugin provided");
+    }
+
+    #[test]
+    fn a_page_without_an_application_gets_a_plain_error_not_a_panic() {
+        let token = UiThreadToken::dangerously_create_token_unchecked();
+        let router = Router::new(token);
+        let uri = AppUri::parse("/ubuntu/processes").unwrap();
+
+        let err = router
+            .activate::<NeedsAService>(&uri)
+            .map(|_| ())
+            .expect_err("nothing provided the service");
+
+        assert!(
+            format!("{err:#}").contains("Greeting"),
+            "the error should name the missing service, got: {err:#}"
+        );
     }
 
     #[test]

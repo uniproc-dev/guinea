@@ -11,7 +11,7 @@ use guinea_core::actor::{Addr, Handler, UiThreadToken};
 
 use crate::feature::{AppFeatureDeinitContext, FeatureContext};
 use crate::lifecycle_tracker::AppLifecycle;
-use crate::reactor::Reactor;
+use crate::timers::Reactor;
 
 use super::plugin::{AppFeature, ErasedFeature, ErasedPlugin, Plugin};
 use super::registry::{Admission, Registry, Unit};

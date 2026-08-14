@@ -1,8 +1,18 @@
-pub mod app;
-pub mod feature;
-pub mod lifecycle_tracker;
-pub mod reactor;
+//! The windows-reactor face of guinea: routing, the run loop, and the
+//! re-exports an application builds against.
+//!
+//! Everything that does not touch a toolkit lives in `guinea-app` and
+//! `guinea-core`; this crate is where they meet windows-reactor.
+
+mod dispatcher;
+mod run;
+
 pub mod router;
+
+pub use run::run;
+
+pub use guinea_app::{app, feature, lifecycle_tracker};
+pub use guinea_app::timers as reactor;
 
 pub use guinea_codegen as codegen;
 pub use guinea_core as core;

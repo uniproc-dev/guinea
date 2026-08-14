@@ -1,0 +1,22 @@
+[package]
+name = "guinea-app"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+guinea-core.workspace = true
+tracing.workspace = true
+anyhow.workspace = true
+tokio.workspace = true
+
+[features]
+# `TestApp` - an application without a window, for crates that write plugins or
+# features out of tree and need to install them in a test.
+test-utils = []
+
+[lints]
+workspace = true
+
+[dev-dependencies]
+guinea-macros.workspace = true
+guinea-core = { workspace = true, features = ["test-utils"] }

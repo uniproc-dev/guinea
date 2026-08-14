@@ -1,7 +1,9 @@
 use std::fmt::Debug;
 use std::rc::Rc;
+use std::sync::Arc;
 
-use crate::reactor::Reactor;
+use crate::timers::Reactor;
+use anyhow::Context as _;
 use guinea_core::SharedState;
 use guinea_core::actor::registry::DebugRegistry;
 use guinea_core::actor::{Addr, Handler, ManagedActor, UiThreadToken};
@@ -22,6 +24,8 @@ pub struct FeatureInitContext {
     pub token: UiThreadToken,
     pub event_bus: Rc<EventBus>,
     pub debug_registry: Rc<DebugRegistry>,
+    /// What plugins provided during application startup.
+    pub services: SharedState,
 }
 
 impl FeatureInitContext {
@@ -81,6 +85,27 @@ impl FeatureInitContext {
     pub fn seed_reducer<R: Reducer>(&self, state: R::State) {
         self.scope.note_reducer_owner::<R>();
         self.scope.seed::<R>(state);
+    }
+
+    /// A service a plugin provided at startup.
+    ///
+    /// The counterpart of `PluginBuilder::provide`: this is how a page reaches
+    /// the store, or anything else an application-level plugin set up.
+    pub fn require<T: Send + Sync + 'static>(&self) -> anyhow::Result<Arc<T>> {
+        let service = std::any::type_name::<T>();
+        match self.services.try_get::<T>() {
+            Ok(Some(value)) => Ok(value),
+            Ok(None) => anyhow::bail!(
+                "no plugin provided service `{service}` - install the plugin that \
+                 provides it on the application, before the window opens"
+            ),
+            Err(poisoned) => Err(anyhow::Error::new(poisoned))
+                .with_context(|| format!("requiring service `{service}`")),
+        }
+    }
+
+    pub fn try_require<T: Send + Sync + 'static>(&self) -> Option<Arc<T>> {
+        self.services.get::<T>()
     }
 
     pub fn subscribe<M: Event>(&self, callback: impl Fn(M) + 'static) {

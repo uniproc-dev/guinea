@@ -162,6 +162,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "derive_more",
+ "guinea-app",
  "guinea-codegen",
  "guinea-core",
  "guinea-macros",
@@ -176,6 +177,17 @@ dependencies = [
  "uuid",
  "windows",
  "windows-reactor",
+]
+
+[[package]]
+name = "guinea-app"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "guinea-core",
+ "guinea-macros",
+ "tokio",
+ "tracing",
 ]
 
 [[package]]
