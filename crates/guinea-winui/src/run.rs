@@ -5,7 +5,7 @@ use guinea_core::actor::UiThreadToken;
 /// `root`, and tears everything down on exit.
 ///
 /// `root` is built on the UI thread, after installation. Pass
-/// [`crate::router::RouterRoot::at`] for a route-based UI, or any other
+/// [`crate::RouterRoot::at`] for a route-based UI, or any other
 /// component - nothing here knows about routing.
 ///
 /// Does not return: the reactor exits the process once the last window closes.

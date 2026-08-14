@@ -7,9 +7,9 @@
 
 use guinea_core::scope::Reducer;
 
-use crate::feature::FeatureInitContext;
+use guinea_app::feature::FeatureInitContext;
 use crate::router::{SegmentEntry, SegmentProps, Ui, single_entry_chain};
-use crate::uri::AppUri;
+use guinea_core::uri::AppUri;
 
 pub struct Headless;
 
@@ -93,9 +93,9 @@ pub fn page_chain<P: Page>() -> &'static [SegmentEntry<Headless>] {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::feature::FeatureInitContext;
+    use guinea_app::feature::FeatureInitContext;
     use crate::router::Router;
-    use crate::uri::AppUri;
+    use guinea_core::uri::AppUri;
     use guinea_core::actor::UiThreadToken;
     use guinea_macros::reducer;
 

@@ -13,10 +13,10 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  # Windows-only by construction: every crate in the workspace pulls in
-  # `windows-reactor` (git fork) and the `windows` crate. There is no
-  # non-Windows build to gate.
-  rust:
+  # The whole workspace, including the backend. Windows-only because
+  # `guinea-winui` (and `guinea`, which re-exports it) pull in the
+  # `windows-reactor` fork and the `windows` crate.
+  windows:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v5
@@ -35,3 +35,26 @@ jobs:
 
       - name: Test
         run: cargo test --workspace
+
+  # The half that claims to know nothing about a toolkit, built where no
+  # toolkit exists. This job is the claim's only proof: `guinea-core`,
+  # `guinea-app` and `guinea-router` have no Windows dependency in their
+  # trees, and if one creeps back in, it fails here rather than in a review.
+  linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Test the agnostic crates
+        run: >
+          cargo test
+          -p guinea-core
+          -p guinea-app
+          -p guinea-router
+          -p guinea-macros
+          -p guinea-trace
+          -p guinea-codegen

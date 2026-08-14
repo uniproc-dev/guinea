@@ -6,6 +6,8 @@ edition.workspace = true
 [dependencies]
 guinea-core.workspace = true
 guinea-app.workspace = true
+guinea-router.workspace = true
+guinea-winui.workspace = true
 guinea-codegen.workspace = true
 guinea-meta = { git = "https://github.com/uniproc-dev/guinea-meta", tag = "v0.1.0" }
 tracing.workspace = true
@@ -29,6 +31,8 @@ test-utils = ["guinea-app/test-utils"]
 workspace = true
 
 [dev-dependencies]
+guinea-router.workspace = true
+windows-reactor.workspace = true
 tempfile = "3.27.0"
 uuid.workspace = true
 guinea-macros.workspace = true

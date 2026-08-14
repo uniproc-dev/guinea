@@ -6,8 +6,8 @@ use std::rc::Rc;
 use guinea_core::binding::ReducerBinding;
 use guinea_core::scope::{Reducer, Scope};
 
-use crate::feature::FeatureInitContext;
-use crate::uri::AppUri;
+use guinea_app::feature::FeatureInitContext;
+use guinea_core::uri::AppUri;
 
 /// A UI backend, described entirely by the types it works in.
 ///
@@ -224,7 +224,7 @@ where
     pub fn to(&self, route: R) {
         let uri = route.to_uri();
         self.router.navigate(route.clone(), &uri).expect("navigate");
-        crate::app::route_changed(&uri.to_string());
+        guinea_app::app::route_changed(&uri.to_string());
         self.sink.publish(route);
     }
 
@@ -462,6 +462,15 @@ impl<U: Ui> Router<U> {
         *self.prev_route.borrow_mut() = None;
     }
     
+    /// The scope of the segment at `cursor` in the active chain: 0 is the
+    /// outermost layout, the last one the leaf.
+    pub fn scope_at(&self, cursor: usize) -> Option<Rc<Scope>> {
+        self.active
+            .borrow()
+            .as_ref()
+            .and_then(|active| active.scopes.get(cursor).cloned())
+    }
+
     pub fn active_scope(&self) -> Option<Rc<Scope>> {
         self.active.borrow().as_ref().and_then(|a| a.scopes.last().cloned())
     }

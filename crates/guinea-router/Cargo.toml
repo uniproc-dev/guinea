@@ -1,0 +1,17 @@
+[package]
+name = "guinea-router"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+guinea-core.workspace = true
+guinea-app.workspace = true
+anyhow.workspace = true
+tracing.workspace = true
+
+[lints]
+workspace = true
+
+[dev-dependencies]
+guinea-macros.workspace = true
+guinea-core = { workspace = true, features = ["test-utils"] }

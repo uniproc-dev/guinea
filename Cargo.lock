@@ -167,6 +167,8 @@ dependencies = [
  "guinea-core",
  "guinea-macros",
  "guinea-meta",
+ "guinea-router",
+ "guinea-winui",
  "inventory",
  "raw-window-handle",
  "serde",
@@ -254,6 +256,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "guinea-router"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "guinea-app",
+ "guinea-core",
+ "guinea-macros",
+ "tracing",
+]
+
+[[package]]
 name = "guinea-trace"
 version = "0.1.0"
 dependencies = [
@@ -264,6 +277,17 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "uuid",
+]
+
+[[package]]
+name = "guinea-winui"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "guinea-app",
+ "guinea-core",
+ "guinea-router",
+ "windows-reactor",
 ]
 
 [[package]]

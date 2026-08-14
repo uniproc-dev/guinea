@@ -1,0 +1,16 @@
+[package]
+name = "guinea-winui"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+guinea-core.workspace = true
+guinea-app.workspace = true
+guinea-router.workspace = true
+anyhow.workspace = true
+
+[target.'cfg(target_os = "windows")'.dependencies]
+windows-reactor.workspace = true
+
+[lints]
+workspace = true

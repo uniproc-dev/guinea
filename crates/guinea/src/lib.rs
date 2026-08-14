@@ -1,23 +1,19 @@
-//! The windows-reactor face of guinea: routing, the run loop, and the
-//! re-exports an application builds against.
+//! guinea, assembled: the agnostic halves plus the backend this build renders
+//! with.
 //!
-//! Everything that does not touch a toolkit lives in `guinea-app` and
-//! `guinea-core`; this crate is where they meet windows-reactor.
+//! An application depends on this crate and nothing else. The backend appears
+//! in exactly two items here - [`backend`] and [`Backend`] - and `routes!`
+//! targets them, so swapping toolkits is a change to this file rather than to
+//! the application.
 
-mod dispatcher;
-mod run;
+pub use guinea_router::{headless, router};
+pub use guinea_winui as winui;
 
-pub mod headless;
-pub mod router;
-pub mod winui;
+/// The backend this build renders with, as a module and as a type.
+pub use guinea_winui as backend;
+pub type Backend = guinea_winui::WinUi;
 
-/// The backend this build renders with, as a module and as a type. `routes!`
-/// targets these, so an application names the concrete backend nowhere - and
-/// a second backend is a change to these two lines.
-pub use winui as backend;
-pub type Backend = winui::WinUi;
-
-pub use run::run;
+pub use guinea_winui::run;
 
 pub use guinea_app::{app, feature, lifecycle_tracker};
 pub use guinea_app::timers as reactor;

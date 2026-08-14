@@ -402,6 +402,8 @@ dependencies = [
  "guinea-codegen",
  "guinea-core",
  "guinea-meta",
+ "guinea-router",
+ "guinea-winui",
  "raw-window-handle",
  "serde",
  "serde_json",
@@ -543,6 +545,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "guinea-router"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "guinea-app",
+ "guinea-core",
+ "tracing",
+]
+
+[[package]]
 name = "guinea-trace"
 version = "0.1.0"
 dependencies = [
@@ -562,6 +574,17 @@ source = "git+https://github.com/uniproc-dev/guinea-plugins?rev=38cb363#38cb3633
 dependencies = [
  "tracing",
  "windows-canvas",
+ "windows-reactor",
+]
+
+[[package]]
+name = "guinea-winui"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "guinea-app",
+ "guinea-core",
+ "guinea-router",
  "windows-reactor",
 ]
 
