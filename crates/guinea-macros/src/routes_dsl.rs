@@ -280,20 +280,14 @@ pub fn routes_impl(input: TokenStream1) -> TokenStream1 {
         let const_name = format_ident!("__routes_chain_{}_{}", enum_ident, ident);
         let leaf_ty = &leaf.ty;
         let ancestor_entries = leaf.ancestors.iter().map(|ty| {
-            quote! {
-                #guinea::router::layout_entry::<#guinea::Backend, #ty>(
-                    #guinea::winui::mount_layout::<#ty>,
-                )
-            }
+            quote! { #guinea::backend::layout_entry::<#ty>() }
         });
         let len = leaf.ancestors.len() + 1;
         quote! {
             #[allow(non_upper_case_globals)]
             const #const_name: [#guinea::router::SegmentEntry<#guinea::Backend>; #len] = [
                 #(#ancestor_entries,)*
-                #guinea::router::segment_entry::<#guinea::Backend, #leaf_ty>(
-                    #guinea::winui::mount_page::<#leaf_ty>,
-                ),
+                #guinea::backend::segment_entry::<#leaf_ty>(),
             ];
         }
     });

@@ -7,29 +7,71 @@ use std::rc::Rc;
 
 use guinea_core::scope::Reducer;
 
+use crate::feature::FeatureInitContext;
 use crate::router::{
-    Layout, NavigateHandle, Page, RouteChain, RouteSink, Router, SegmentProps, ToUri, Ui,
+    NavigateHandle, RouteChain, RouteSink, Router, SegmentEntry, SegmentProps, ToUri, Ui,
     single_entry_chain,
 };
+use crate::uri::AppUri;
 
 /// windows-reactor as a [`Ui`].
 pub struct WinUi;
 
 impl Ui for WinUi {
     type View = windows_reactor::Element;
-    type PageCx<'a> = PageCx<'a>;
-    type LayoutCx<'a> = LayoutCx<'a>;
 }
 
-pub fn mount_page<P: Page<WinUi>>(props: SegmentProps<WinUi>) -> windows_reactor::Element {
+/// A leaf of the route tree.
+///
+/// Declared by the backend, not the router: what a view is handed and what it
+/// returns differ per toolkit, and there is nothing useful left once you take
+/// the difference out.
+pub trait Page: 'static {
+    /// When `true`, the router keeps this page's reducer states in memory
+    /// while the page is not mounted. The page's scope (and therefore its
+    /// actors) is still torn down, but when the user returns the UI will see
+    /// the last cached state immediately instead of starting from defaults.
+    const CACHE_STATE_IN_MEMORY: bool = false;
+
+    fn install(_ctx: &FeatureInitContext, _uri: &AppUri) -> anyhow::Result<()> {
+        Ok(())
+    }
+
+    fn view(cx: &mut PageCx) -> windows_reactor::Element;
+}
+
+/// A branch of the route tree: renders its own chrome and its child through
+/// [`LayoutCx::outlet`].
+pub trait Layout: 'static {
+    fn install(_ctx: &FeatureInitContext, _uri: &AppUri) -> anyhow::Result<()> {
+        Ok(())
+    }
+
+    fn view(cx: &mut LayoutCx) -> windows_reactor::Element;
+}
+
+pub const fn segment_entry<P: Page>() -> SegmentEntry<WinUi> {
+    SegmentEntry::new(
+        TypeId::of::<P>,
+        P::install,
+        mount_page::<P>,
+        P::CACHE_STATE_IN_MEMORY,
+    )
+}
+
+pub const fn layout_entry<L: Layout>() -> SegmentEntry<WinUi> {
+    SegmentEntry::new(TypeId::of::<L>, L::install, mount_layout::<L>, false)
+}
+
+pub fn mount_page<P: Page>(props: SegmentProps<WinUi>) -> windows_reactor::Element {
     windows_reactor::component(render_page::<P>, props)
 }
 
-pub fn mount_layout<L: Layout<WinUi>>(props: SegmentProps<WinUi>) -> windows_reactor::Element {
+pub fn mount_layout<L: Layout>(props: SegmentProps<WinUi>) -> windows_reactor::Element {
     windows_reactor::component(render_layout::<L>, props)
 }
 
-fn render_page<P: Page<WinUi>>(
+fn render_page<P: Page>(
     props: &SegmentProps<WinUi>,
     cx: &mut windows_reactor::RenderCx,
 ) -> windows_reactor::Element {
@@ -39,7 +81,7 @@ fn render_page<P: Page<WinUi>>(
     })
 }
 
-fn render_layout<L: Layout<WinUi>>(
+fn render_layout<L: Layout>(
     props: &SegmentProps<WinUi>,
     cx: &mut windows_reactor::RenderCx,
 ) -> windows_reactor::Element {
@@ -50,8 +92,8 @@ fn render_layout<L: Layout<WinUi>>(
 }
 
 /// A one-segment chain for a page mounted without a route tree.
-pub fn page_chain<P: Page<WinUi>>() -> &'static [crate::router::SegmentEntry<WinUi>] {
-    single_entry_chain::<WinUi, P>(mount_page::<P>)
+pub fn page_chain<P: Page>() -> &'static [SegmentEntry<WinUi>] {
+    single_entry_chain(segment_entry::<P>())
 }
 
 fn nav_context<R: 'static>() -> windows_reactor::Context<Option<NavigateHandle<WinUi, R>>> {
@@ -312,7 +354,7 @@ mod tests {
         }
     }
 
-    impl Page<WinUi> for Processes {
+    impl Page for Processes {
         fn install(ctx: &FeatureInitContext, uri: &AppUri) -> anyhow::Result<()> {
             install_processes(ctx, uri)
         }
@@ -339,7 +381,7 @@ mod tests {
 
     struct NeedsAService;
 
-    impl Page<WinUi> for NeedsAService {
+    impl Page for NeedsAService {
         fn install(ctx: &FeatureInitContext, _uri: &AppUri) -> anyhow::Result<()> {
             let greeting = ctx.require::<Greeting>()?;
             assert_eq!(greeting.0, "hello");
@@ -365,7 +407,7 @@ mod tests {
         let uri = AppUri::parse("/ubuntu/processes").unwrap();
 
         router
-            .activate::<NeedsAService>(&uri, mount_page::<NeedsAService>)
+            .activate(&uri, page_chain::<NeedsAService>())
             .expect("the page's install must find the service the plugin provided");
     }
 
@@ -376,7 +418,7 @@ mod tests {
         let uri = AppUri::parse("/ubuntu/processes").unwrap();
 
         let err = router
-            .activate::<NeedsAService>(&uri, mount_page::<NeedsAService>)
+            .activate(&uri, page_chain::<NeedsAService>())
             .map(|_| ())
             .expect_err("nothing provided the service");
 
@@ -435,7 +477,7 @@ mod tests {
         let router = Router::<WinUi>::new(token);
         let uri = AppUri::parse("/ubuntu/processes").unwrap();
 
-        let scope = router.activate::<Processes>(&uri, mount_page::<Processes>).expect("activate");
+        let scope = router.activate(&uri, page_chain::<Processes>()).expect("activate");
         assert!(router.active_scope().is_some());
 
         // install already ran (synchronously, inside activate) and seeded state.
@@ -464,7 +506,7 @@ mod tests {
         let token = UiThreadToken::dangerously_create_token_unchecked();
         let router = Router::<WinUi>::new(token);
         let uri = AppUri::parse("/ubuntu/processes").unwrap();
-        let scope = router.activate::<Processes>(&uri, mount_page::<Processes>).expect("activate");
+        let scope = router.activate(&uri, page_chain::<Processes>()).expect("activate");
 
         let rerender_count = Rc::new(std::cell::Cell::new(0));
         let count_for_callback = rerender_count.clone();
@@ -524,7 +566,7 @@ mod tests {
     }
 
     struct ProcsTab;
-    impl Layout<WinUi> for ProcsTab {
+    impl Layout for ProcsTab {
         fn install(ctx: &FeatureInitContext, _uri: &AppUri) -> anyhow::Result<()> {
             let count = ctx.scope.peek::<TabsReducer>().map_or(0, |s| s.borrow().install_count);
             ctx.scope.push::<TabsReducer>(count + 1);
@@ -536,7 +578,7 @@ mod tests {
     }
 
     struct ServicesLeaf;
-    impl Page<WinUi> for ServicesLeaf {
+    impl Page for ServicesLeaf {
         fn view(cx: &mut PageCx<'_>) -> windows_reactor::Element {
             let _ = cx;
             windows_reactor::Element::default()
@@ -550,12 +592,12 @@ mod tests {
     }
 
     const PROCESSES_CHAIN: [SegmentEntry<WinUi>; 2] = [
-        layout_entry::<WinUi, ProcsTab>(mount_layout::<ProcsTab>),
-        segment_entry::<WinUi, Processes>(mount_page::<Processes>),
+        layout_entry::<ProcsTab>(),
+        segment_entry::<Processes>(),
     ];
     const SERVICES_CHAIN: [SegmentEntry<WinUi>; 2] = [
-        layout_entry::<WinUi, ProcsTab>(mount_layout::<ProcsTab>),
-        segment_entry::<WinUi, ServicesLeaf>(mount_page::<ServicesLeaf>),
+        layout_entry::<ProcsTab>(),
+        segment_entry::<ServicesLeaf>(),
     ];
 
     impl RouteChain<WinUi> for TabRoute {
@@ -664,7 +706,7 @@ mod tests {
         use std::any::TypeId;
 
         struct Services;
-        impl Page<WinUi> for Services {
+        impl Page for Services {
             fn view(cx: &mut PageCx<'_>) -> windows_reactor::Element {
                 let _ = cx;
                 windows_reactor::Element::default()
@@ -724,7 +766,7 @@ mod tests {
         // variant or constant, found struct variant"). Every call site must
         // consistently use the same (struct-style) shape.
         struct Home;
-        impl Page<WinUi> for Home {
+        impl Page for Home {
             fn view(cx: &mut PageCx<'_>) -> windows_reactor::Element {
                 let _ = cx;
                 windows_reactor::Element::default()
@@ -802,7 +844,7 @@ mod tests {
         }
 
         struct ProbePage;
-        impl Page<WinUi> for ProbePage {
+        impl Page for ProbePage {
             fn install(ctx: &FeatureInitContext, _uri: &AppUri) -> anyhow::Result<()> {
                 PROBE_DROPPED.with(|d| *d.borrow_mut() = false);
                 let addr = ctx.spawn_actor(ProbeActor {
@@ -822,14 +864,14 @@ mod tests {
         }
 
         struct OtherPage;
-        impl Page<WinUi> for OtherPage {
+        impl Page for OtherPage {
             fn view(_cx: &mut PageCx<'_>) -> windows_reactor::Element {
                 windows_reactor::Element::default()
             }
         }
 
         struct ProbeLayout;
-        impl Layout<WinUi> for ProbeLayout {
+        impl Layout for ProbeLayout {
             fn view(cx: &mut LayoutCx<'_>) -> windows_reactor::Element {
                 cx.outlet()
             }

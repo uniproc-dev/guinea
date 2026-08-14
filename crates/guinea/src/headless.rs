@@ -7,14 +7,53 @@
 
 use guinea_core::scope::Reducer;
 
-use crate::router::{Layout, Page, SegmentEntry, SegmentProps, Ui, single_entry_chain};
+use crate::feature::FeatureInitContext;
+use crate::router::{SegmentEntry, SegmentProps, Ui, single_entry_chain};
+use crate::uri::AppUri;
 
 pub struct Headless;
 
 impl Ui for Headless {
     type View = ();
-    type PageCx<'a> = HeadlessCx;
-    type LayoutCx<'a> = HeadlessCx;
+}
+
+/// A leaf, in a backend that renders nothing. Note how little it has in common
+/// with `winui::Page` beyond the name - which is the reason neither of them
+/// belongs in the router.
+pub trait Page: 'static {
+    const CACHE_STATE_IN_MEMORY: bool = false;
+
+    fn install(_ctx: &FeatureInitContext, _uri: &AppUri) -> anyhow::Result<()> {
+        Ok(())
+    }
+
+    fn view(cx: &mut HeadlessCx);
+}
+
+pub trait Layout: 'static {
+    fn install(_ctx: &FeatureInitContext, _uri: &AppUri) -> anyhow::Result<()> {
+        Ok(())
+    }
+
+    fn view(cx: &mut HeadlessCx);
+}
+
+pub const fn segment_entry<P: Page>() -> SegmentEntry<Headless> {
+    SegmentEntry::new(
+        std::any::TypeId::of::<P>,
+        P::install,
+        mount_page::<P>,
+        P::CACHE_STATE_IN_MEMORY,
+    )
+}
+
+pub const fn layout_entry<L: Layout>() -> SegmentEntry<Headless> {
+    SegmentEntry::new(
+        std::any::TypeId::of::<L>,
+        L::install,
+        mount_layout::<L>,
+        false,
+    )
 }
 
 /// What a headless view gets: the segment it belongs to, and nothing else.
@@ -39,16 +78,16 @@ impl HeadlessCx {
     }
 }
 
-pub fn mount_page<P: Page<Headless>>(props: SegmentProps<Headless>) {
+pub fn mount_page<P: Page>(props: SegmentProps<Headless>) {
     P::view(&mut HeadlessCx { props })
 }
 
-pub fn mount_layout<L: Layout<Headless>>(props: SegmentProps<Headless>) {
+pub fn mount_layout<L: Layout>(props: SegmentProps<Headless>) {
     L::view(&mut HeadlessCx { props })
 }
 
-pub fn page_chain<P: Page<Headless>>() -> &'static [SegmentEntry<Headless>] {
-    single_entry_chain::<Headless, P>(mount_page::<P>)
+pub fn page_chain<P: Page>() -> &'static [SegmentEntry<Headless>] {
+    single_entry_chain(segment_entry::<P>())
 }
 
 #[cfg(test)]
@@ -72,7 +111,7 @@ mod tests {
 
     struct Page1;
 
-    impl Page<Headless> for Page1 {
+    impl Page for Page1 {
         fn install(ctx: &FeatureInitContext, _uri: &AppUri) -> anyhow::Result<()> {
             ctx.port::<Counter>()(1);
             Ok(())
@@ -91,7 +130,7 @@ mod tests {
         let uri = AppUri::parse("/anything").unwrap();
 
         let scope = router
-            .activate::<Page1>(&uri, mount_page::<Page1>)
+            .activate(&uri, page_chain::<Page1>())
             .expect("activate");
 
         assert_eq!(scope.state::<Counter>().borrow().installs, 1);

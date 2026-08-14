@@ -1,7 +1,7 @@
 use guinea::feature::FeatureInitContext;
 use guinea_plugin_l10n::{Localization, ui::use_l10n};
-use guinea::router::Layout;
-use guinea::winui::{LayoutCx, UseNavigate};
+use guinea::winui::UseNavigate;
+use guinea::winui::{Layout, LayoutCx};
 use guinea::uri::AppUri;
 use windows_reactor::{Element, ReactorWindow, button, hstack, text_block, vstack};
 
@@ -12,7 +12,7 @@ use super::contracts::TabsReducer;
 
 pub struct TabsLayout;
 
-impl Layout<guinea::Backend> for TabsLayout {
+impl Layout for TabsLayout {
     fn install(ctx: &FeatureInitContext, uri: &AppUri) -> anyhow::Result<()> {
         super::install::install(ctx, uri)
     }

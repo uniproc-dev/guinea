@@ -18,40 +18,10 @@ use crate::uri::AppUri;
 /// toolkit, and each backend would then be forced to fake the parts that do
 /// not fit its model.
 pub trait Ui: Sized + 'static {
-    /// What a view produces: an element tree for a reconciler, a deferred
-    /// draw closure for immediate mode, `()` for a backend that pushes into
+    /// What a view produces: an element tree for a reconciler, a deferred draw
+    /// closure for immediate mode, `()` for a backend that pushes into
     /// retained properties.
     type View: 'static;
-
-    /// What a page's `view` is handed. Separate from `LayoutCx` so a page
-    /// cannot call `outlet()` - it has no child to render.
-    type PageCx<'a>;
-
-    /// What a layout's `view` is handed.
-    type LayoutCx<'a>;
-}
-
-pub trait Page<U: Ui>: Sized + 'static {
-
-    /// When `true`, the router keeps this page's reducer states in memory
-    /// while the page is not mounted. The page's scope (and therefore its
-    /// actors) is still torn down, but when the user returns the UI will see
-    /// the last cached state immediately instead of starting from defaults.
-    const CACHE_STATE_IN_MEMORY: bool = false;
-
-    fn install(_ctx: &FeatureInitContext, _uri: &AppUri) -> anyhow::Result<()> {
-        Ok(())
-    }
-
-    fn view(cx: &mut U::PageCx<'_>) -> U::View;
-}
-
-pub trait Layout<U: Ui>: Sized + 'static {
-    fn install(_ctx: &FeatureInitContext, _uri: &AppUri) -> anyhow::Result<()> {
-        Ok(())
-    }
-
-    fn view(cx: &mut U::LayoutCx<'_>) -> U::View;
 }
 
 pub struct SegmentEntry<U: Ui> {
@@ -143,8 +113,8 @@ impl<U: Ui> SegmentProps<U> {
         owner.binding::<R>()
     }
 
-    /// Mounts the next segment down the chain. Layouts only - a page has no
-    /// child, which is why `Ui::PageCx` is a separate type.
+    /// Mounts the next segment down the chain. Backends expose this to layouts
+    /// only: a page is the end of the chain and has no child to render.
     pub fn outlet(&self) -> U::View {
         let next = self.cursor + 1;
         assert!(
@@ -159,21 +129,21 @@ impl<U: Ui> SegmentProps<U> {
     }
 }
 
-pub const fn segment_entry<U: Ui, P: Page<U>>(mount: fn(SegmentProps<U>) -> U::View) -> SegmentEntry<U> {
-    SegmentEntry {
-        type_id: TypeId::of::<P>,
-        install: P::install,
-        mount,
-        cache_state: P::CACHE_STATE_IN_MEMORY,
-    }
-}
-
-pub const fn layout_entry<U: Ui, L: Layout<U>>(mount: fn(SegmentProps<U>) -> U::View) -> SegmentEntry<U> {
-    SegmentEntry {
-        type_id: TypeId::of::<L>,
-        install: L::install,
-        mount,
-        cache_state: false,
+impl<U: Ui> SegmentEntry<U> {
+    /// Built by the backend, which is where "page" and "layout" are defined -
+    /// the router only needs something it can install and mount.
+    pub const fn new(
+        type_id: fn() -> TypeId,
+        install: fn(&FeatureInitContext, &AppUri) -> anyhow::Result<()>,
+        mount: fn(SegmentProps<U>) -> U::View,
+        cache_state: bool,
+    ) -> Self {
+        Self {
+            type_id,
+            install,
+            mount,
+            cache_state,
+        }
     }
 }
 
@@ -182,10 +152,8 @@ pub const fn layout_entry<U: Ui, L: Layout<U>>(mount: fn(SegmentProps<U>) -> U::
 /// Leaked rather than owned because `SegmentEntry` chains are `&'static` -
 /// `routes!` generates them as `const` arrays, and this is the path for a page
 /// activated without a route tree (tests, and `Router::activate`).
-pub(crate) fn single_entry_chain<U: Ui, P: Page<U>>(
-    mount: fn(SegmentProps<U>) -> U::View,
-) -> &'static [SegmentEntry<U>] {
-    Box::leak(Box::new([segment_entry::<U, P>(mount)])) as &'static [SegmentEntry<U>]
+pub fn single_entry_chain<U: Ui>(entry: SegmentEntry<U>) -> &'static [SegmentEntry<U>] {
+    Box::leak(Box::new([entry])) as &'static [SegmentEntry<U>]
 }
 
 pub trait RouteChain<U: Ui> {
@@ -373,9 +341,16 @@ impl<U: Ui> Router<U> {
         }
     }
     
-    pub fn activate<P: Page<U>>(&self, uri: &AppUri, mount: fn(SegmentProps<U>) -> U::View) -> anyhow::Result<Rc<Scope>> {
+    /// Installs a chain directly, outside any route tree - one segment, as a
+    /// rule. The backend builds the chain, since only it knows how a segment
+    /// is mounted.
+    pub fn activate(
+        &self,
+        uri: &AppUri,
+        chain: &'static [SegmentEntry<U>],
+    ) -> anyhow::Result<Rc<Scope>> {
         *self.prev_route.borrow_mut() = None;
-        self.install_chain(single_entry_chain::<U, P>(mount), uri)
+        self.install_chain(chain, uri)
     }
 
     pub fn navigate<R>(&self, route: R, uri: &AppUri) -> anyhow::Result<Rc<Scope>>

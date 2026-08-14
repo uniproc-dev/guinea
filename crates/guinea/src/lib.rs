@@ -11,8 +11,10 @@ pub mod headless;
 pub mod router;
 pub mod winui;
 
-/// The backend this build renders with. `routes!` targets this alias, so an
-/// application names it nowhere.
+/// The backend this build renders with, as a module and as a type. `routes!`
+/// targets these, so an application names the concrete backend nowhere - and
+/// a second backend is a change to these two lines.
+pub use winui as backend;
 pub type Backend = winui::WinUi;
 
 pub use run::run;

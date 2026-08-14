@@ -1,6 +1,5 @@
 use guinea::feature::FeatureInitContext;
-use guinea::router::Page;
-use guinea::winui::PageCx;
+use guinea::winui::{Page, PageCx};
 use guinea::uri::AppUri;
 use windows_reactor::{Element, text_block, title, vstack};
 
@@ -8,7 +7,7 @@ use super::contracts::ServicesReducer;
 
 pub struct Services;
 
-impl Page<guinea::Backend> for Services {
+impl Page for Services {
     fn install(ctx: &FeatureInitContext, uri: &AppUri) -> anyhow::Result<()> {
         super::install::install(ctx, uri)
     }
