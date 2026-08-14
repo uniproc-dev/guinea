@@ -169,6 +169,32 @@ pub trait ToUri {
 ///
 /// Data, not a trait: the agnostic half publishes the new route, the backend
 /// decides what publishing means.
+/// Keeps a route-change hook alive. Dropping it removes the hook.
+pub struct RouteHookHandle {
+    id: usize,
+    router: std::rc::Weak<dyn AnyRouter>,
+}
+
+impl Drop for RouteHookHandle {
+    fn drop(&mut self) {
+        if let Some(router) = self.router.upgrade() {
+            router.remove_route_hook(self.id);
+        }
+    }
+}
+
+/// The part of `Router` a hook handle needs, without its backend parameter -
+/// a handle should not have to name `U` just to unregister itself.
+pub trait AnyRouter {
+    fn remove_route_hook(&self, id: usize);
+}
+
+impl<U: Ui> AnyRouter for Router<U> {
+    fn remove_route_hook(&self, id: usize) {
+        self.route_hooks.borrow_mut().retain(|(this, _)| *this != id);
+    }
+}
+
 pub struct RouteSink<R> {
     publish: Rc<dyn Fn(R)>,
 }
@@ -324,7 +350,8 @@ pub struct Router<U: Ui> {
     /// Notified after a navigation is applied. Kept here rather than on the
     /// application, because a route change is something only a router has -
     /// an application without one has nothing to report.
-    route_hooks: RefCell<Vec<Box<dyn Fn(Option<&str>, &str)>>>,
+    route_hooks: RefCell<Vec<(usize, Rc<dyn Fn(Option<&str>, &str)>)>>,
+    next_hook_id: std::cell::Cell<usize>,
     last_route: RefCell<Option<String>>,
 }
 
@@ -342,21 +369,44 @@ impl<U: Ui> Router<U> {
             host,
             state_cache: RefCell::new(StateCache::new()),
             route_hooks: RefCell::new(Vec::new()),
+            next_hook_id: std::cell::Cell::new(0),
             last_route: RefCell::new(None),
         }
     }
 
     /// Runs `hook` after each navigation, with the previous path (`None` for
     /// the first) and the new one.
-    pub fn on_route_change(&self, hook: impl Fn(Option<&str>, &str) + 'static) {
-        self.route_hooks.borrow_mut().push(Box::new(hook));
+    ///
+    /// The hook lasts as long as the returned handle. A caller that wants it
+    /// for the life of the router can `std::mem::forget` it, but the usual
+    /// caller is a view that must stop listening when it unmounts.
+    #[must_use = "the hook is removed when the handle is dropped"]
+    pub fn on_route_change(
+        self: &Rc<Self>,
+        hook: impl Fn(Option<&str>, &str) + 'static,
+    ) -> RouteHookHandle {
+        let id = self.next_hook_id.get();
+        self.next_hook_id.set(id + 1);
+        self.route_hooks.borrow_mut().push((id, Rc::new(hook)));
+        RouteHookHandle {
+            id,
+            router: Rc::downgrade(&(self.clone() as Rc<dyn AnyRouter>)),
+        }
     }
 
     /// Announces a navigation to the hooks. Called by `NavigateHandle::to`
     /// once the router has accepted the route.
     pub fn route_changed(&self, to: &str) {
         let from = self.last_route.borrow().clone();
-        for hook in self.route_hooks.borrow().iter() {
+        // Cloned out before calling: a hook is free to navigate, and would
+        // otherwise re-enter this borrow.
+        let hooks: Vec<_> = self
+            .route_hooks
+            .borrow()
+            .iter()
+            .map(|(_, hook)| hook.clone())
+            .collect();
+        for hook in hooks {
             hook(from.as_deref(), to);
         }
         *self.last_route.borrow_mut() = Some(to.to_string());

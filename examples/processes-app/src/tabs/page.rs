@@ -1,6 +1,6 @@
 use guinea::feature::FeatureInitContext;
 use guinea_plugin_l10n::{Localization, ui::use_l10n};
-use guinea::winui::UseNavigate;
+use guinea::winui::{UseNavigate, UseRouteChange};
 use guinea::winui::{Layout, LayoutCx};
 use guinea::uri::AppUri;
 use windows_reactor::{Element, ReactorWindow, button, hstack, text_block, vstack};
@@ -19,6 +19,8 @@ impl Layout for TabsLayout {
 
     fn view(cx: &mut LayoutCx) -> Element {
         let (tabs, _) = cx.use_reducer::<TabsReducer>();
+        cx.use_route_change(|from, to| tracing::debug!(?from, to, "route"));
+
         let nav = cx.use_navigate::<Route>();
         let l10n = use_l10n::<L10n>(cx);
 

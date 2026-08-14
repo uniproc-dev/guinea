@@ -120,12 +120,12 @@ mod routing {
 
         let mut cx1 = windows_reactor::RenderCx::new(Rc::new(|| {}));
         cx1.begin_render();
-        let router_a = scoped_router(&mut cx1, token.clone(), None);
+        let router_a = scoped_router(&mut cx1, token.clone());
 
         // A second render pass of the *same* window (hook slots realign) -
         // must resolve the same Router, not a fresh one.
         cx1.begin_render();
-        let router_a2 = scoped_router(&mut cx1, token.clone(), None);
+        let router_a2 = scoped_router(&mut cx1, token.clone());
         assert!(
             Rc::ptr_eq(&router_a, &router_a2),
             "re-rendering the same window must reuse its own Router"
@@ -136,7 +136,7 @@ mod routing {
         // process-wide sharing.
         let mut cx2 = windows_reactor::RenderCx::new(Rc::new(|| {}));
         cx2.begin_render();
-        let router_b = scoped_router(&mut cx2, token, None);
+        let router_b = scoped_router(&mut cx2, token);
         assert!(
             !Rc::ptr_eq(&router_a, &router_b),
             "a different render root must get its own Router, not the first one's"

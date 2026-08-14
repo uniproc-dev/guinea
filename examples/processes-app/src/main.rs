@@ -10,7 +10,7 @@ mod tabs;
 use routes::Route;
 
 use guinea::app::GuineaApp;
-use guinea::winui::{Bootstrap, WindowExt};
+use guinea::winui::Bootstrap;
 
 fn initial_route() -> Route {
     Route::Processes {
@@ -18,8 +18,8 @@ fn initial_route() -> Route {
     }
 }
 
-pub(crate) fn root(cx: &mut windows_reactor::RenderCx) -> windows_reactor::Element {
-    guinea::winui::RouterRx::<Route>::render(cx, initial_route(), None)
+fn root(cx: &mut windows_reactor::RenderCx) -> windows_reactor::Element {
+    guinea::winui::RouterRx::<Route>::render(cx, initial_route())
 }
 
 fn main() -> anyhow::Result<()> {
@@ -43,8 +43,7 @@ fn main() -> anyhow::Result<()> {
         .run(
             windows_reactor::App::new()
                 .title("guinea · processes")
-                .inner_size(420.0, 420.0)
-                .router(initial_route())
-                .on_route_change(|from, to| tracing::debug!(?from, to, "route")),
+                .inner_size(420.0, 420.0),
+            root,
         )
 }

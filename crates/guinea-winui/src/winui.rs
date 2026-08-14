@@ -113,6 +113,30 @@ fn nav_context<R: 'static>() -> windows_reactor::Context<Option<NavigateHandle<W
     windows_reactor::Context { default: None, id }
 }
 
+/// A router in a context slot. Compared by identity - a `Router` has no
+/// meaningful equality, and two handles mean the same router or a different
+/// one.
+#[derive(Clone)]
+pub struct RouterHandle(Rc<Router<WinUi>>);
+
+impl PartialEq for RouterHandle {
+    fn eq(&self, other: &Self) -> bool {
+        Rc::ptr_eq(&self.0, &other.0)
+    }
+}
+
+/// The router itself, for hooks that configure it. One per backend rather
+/// than per route type: `Router<WinUi>` does not mention `R`.
+fn router_context() -> windows_reactor::Context<Option<RouterHandle>> {
+    thread_local! {
+        static ID: windows_reactor::ContextId = windows_reactor::ContextId::new();
+    }
+    windows_reactor::Context {
+        default: None,
+        id: ID.with(|id| *id),
+    }
+}
+
 fn route_context<R: 'static>() -> windows_reactor::Context<Option<R>> {
     thread_local! {
         static IDS: RefCell<std::collections::HashMap<TypeId, windows_reactor::ContextId>> =
@@ -131,19 +155,12 @@ fn route_context<R: 'static>() -> windows_reactor::Context<Option<R>> {
 pub fn scoped_router(
     cx: &mut windows_reactor::RenderCx,
     token: guinea_core::actor::UiThreadToken,
-    setup: Option<std::sync::Arc<dyn Fn(&Router<WinUi>) + Send + Sync>>,
 ) -> Rc<Router<WinUi>> {
     let slot = cx.use_ref(None::<Rc<Router<WinUi>>>);
     {
         let mut slot = slot.borrow_mut();
         if slot.is_none() {
-            let router = Router::new(token);
-            // Once per router, not once per render: hooks registered on every
-            // pass would fire as many times as this component has rendered.
-            if let Some(setup) = setup {
-                setup(&router);
-            }
-            *slot = Some(Rc::new(router));
+            *slot = Some(Rc::new(Router::new(token)));
         }
     }
     slot.borrow().clone().expect("just initialized above")
@@ -155,11 +172,7 @@ impl<R> RouterRx<R>
 where
     R: RouteChain<WinUi> + ToUri + Clone + PartialEq + 'static,
 {
-    pub fn render(
-        cx: &mut windows_reactor::RenderCx,
-        initial: R,
-        setup: Option<std::sync::Arc<dyn Fn(&Router<WinUi>) + Send + Sync>>,
-    ) -> windows_reactor::Element {
+    pub fn render(cx: &mut windows_reactor::RenderCx, initial: R) -> windows_reactor::Element {
         use windows_reactor::ElementExt;
 
         // Genuinely on the UI thread here - `root()` render callbacks always
@@ -167,7 +180,7 @@ where
         let token = guinea_core::actor::UiThreadToken::dangerously_create_token_unchecked();
 
         let (route, set_route) = cx.use_state(initial);
-        let router = scoped_router(cx, token, setup);
+        let router = scoped_router(cx, token);
         router.navigate(route.clone(), &route.to_uri()).expect("navigate");
 
         let nav = NavigateHandle::new(
@@ -178,6 +191,7 @@ where
             .render()
             .provide(&nav_context::<R>(), Some(nav))
             .provide(&route_context::<R>(), Some(route))
+            .provide(&router_context(), Some(RouterHandle(router.clone())))
     }
 }
 
@@ -185,40 +199,27 @@ where
 ///
 /// An application whose UI is not route-based passes its own component
 /// instead - `run` does not know about routing.
-pub struct RouterRoot<R> {
-    initial: R,
-    setup: Option<std::sync::Arc<dyn Fn(&Router<WinUi>) + Send + Sync>>,
+/// Subscribing to route changes from a view, the way any other effect is
+/// written: registered once, undone when the view unmounts.
+pub trait UseRouteChange {
+    /// Runs `hook` after each navigation, for as long as this view is
+    /// mounted. Panics if there is no router above - which is a wiring
+    /// mistake, not a state a running application can reach.
+    fn use_route_change(&mut self, hook: impl Fn(Option<&str>, &str) + 'static);
 }
 
-impl<R> RouterRoot<R> {
-    pub fn at(initial: R) -> Self {
-        Self {
-            initial,
-            setup: None,
-        }
-    }
+impl UseRouteChange for windows_reactor::RenderCx {
+    fn use_route_change(&mut self, hook: impl Fn(Option<&str>, &str) + 'static) {
+        let router = self.use_context(&router_context()).unwrap_or_else(|| {
+            panic!(
+                "use_route_change() found no router above this view - it has to be                  called from inside the tree a RouterRx renders"
+            )
+        });
 
-    /// Runs `setup` on the router, once, when it is created.
-    ///
-    /// This is where router-shaped configuration goes - `on_route_change`
-    /// above all. It is handed the router rather than declared on the
-    /// application, because an application need not have one.
-    pub fn setup(mut self, setup: impl Fn(&Router<WinUi>) + Send + Sync + 'static) -> Self {
-        self.setup = Some(std::sync::Arc::new(setup));
-        self
-    }
-}
-
-impl<R> windows_reactor::Component for RouterRoot<R>
-where
-    R: RouteChain<WinUi> + ToUri + Clone + PartialEq + 'static,
-{
-    fn render(
-        &self,
-        _props: &(),
-        cx: &mut windows_reactor::RenderCx,
-    ) -> windows_reactor::Element {
-        RouterRx::<R>::render(cx, self.initial.clone(), self.setup.clone())
+        self.use_effect_with_cleanup((), move || {
+            let handle = router.0.on_route_change(hook);
+            Some(move || drop(handle))
+        });
     }
 }
 

@@ -129,11 +129,11 @@ mod tests {
         use std::cell::RefCell;
 
         let token = UiThreadToken::dangerously_create_token_unchecked();
-        let router = Router::<Headless>::new(token);
+        let router = Rc::new(Router::<Headless>::new(token));
 
         let seen: Rc<RefCell<Vec<(Option<String>, String)>>> = Rc::new(RefCell::new(Vec::new()));
         let recorded = seen.clone();
-        router.on_route_change(move |from, to| {
+        let handle = router.on_route_change(move |from, to| {
             recorded
                 .borrow_mut()
                 .push((from.map(str::to_string), to.to_string()));
@@ -142,7 +142,12 @@ mod tests {
         router.route_changed("/a");
         router.route_changed("/b");
 
+        // Dropping the handle is what a view unmounting does.
+        drop(handle);
+        router.route_changed("/c");
+
         let seen = seen.borrow();
+        assert_eq!(seen.len(), 2, "the hook stopped when its handle was dropped");
         assert_eq!(seen[0], (None, "/a".to_string()));
         assert_eq!(seen[1], (Some("/a".to_string()), "/b".to_string()));
     }
