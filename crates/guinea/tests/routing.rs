@@ -83,7 +83,7 @@ mod routing {
     fn a_page_can_read_what_an_application_plugin_provided() {
         let token = UiThreadToken::dangerously_create_token_unchecked();
 
-        let runtime = guinea_app::app::App::new()
+        let runtime = guinea::app::GuineaApp::new()
             .plugin(GreetingPlugin)
             .install(token.clone())
             .expect("install");

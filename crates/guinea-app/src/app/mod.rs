@@ -28,15 +28,17 @@ pub type RouteHook = Box<dyn Fn(Option<&str>, &str) + Send>;
 /// The application, described before there is a UI thread to build it on.
 ///
 /// Everything registered here is replayed once by the backend adapter, on the
-/// UI thread, in registration order - see `guinea::run`.
+/// UI thread, in registration order. Named `GuineaApp` rather than `App`
+/// because every backend has an `App` of its own and the two appear in the
+/// same `main`.
 #[derive(Default)]
-pub struct App {
+pub struct GuineaApp {
     registrations: Vec<Registration>,
     ready: Vec<ReadyHook>,
     route_hooks: Vec<RouteHook>,
 }
 
-impl App {
+impl GuineaApp {
     pub fn new() -> Self {
         Self::default()
     }

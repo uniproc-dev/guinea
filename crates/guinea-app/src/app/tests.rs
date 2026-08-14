@@ -242,7 +242,7 @@ impl Plugin for GreetingPlugin {
 fn a_feature_installs_without_a_router_and_reaches_the_services() {
     let token = UiThreadToken::dangerously_create_token_unchecked();
 
-    let runtime = super::App::new()
+    let runtime = super::GuineaApp::new()
         .plugin(GreetingPlugin)
         .install(token.clone())
         .expect("install");

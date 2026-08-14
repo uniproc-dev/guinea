@@ -9,6 +9,9 @@ mod tabs;
 
 use routes::Route;
 
+use guinea::app::GuineaApp;
+use guinea::winui::{Bootstrap, RouterRoot};
+
 fn initial_route() -> Route {
     Route::Processes {
         context: "ubuntu".to_string(),
@@ -30,18 +33,18 @@ fn main() -> anyhow::Result<()> {
     let runtime = tokio::runtime::Runtime::new()?;
     let _guard = runtime.enter();
 
-    guinea::run(
-        guinea::app::App::new()
-            .plugin(guinea_plugin_store::StorePlugin::for_app(
-                "guinea-processes-app-example",
-                "settings",
-            ))
-            .plugin(guinea_plugin_l10n::L10nPlugin::<l10n::L10n>::new("en"))
-            .feature(startup::Startup)
-            .on_route_change(|from, to| tracing::debug!(?from, to, "route")),
-        windows_reactor::App::new()
-            .title("guinea · processes")
-            .inner_size(420.0, 420.0),
-        guinea::winui::RouterRoot::at(initial_route()),
-    )
+    GuineaApp::new()
+        .plugin(guinea_plugin_store::StorePlugin::for_app(
+            "guinea-processes-app-example",
+            "settings",
+        ))
+        .plugin(guinea_plugin_l10n::L10nPlugin::<l10n::L10n>::new("en"))
+        .feature(startup::Startup)
+        .on_route_change(|from, to| tracing::debug!(?from, to, "route"))
+        .run(
+            windows_reactor::App::new()
+                .title("guinea · processes")
+                .inner_size(420.0, 420.0),
+            RouterRoot::at(initial_route()),
+        )
 }

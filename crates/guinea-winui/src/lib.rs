@@ -5,5 +5,5 @@ mod dispatcher;
 mod run;
 mod winui;
 
-pub use run::run;
+pub use run::{Bootstrap, run};
 pub use winui::*;
