@@ -6,7 +6,7 @@ use std::rc::Rc;
 use guinea_core::binding::ReducerBinding;
 use guinea_core::scope::{Reducer, Scope};
 
-use guinea_app::feature::FeatureInitContext;
+use guinea_app::feature::{FeatureHost, FeatureInitContext};
 use guinea_core::uri::AppUri;
 
 /// A UI backend, described entirely by the types it works in.
@@ -316,29 +316,31 @@ impl StateCache {
 pub struct Router<U: Ui> {
     pub(crate) active: RefCell<Option<ActiveChain<U>>>,
     prev_route: RefCell<Option<Box<dyn Any>>>,
-    token: guinea_core::actor::UiThreadToken,
-    /// One `EventBus` per window - shared by every segment installed through
-    /// this `Router`, so actors in different features of the same window can
-    /// reach each other. See `FeatureInitContext::event_bus`.
-    event_bus: Rc<guinea_core::actor::event_bus::EventBus>,
-    debug_registry: Rc<guinea_core::actor::registry::DebugRegistry>,
+    /// Installing a feature is not a routing concern - the router asks the
+    /// host for a context and does the part that is its own: which scopes to
+    /// keep, which to tear down, and in what order.
+    host: FeatureHost,
     state_cache: RefCell<StateCache>,
-    /// Services provided by application-level plugins, handed to every feature
-    /// this router installs. Empty when there is no installed application.
-    services: guinea_core::SharedState,
 }
 
 impl<U: Ui> Router<U> {
     pub fn new(token: guinea_core::actor::UiThreadToken) -> Self {
+        Self::with_host(FeatureHost::new(token))
+    }
+
+    /// For a caller that already has a host - one window hosting more than a
+    /// single router, say, where features must share an event bus.
+    pub fn with_host(host: FeatureHost) -> Self {
         Self {
             active: RefCell::new(None),
             prev_route: RefCell::new(None),
-            token,
-            event_bus: Rc::new(guinea_core::actor::event_bus::EventBus::new()),
-            debug_registry: Rc::new(guinea_core::actor::registry::DebugRegistry::new()),
+            host,
             state_cache: RefCell::new(StateCache::new()),
-            services: guinea_app::app::app_services(),
         }
+    }
+
+    pub fn host(&self) -> &FeatureHost {
+        &self.host
     }
     
     /// Installs a chain directly, outside any route tree - one segment, as a
@@ -433,18 +435,13 @@ impl<U: Ui> Router<U> {
                 }
             }
 
-            let ctx = FeatureInitContext {
-                scope: scope.clone(),
-                // Snapshot of everything built so far this loop - root to
-                // this segment's immediate parent, never including `scope`
-                // itself. `inherit()` walks this to find an ancestor that
-                // already `install()`-ed the feature being asked for.
-                ancestors: Rc::from(scopes.clone()),
-                token: self.token.clone(),
-                event_bus: self.event_bus.clone(),
-                debug_registry: self.debug_registry.clone(),
-                services: self.services.clone(),
-            };
+            // The ancestors snapshot is everything built so far this loop -
+            // root to this segment's immediate parent, never including
+            // `scope` itself. `inherit()` walks it to find an ancestor that
+            // already `install()`-ed the feature being asked for.
+            let ctx = self
+                .host
+                .context(scope.clone(), Rc::from(scopes.clone()));
             (entry.install)(&ctx, uri)?;
             scopes.push(scope);
         }

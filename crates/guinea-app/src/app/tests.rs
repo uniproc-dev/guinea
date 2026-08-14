@@ -224,3 +224,53 @@ fn route_hooks_see_the_previous_and_current_path() {
     assert_eq!(seen[0], (None, "/a".to_string()));
     assert_eq!(seen[1], (Some("/a".to_string()), "/b".to_string()));
 }
+
+struct Greeting(&'static str);
+
+struct GreetingPlugin;
+
+impl Plugin for GreetingPlugin {
+    const ID: &'static str = "test.greeting";
+
+    fn build(self, app: &mut PluginBuilder) -> anyhow::Result<()> {
+        app.provide(Greeting("hello"));
+        Ok(())
+    }
+}
+
+#[test]
+fn a_feature_installs_without_a_router_and_reaches_the_services() {
+    let token = UiThreadToken::dangerously_create_token_unchecked();
+
+    let runtime = super::App::new()
+        .plugin(GreetingPlugin)
+        .install(token.clone())
+        .expect("install");
+    crate::app::install_runtime(runtime);
+
+    // No chain, no route, no backend: an application with a single window and
+    // nothing to navigate between still gets a scope and its services.
+    let host = crate::feature::FeatureHost::new(token);
+    let scope = host
+        .install(|ctx| {
+            assert_eq!(ctx.require::<Greeting>()?.0, "hello");
+            ctx.subscribe(|_: Ping| trace("pinged"));
+            Ok(())
+        })
+        .expect("install the feature");
+
+    host.event_bus().publish(Ping);
+    assert_eq!(taken(), vec!["pinged"]);
+
+    drop(scope);
+    host.event_bus().publish(Ping);
+    assert!(
+        taken().is_empty(),
+        "the subscription is owned by the scope and ends with it"
+    );
+}
+
+#[derive(Clone)]
+struct Ping;
+
+impl guinea_core::actor::Message for Ping {}
