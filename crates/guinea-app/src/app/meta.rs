@@ -19,9 +19,17 @@ pub struct AppMeta {
     pub identifier: &'static str,
     pub version: &'static str,
     pub publisher: &'static str,
+    /// What the window is called. Manifest data rather than a UI concern -
+    /// the backend that opens a window decides whether to use it.
+    pub window_title: &'static str,
+    /// The application icon, as the bytes of an `.ico`. Empty when the
+    /// manifest had none.
+    pub window_icon: &'static [u8],
 }
 
 impl AppMeta {
+    /// The four strings that identify an application. Window title defaults to
+    /// the name, and there is no icon - both are what a manifest adds.
     pub const fn new(
         name: &'static str,
         identifier: &'static str,
@@ -33,42 +41,43 @@ impl AppMeta {
             identifier,
             version,
             publisher,
+            window_title: name,
+            window_icon: &[],
         }
     }
 }
 
-/// Declares this application's identity from its manifest, in one call.
+/// This application's identity, read from its manifest.
 ///
 /// ```ignore
-/// guinea::app_meta!();               // once, at the crate root
-///
 /// windows_reactor::App::new()
-///     .title(WINDOW_TITLE)           // the manifest's, not a literal
+///     .title(app_meta!().window_title)
 ///     .render(root)
 ///
 /// fn root(cx: &mut RenderCx) -> Element {
-///     GuineaApp::new().meta(APP_META).bootstrap(cx);
+///     GuineaApp::new().meta(app_meta!()).bootstrap(cx);
 ///     ...
 /// }
 /// ```
 ///
-/// Expands to the constants `guinea-meta` generated at build time - `APP_NAME`,
-/// `APP_IDENTIFIER`, `APP_VERSION`, `APP_PUBLISHER`, `WINDOW_TITLE`,
-/// `WINDOW_ICON` - plus `APP_META` built from them. Nothing else needs
-/// including: the generated file is read from this crate's own `OUT_DIR`,
-/// because the macro expands where it is called.
+/// An expression, so it goes straight into the call that needs it. The
+/// constants `guinea-meta` generated at build time are included inside the
+/// macro's own block - it expands where it is called, so `OUT_DIR` is the
+/// application's, and nothing has to be declared at the crate root first.
 #[macro_export]
 macro_rules! app_meta {
-    () => {
-        include!(concat!(env!("OUT_DIR"), "/guinea_meta.rs"));
+    () => {{
+        mod generated {
+            include!(concat!(env!("OUT_DIR"), "/guinea_meta.rs"));
+        }
 
-        /// This application's identity, for `GuineaApp::meta`.
-        #[allow(dead_code)]
-        pub const APP_META: $crate::app::AppMeta = $crate::app::AppMeta::new(
-            APP_NAME,
-            APP_IDENTIFIER,
-            APP_VERSION,
-            APP_PUBLISHER,
-        );
-    };
+        $crate::app::AppMeta {
+            name: generated::APP_NAME,
+            identifier: generated::APP_IDENTIFIER,
+            version: generated::APP_VERSION,
+            publisher: generated::APP_PUBLISHER,
+            window_title: generated::WINDOW_TITLE,
+            window_icon: generated::WINDOW_ICON,
+        }
+    }};
 }

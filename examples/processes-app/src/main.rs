@@ -9,9 +9,8 @@ mod tabs;
 
 use routes::Route;
 
-guinea::app_meta!();
-
 use guinea::app::GuineaApp;
+use guinea::app_meta;
 use guinea::Bootstrap;
 
 fn initial_route() -> Route {
@@ -22,7 +21,7 @@ fn initial_route() -> Route {
 
 fn root(cx: &mut windows_reactor::RenderCx) -> windows_reactor::Element {
     GuineaApp::new()
-        .meta(APP_META)
+        .meta(app_meta!())
         .plugin(guinea_plugin_store::StorePlugin::for_app(
             "guinea-processes-app-example",
             "settings",
@@ -46,7 +45,7 @@ fn main() -> anyhow::Result<()> {
     let _guard = runtime.enter();
 
     windows_reactor::App::new()
-        .title(WINDOW_TITLE)
+        .title(app_meta!().window_title)
         .inner_size(420.0, 420.0)
         .on_exit(guinea::shutdown)
         .render(root)
