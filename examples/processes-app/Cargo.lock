@@ -522,6 +522,7 @@ dependencies = [
  "guinea-codegen",
  "guinea-core",
  "guinea-macros",
+ "guinea-meta-build",
  "guinea-plugin-l10n",
  "guinea-plugin-l10n-build",
  "guinea-plugin-store",

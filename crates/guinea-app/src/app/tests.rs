@@ -249,3 +249,57 @@ fn a_feature_installs_without_a_router_and_reaches_the_services() {
 struct Ping;
 
 impl guinea_core::actor::Message for Ping {}
+
+struct NeedsMeta;
+
+impl Plugin for NeedsMeta {
+    const ID: &'static str = "test.needs-meta";
+
+    fn build(self, app: &mut PluginBuilder) -> anyhow::Result<()> {
+        let meta = app.require::<super::AppMeta>()?;
+        trace(if meta.identifier == "dev.uniproc.test" {
+            "read the identifier"
+        } else {
+            "read something else"
+        });
+        Ok(())
+    }
+}
+
+#[test]
+fn a_plugin_reads_the_application_identity_instead_of_being_told_it() {
+    let token = UiThreadToken::dangerously_create_token_unchecked();
+
+    super::GuineaApp::new()
+        .meta(super::AppMeta::new(
+            "Test",
+            "dev.uniproc.test",
+            "1.2.3",
+            "uniproc",
+        ))
+        .plugin(NeedsMeta)
+        .install(token)
+        .expect("install");
+
+    assert_eq!(taken(), vec!["read the identifier"]);
+}
+
+#[test]
+fn meta_declared_after_a_plugin_is_still_there_for_it() {
+    let token = UiThreadToken::dangerously_create_token_unchecked();
+
+    // Order in the builder is registration order, not installation order -
+    // both are replayed before any plugin is built.
+    super::GuineaApp::new()
+        .plugin(NeedsMeta)
+        .meta(super::AppMeta::new(
+            "Test",
+            "dev.uniproc.test",
+            "1.2.3",
+            "uniproc",
+        ))
+        .install(token)
+        .expect("install");
+
+    assert_eq!(taken(), vec!["read the identifier"]);
+}

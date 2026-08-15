@@ -30,5 +30,6 @@ guinea-core = { path = "../../crates/guinea-core" }
 
 [build-dependencies]
 guinea-plugin-l10n-build = { git = "https://github.com/uniproc-dev/guinea-plugins", tag = "v0.1.2" }
+guinea-meta-build = { git = "https://github.com/uniproc-dev/guinea-meta", tag = "v0.1.0" }
 windows-reactor-setup = { git = "https://github.com/Tam1SH/windows-rs", rev = "d0fd3ce88" }
 guinea-codegen = { path = "../../crates/guinea-codegen" }

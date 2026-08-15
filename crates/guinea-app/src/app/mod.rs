@@ -1,4 +1,5 @@
 mod builder;
+mod meta;
 mod plugin;
 mod registry;
 mod runtime;
@@ -7,6 +8,7 @@ mod runtime;
 mod harness;
 
 pub use builder::{FeatureBuilder, PluginBuilder};
+pub use meta::AppMeta;
 pub use plugin::{AppFeature, Plugin};
 
 #[cfg(any(test, feature = "test-utils"))]
@@ -31,6 +33,7 @@ pub type ReadyHook = Box<dyn FnOnce(&mut FeatureBuilder) + Send>;
 /// same `main`.
 #[derive(Default)]
 pub struct GuineaApp {
+    meta: Option<AppMeta>,
     registrations: Vec<Registration>,
     ready: Vec<ReadyHook>,
 }
@@ -38,6 +41,18 @@ pub struct GuineaApp {
 impl GuineaApp {
     pub fn new() -> Self {
         Self::default()
+    }
+
+    /// Declares who this application is. Provided as a service, so any plugin
+    /// can ask for it with `require::<AppMeta>()` instead of being handed the
+    /// same strings by hand.
+    ///
+    /// Installed before anything else, so where it sits in the chain does not
+    /// matter - an application's identity is not a step in a sequence, and a
+    /// plugin declared above this call still sees it.
+    pub fn meta(mut self, meta: AppMeta) -> Self {
+        self.meta = Some(meta);
+        self
     }
 
     pub fn plugin<P: Plugin>(mut self, plugin: P) -> Self {
@@ -69,6 +84,13 @@ impl GuineaApp {
     /// [`install_runtime`] so teardown can find it.
     pub fn install(self, token: UiThreadToken) -> anyhow::Result<AppRuntime> {
         let mut builder = FeatureBuilder::new(token.clone(), AppLifecycle::new());
+
+        // First, whatever the order of the calls that built this: a plugin
+        // asking who the application is must not depend on where `meta()` sat
+        // in the chain.
+        if let Some(meta) = self.meta {
+            builder.provide(meta);
+        }
 
         for register in self.registrations {
             register(&mut builder)?;
