@@ -9,7 +9,7 @@ mod tabs;
 
 use routes::Route;
 
-guinea::meta::manifest!();
+guinea::app_meta!();
 
 use guinea::app::GuineaApp;
 use guinea::Bootstrap;
@@ -22,7 +22,7 @@ fn initial_route() -> Route {
 
 fn root(cx: &mut windows_reactor::RenderCx) -> windows_reactor::Element {
     GuineaApp::new()
-        .meta(guinea::app_meta!())
+        .meta(APP_META)
         .plugin(guinea_plugin_store::StorePlugin::for_app(
             "guinea-processes-app-example",
             "settings",

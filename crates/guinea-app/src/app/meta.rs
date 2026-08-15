@@ -37,26 +37,38 @@ impl AppMeta {
     }
 }
 
-/// Builds [`AppMeta`] from the constants `guinea_meta::manifest!()` generated
-/// in this crate.
+/// Declares this application's identity from its manifest, in one call.
 ///
 /// ```ignore
-/// guinea_meta::manifest!();          // once, at the crate root
+/// guinea::app_meta!();               // once, at the crate root
 ///
-/// GuineaApp::new()
-///     .meta(guinea::app_meta!())
-///     .plugin(StorePlugin::new())    // no application name to repeat
+/// windows_reactor::App::new()
+///     .title(WINDOW_TITLE)           // the manifest's, not a literal
+///     .render(root)
+///
+/// fn root(cx: &mut RenderCx) -> Element {
+///     GuineaApp::new().meta(APP_META).bootstrap(cx);
+///     ...
+/// }
 /// ```
 ///
-/// A plugin that needs any of it asks for `AppMeta` like any other service.
+/// Expands to the constants `guinea-meta` generated at build time - `APP_NAME`,
+/// `APP_IDENTIFIER`, `APP_VERSION`, `APP_PUBLISHER`, `WINDOW_TITLE`,
+/// `WINDOW_ICON` - plus `APP_META` built from them. Nothing else needs
+/// including: the generated file is read from this crate's own `OUT_DIR`,
+/// because the macro expands where it is called.
 #[macro_export]
 macro_rules! app_meta {
     () => {
-        $crate::app::AppMeta::new(
-            crate::APP_NAME,
-            crate::APP_IDENTIFIER,
-            crate::APP_VERSION,
-            crate::APP_PUBLISHER,
-        )
+        include!(concat!(env!("OUT_DIR"), "/guinea_meta.rs"));
+
+        /// This application's identity, for `GuineaApp::meta`.
+        #[allow(dead_code)]
+        pub const APP_META: $crate::app::AppMeta = $crate::app::AppMeta::new(
+            APP_NAME,
+            APP_IDENTIFIER,
+            APP_VERSION,
+            APP_PUBLISHER,
+        );
     };
 }
