@@ -4,7 +4,7 @@ use guinea::uri::AppUri;
 use guinea_widgets::chart::{HoverInfo, Interpolation, Series, line_chart};
 use guinea_widgets::color::{hex, hex_alpha};
 use windows_canvas::ColorF;
-use windows_reactor::{Element, ElementExt, text_block, title, vstack};
+use windows_reactor::{Element, LayoutExt, text_block, title, vstack};
 
 use super::contracts::MetricsReducer;
 
@@ -38,9 +38,11 @@ impl Page for Metrics {
         ];
 
         let hover_for_cb = hover_ref.clone();
-        let chart = line_chart(cx, series, move |info| {
+        // The chart hands back an erased `Element`, and size is a capability
+        // of the widget carrying it - so the size goes on the wrapper.
+        let chart = windows_reactor::border(line_chart(cx, series, move |info| {
             *hover_for_cb.borrow_mut() = info;
-        })
+        }))
         .width(380.0)
         .height(220.0);
 

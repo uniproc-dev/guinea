@@ -10,16 +10,16 @@ publish = false
 guinea = { path = "../../crates/guinea" }
 guinea-core = { path = "../../crates/guinea-core" }
 guinea-macros = { path = "../../crates/guinea-macros" }
-guinea-plugin-store = { git = "https://github.com/uniproc-dev/guinea-plugins", tag = "v0.1.2" }
-guinea-widgets = { git = "https://github.com/uniproc-dev/guinea-plugins", tag = "v0.1.2" }
-guinea-plugin-l10n = { git = "https://github.com/uniproc-dev/guinea-plugins", tag = "v0.1.2", features = ["winui"] }
+guinea-plugin-store = { git = "https://github.com/uniproc-dev/guinea-plugins", tag = "v0.2.3" }
+guinea-widgets = { git = "https://github.com/uniproc-dev/guinea-plugins", tag = "v0.2.3" }
+guinea-plugin-l10n = { git = "https://github.com/uniproc-dev/guinea-plugins", tag = "v0.2.3", features = ["winui"] }
 anyhow = "1.0"
 inventory = "0.3"
 tokio = { version = "1", features = ["time", "rt-multi-thread"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
-windows-reactor = { git = "https://github.com/Tam1SH/windows-rs", rev = "d0fd3ce88" }
-windows-canvas = { git = "https://github.com/Tam1SH/windows-rs", rev = "d0fd3ce88" }
+windows-reactor = { git = "https://github.com/Tam1SH/windows-rs", rev = "afb695ebe" }
+windows-canvas = { git = "https://github.com/Tam1SH/windows-rs", rev = "afb695ebe" }
 
 # The plugin depends on guinea from git; without this the example would build
 # two copies of guinea and the plugin's `PluginBuilder` would be a different
@@ -29,7 +29,7 @@ guinea = { path = "../../crates/guinea" }
 guinea-core = { path = "../../crates/guinea-core" }
 
 [build-dependencies]
-guinea-plugin-l10n-build = { git = "https://github.com/uniproc-dev/guinea-plugins", tag = "v0.1.2" }
+guinea-plugin-l10n-build = { git = "https://github.com/uniproc-dev/guinea-plugins", tag = "v0.2.3" }
 guinea-meta-build = { git = "https://github.com/uniproc-dev/guinea-meta", tag = "v0.1.0" }
-windows-reactor-setup = { git = "https://github.com/Tam1SH/windows-rs", rev = "d0fd3ce88" }
+windows-reactor-setup = { git = "https://github.com/Tam1SH/windows-rs", rev = "afb695ebe" }
 guinea-codegen = { path = "../../crates/guinea-codegen" }

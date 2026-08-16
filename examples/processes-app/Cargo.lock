@@ -13,12 +13,13 @@ dependencies = [
 
 [[package]]
 name = "amethystate"
-version = "0.12.0"
+version = "0.13.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c3a3e89a423df4d9ffa542d2768fd92f42fd5363aaf86332e895450b3f67c67d"
+checksum = "d55e0573887d500d9b206440f43278cda616bda8e537ff7a65bd7c27d9a83db9"
 dependencies = [
  "amethystate-core",
  "amethystate-macros",
+ "erased-serde",
  "etcetera",
  "futures-core",
  "inventory",
@@ -35,9 +36,9 @@ dependencies = [
 
 [[package]]
 name = "amethystate-core"
-version = "0.12.0"
+version = "0.13.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "dc508b9475f4c126e881aa366e71ad6467fec4e8bfd926dc5957d5fbd5f5301d"
+checksum = "9236e44b7eb1fb7cfd64c62b8545768bc5ad0de7a73352ea4cb2fcf90aefc5ed"
 dependencies = [
  "arc-swap",
  "inventory",
@@ -49,9 +50,9 @@ dependencies = [
 
 [[package]]
 name = "amethystate-macros"
-version = "0.12.0"
+version = "0.13.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "198559c96574dbb14c7ec01bba6f011992ae8f856fbc527c7241ae2719d4edaa"
+checksum = "9faa9d8ecec7fd1e34678da8df07b6af350de44ecf4b3b5f5fa7e72b1259a1d2"
 dependencies = [
  "amethystate-macros-core",
  "darling",
@@ -63,9 +64,9 @@ dependencies = [
 
 [[package]]
 name = "amethystate-macros-core"
-version = "0.12.0"
+version = "0.13.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "190800f682178147a22636641f207a69a4c66a489d5180674aebe32dad264ea2"
+checksum = "47a58a727dcf5b9720c80af4e1751aa2ba9227f1b97013f82ec503ae01b0ae85"
 dependencies = [
  "darling",
  "proc-macro2",
@@ -235,6 +236,17 @@ name = "equivalent"
 version = "1.0.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "877a4ace8713b0bcf2a4e7eec82529c029f1d0619886d18145fea96c3ffe5c0f"
+
+[[package]]
+name = "erased-serde"
+version = "0.4.10"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d2add8a07dd6a8d93ff627029c51de145e12686fbc36ecb298ac22e74cf02dec"
+dependencies = [
+ "serde",
+ "serde_core",
+ "typeid",
+]
 
 [[package]]
 name = "errno"
@@ -476,8 +488,8 @@ dependencies = [
 
 [[package]]
 name = "guinea-plugin-l10n"
-version = "0.1.0"
-source = "git+https://github.com/uniproc-dev/guinea-plugins?tag=v0.1.2#c133aa3ad713cb085674e96ae306b7a41816f1ef"
+version = "0.2.2"
+source = "git+https://github.com/uniproc-dev/guinea-plugins?tag=v0.2.3#96be772ccb82107d8c2907e32ef91c09edf7133d"
 dependencies = [
  "anyhow",
  "fluent-bundle",
@@ -492,8 +504,8 @@ dependencies = [
 
 [[package]]
 name = "guinea-plugin-l10n-build"
-version = "0.1.0"
-source = "git+https://github.com/uniproc-dev/guinea-plugins?tag=v0.1.2#c133aa3ad713cb085674e96ae306b7a41816f1ef"
+version = "0.2.2"
+source = "git+https://github.com/uniproc-dev/guinea-plugins?tag=v0.2.3#96be772ccb82107d8c2907e32ef91c09edf7133d"
 dependencies = [
  "fluent-syntax",
  "proc-macro2",
@@ -504,8 +516,8 @@ dependencies = [
 
 [[package]]
 name = "guinea-plugin-store"
-version = "0.12.0"
-source = "git+https://github.com/uniproc-dev/guinea-plugins?tag=v0.1.2#c133aa3ad713cb085674e96ae306b7a41816f1ef"
+version = "0.13.0"
+source = "git+https://github.com/uniproc-dev/guinea-plugins?tag=v0.2.3#96be772ccb82107d8c2907e32ef91c09edf7133d"
 dependencies = [
  "amethystate",
  "anyhow",
@@ -561,8 +573,8 @@ dependencies = [
 
 [[package]]
 name = "guinea-widgets"
-version = "0.1.0"
-source = "git+https://github.com/uniproc-dev/guinea-plugins?tag=v0.1.2#c133aa3ad713cb085674e96ae306b7a41816f1ef"
+version = "0.2.2"
+source = "git+https://github.com/uniproc-dev/guinea-plugins?tag=v0.2.3#96be772ccb82107d8c2907e32ef91c09edf7133d"
 dependencies = [
  "tracing",
  "windows-canvas",
@@ -1343,6 +1355,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "typeid"
+version = "1.0.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bc7d623258602320d5c55d1bc22793b57daff0ec7efc270ea7d55ce1d5f5471c"
+
+[[package]]
 name = "unic-langid"
 version = "0.9.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1500,7 +1518,7 @@ dependencies = [
 [[package]]
 name = "windows-canvas"
 version = "0.100.0"
-source = "git+https://github.com/Tam1SH/windows-rs?rev=d0fd3ce88#d0fd3ce88f14dea874101c226c6166261053d82e"
+source = "git+https://github.com/Tam1SH/windows-rs?rev=afb695ebe#afb695ebebe3c08db96e3e7cf45e8c804842fc71"
 dependencies = [
  "windows-core",
  "windows-numerics",
@@ -1510,7 +1528,7 @@ dependencies = [
 [[package]]
 name = "windows-collections"
 version = "0.100.0"
-source = "git+https://github.com/Tam1SH/windows-rs?rev=d0fd3ce88#d0fd3ce88f14dea874101c226c6166261053d82e"
+source = "git+https://github.com/Tam1SH/windows-rs?rev=afb695ebe#afb695ebebe3c08db96e3e7cf45e8c804842fc71"
 dependencies = [
  "windows-core",
 ]
@@ -1518,7 +1536,7 @@ dependencies = [
 [[package]]
 name = "windows-composition"
 version = "0.100.0"
-source = "git+https://github.com/Tam1SH/windows-rs?rev=d0fd3ce88#d0fd3ce88f14dea874101c226c6166261053d82e"
+source = "git+https://github.com/Tam1SH/windows-rs?rev=afb695ebe#afb695ebebe3c08db96e3e7cf45e8c804842fc71"
 dependencies = [
  "windows-collections",
  "windows-core",
@@ -1529,7 +1547,7 @@ dependencies = [
 [[package]]
 name = "windows-core"
 version = "0.100.0"
-source = "git+https://github.com/Tam1SH/windows-rs?rev=d0fd3ce88#d0fd3ce88f14dea874101c226c6166261053d82e"
+source = "git+https://github.com/Tam1SH/windows-rs?rev=afb695ebe#afb695ebebe3c08db96e3e7cf45e8c804842fc71"
 dependencies = [
  "windows-link 0.100.0",
  "windows-result",
@@ -1539,7 +1557,7 @@ dependencies = [
 [[package]]
 name = "windows-future"
 version = "0.100.0"
-source = "git+https://github.com/Tam1SH/windows-rs?rev=d0fd3ce88#d0fd3ce88f14dea874101c226c6166261053d82e"
+source = "git+https://github.com/Tam1SH/windows-rs?rev=afb695ebe#afb695ebebe3c08db96e3e7cf45e8c804842fc71"
 dependencies = [
  "windows-core",
  "windows-link 0.100.0",
@@ -1555,12 +1573,12 @@ checksum = "f0805222e57f7521d6a62e36fa9163bc891acd422f971defe97d64e70d0a4fe5"
 [[package]]
 name = "windows-link"
 version = "0.100.0"
-source = "git+https://github.com/Tam1SH/windows-rs?rev=d0fd3ce88#d0fd3ce88f14dea874101c226c6166261053d82e"
+source = "git+https://github.com/Tam1SH/windows-rs?rev=afb695ebe#afb695ebebe3c08db96e3e7cf45e8c804842fc71"
 
 [[package]]
 name = "windows-numerics"
 version = "0.100.0"
-source = "git+https://github.com/Tam1SH/windows-rs?rev=d0fd3ce88#d0fd3ce88f14dea874101c226c6166261053d82e"
+source = "git+https://github.com/Tam1SH/windows-rs?rev=afb695ebe#afb695ebebe3c08db96e3e7cf45e8c804842fc71"
 dependencies = [
  "windows-core",
  "windows-link 0.100.0",
@@ -1569,7 +1587,7 @@ dependencies = [
 [[package]]
 name = "windows-reactor"
 version = "0.0.0"
-source = "git+https://github.com/Tam1SH/windows-rs?rev=d0fd3ce88#d0fd3ce88f14dea874101c226c6166261053d82e"
+source = "git+https://github.com/Tam1SH/windows-rs?rev=afb695ebe#afb695ebebe3c08db96e3e7cf45e8c804842fc71"
 dependencies = [
  "rustc-hash",
  "windows-canvas",
@@ -1586,12 +1604,12 @@ dependencies = [
 [[package]]
 name = "windows-reactor-setup"
 version = "0.100.0"
-source = "git+https://github.com/Tam1SH/windows-rs?rev=d0fd3ce88#d0fd3ce88f14dea874101c226c6166261053d82e"
+source = "git+https://github.com/Tam1SH/windows-rs?rev=afb695ebe#afb695ebebe3c08db96e3e7cf45e8c804842fc71"
 
 [[package]]
 name = "windows-reference"
 version = "0.100.0"
-source = "git+https://github.com/Tam1SH/windows-rs?rev=d0fd3ce88#d0fd3ce88f14dea874101c226c6166261053d82e"
+source = "git+https://github.com/Tam1SH/windows-rs?rev=afb695ebe#afb695ebebe3c08db96e3e7cf45e8c804842fc71"
 dependencies = [
  "windows-core",
  "windows-time",
@@ -1600,7 +1618,7 @@ dependencies = [
 [[package]]
 name = "windows-result"
 version = "0.100.0"
-source = "git+https://github.com/Tam1SH/windows-rs?rev=d0fd3ce88#d0fd3ce88f14dea874101c226c6166261053d82e"
+source = "git+https://github.com/Tam1SH/windows-rs?rev=afb695ebe#afb695ebebe3c08db96e3e7cf45e8c804842fc71"
 dependencies = [
  "windows-link 0.100.0",
 ]
@@ -1608,7 +1626,7 @@ dependencies = [
 [[package]]
 name = "windows-strings"
 version = "0.100.0"
-source = "git+https://github.com/Tam1SH/windows-rs?rev=d0fd3ce88#d0fd3ce88f14dea874101c226c6166261053d82e"
+source = "git+https://github.com/Tam1SH/windows-rs?rev=afb695ebe#afb695ebebe3c08db96e3e7cf45e8c804842fc71"
 dependencies = [
  "windows-link 0.100.0",
 ]
@@ -1625,7 +1643,7 @@ dependencies = [
 [[package]]
 name = "windows-threading"
 version = "0.100.0"
-source = "git+https://github.com/Tam1SH/windows-rs?rev=d0fd3ce88#d0fd3ce88f14dea874101c226c6166261053d82e"
+source = "git+https://github.com/Tam1SH/windows-rs?rev=afb695ebe#afb695ebebe3c08db96e3e7cf45e8c804842fc71"
 dependencies = [
  "windows-link 0.100.0",
 ]
@@ -1633,7 +1651,7 @@ dependencies = [
 [[package]]
 name = "windows-time"
 version = "0.100.0"
-source = "git+https://github.com/Tam1SH/windows-rs?rev=d0fd3ce88#d0fd3ce88f14dea874101c226c6166261053d82e"
+source = "git+https://github.com/Tam1SH/windows-rs?rev=afb695ebe#afb695ebebe3c08db96e3e7cf45e8c804842fc71"
 dependencies = [
  "windows-core",
  "windows-link 0.100.0",
@@ -1642,7 +1660,7 @@ dependencies = [
 [[package]]
 name = "windows-window"
 version = "0.100.0"
-source = "git+https://github.com/Tam1SH/windows-rs?rev=d0fd3ce88#d0fd3ce88f14dea874101c226c6166261053d82e"
+source = "git+https://github.com/Tam1SH/windows-rs?rev=afb695ebe#afb695ebebe3c08db96e3e7cf45e8c804842fc71"
 dependencies = [
  "windows-core",
 ]

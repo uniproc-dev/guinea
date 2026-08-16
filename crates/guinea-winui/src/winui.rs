@@ -173,7 +173,7 @@ where
     R: RouteChain<WinUi> + ToUri + Clone + PartialEq + 'static,
 {
     pub fn render(cx: &mut windows_reactor::RenderCx, initial: R) -> windows_reactor::Element {
-        use windows_reactor::ElementExt;
+        use windows_reactor::ProvideExt;
 
         // Genuinely on the UI thread here - `root()` render callbacks always
         // are - which is what the token attests to.

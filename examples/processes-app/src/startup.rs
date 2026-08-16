@@ -6,7 +6,7 @@ use guinea::feature::{ContextActorExt, ContextReactorExt};
 use guinea_core::actor::Context;
 use guinea_core::messages;
 use guinea_macros::{actor, handler};
-use guinea_plugin_store::{Store, amethystate::Store as _};
+use guinea_plugin_store::Store;
 
 use crate::events::ProcessKilled;
 
