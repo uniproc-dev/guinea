@@ -35,13 +35,16 @@ const TICK: Duration = Duration::from_millis(50);
 
 /// Takes over the terminal and runs until `on_event` says to stop.
 ///
-/// `on_event` is handed every input event and the navigator, so routing stays
-/// the application's decision - the same split as the reactor backend, where
-/// keys are the application's business and the router only obeys.
+/// `on_event` is handed every input event, the navigator, and the router, so
+/// routing stays the application's decision - the same split as the reactor
+/// backend, where keys are the application's business and the router only
+/// obeys. The router comes along because a terminal has no widgets to hang
+/// handlers on: a key is the only way to reach a page's actions, and they are
+/// found through the scope the router installed.
 pub fn run<R, F>(app: GuineaApp, initial: R, mut on_event: F) -> anyhow::Result<()>
 where
     R: RouteChain<Tui> + ToUri + Clone + PartialEq + 'static,
-    F: FnMut(&Event, &NavigateHandle<Tui, R>) -> Flow,
+    F: FnMut(&Event, &NavigateHandle<Tui, R>, &Router<Tui>) -> Flow,
 {
     // Before any actor exists: the first thing a feature does during install
     // may already queue work back to this thread.
@@ -79,14 +82,14 @@ fn pump<R, F>(
 ) -> anyhow::Result<()>
 where
     R: RouteChain<Tui> + ToUri + Clone + PartialEq + 'static,
-    F: FnMut(&Event, &NavigateHandle<Tui, R>) -> Flow,
+    F: FnMut(&Event, &NavigateHandle<Tui, R>, &Router<Tui>) -> Flow,
 {
     loop {
         terminal.draw(|frame| router.render().draw(frame, frame.area()))?;
 
         if event::poll(TICK)? {
             let event = event::read()?;
-            if on_event(&event, nav) == Flow::Exit {
+            if on_event(&event, nav, router) == Flow::Exit {
                 return Ok(());
             }
         }

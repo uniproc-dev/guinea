@@ -1,5 +1,7 @@
 mod builder;
 mod meta;
+#[cfg(feature = "own-runtime")]
+mod runtime_host;
 mod plugin;
 mod registry;
 mod runtime;
@@ -83,6 +85,11 @@ impl GuineaApp {
     /// that is what `token` attests to - and must hand the result to
     /// [`install_runtime`] so teardown can find it.
     pub fn install(self, token: UiThreadToken) -> anyhow::Result<AppRuntime> {
+        // Before anything is built: a feature may spawn an actor while
+        // installing, and that needs a runtime on this thread.
+        #[cfg(feature = "own-runtime")]
+        runtime_host::ensure_entered()?;
+
         let mut builder = FeatureBuilder::new(token.clone(), AppLifecycle::new());
 
         // First, whatever the order of the calls that built this: a plugin

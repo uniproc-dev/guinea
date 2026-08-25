@@ -264,7 +264,7 @@ dependencies = [
 
 [[package]]
 name = "guinea"
-version = "0.2.1"
+version = "0.3.0"
 dependencies = [
  "anyhow",
  "guinea-app",
@@ -272,6 +272,7 @@ dependencies = [
  "guinea-core",
  "guinea-macros",
  "guinea-meta",
+ "guinea-ratatui",
  "guinea-router",
  "guinea-winui",
  "inventory",
@@ -282,7 +283,7 @@ dependencies = [
 
 [[package]]
 name = "guinea-app"
-version = "0.2.1"
+version = "0.3.0"
 dependencies = [
  "anyhow",
  "guinea-core",
@@ -293,7 +294,7 @@ dependencies = [
 
 [[package]]
 name = "guinea-codegen"
-version = "0.2.1"
+version = "0.3.0"
 dependencies = [
  "guinea-core",
  "guinea-meta-build",
@@ -310,7 +311,7 @@ dependencies = [
 
 [[package]]
 name = "guinea-core"
-version = "0.2.1"
+version = "0.3.0"
 dependencies = [
  "anyhow",
  "arc-swap",
@@ -328,7 +329,7 @@ dependencies = [
 
 [[package]]
 name = "guinea-macros"
-version = "0.2.1"
+version = "0.3.0"
 dependencies = [
  "guinea-codegen",
  "heck",
@@ -356,18 +357,21 @@ dependencies = [
 
 [[package]]
 name = "guinea-ratatui"
-version = "0.2.1"
+version = "0.3.0"
 dependencies = [
  "anyhow",
+ "crossterm",
  "guinea-app",
  "guinea-core",
+ "guinea-macros",
  "guinea-router",
  "ratatui",
+ "tracing",
 ]
 
 [[package]]
 name = "guinea-router"
-version = "0.2.1"
+version = "0.3.0"
 dependencies = [
  "anyhow",
  "guinea-app",
@@ -378,7 +382,7 @@ dependencies = [
 
 [[package]]
 name = "guinea-trace"
-version = "0.2.1"
+version = "0.3.0"
 dependencies = [
  "anyhow",
  "once_cell",
@@ -391,7 +395,7 @@ dependencies = [
 
 [[package]]
 name = "guinea-winui"
-version = "0.2.1"
+version = "0.3.0"
 dependencies = [
  "anyhow",
  "guinea-app",
@@ -1369,7 +1373,7 @@ checksum = "712e227841d057c1ee1cd2fb22fa7e5a5461ae8e48fa2ca79ec42cfc1931183f"
 [[package]]
 name = "windows-collections"
 version = "0.100.0"
-source = "git+https://github.com/Tam1SH/windows-rs?rev=afb695ebe#afb695ebebe3c08db96e3e7cf45e8c804842fc71"
+source = "git+https://github.com/Tam1SH/windows-rs?rev=63450fc98#63450fc98caa6168e9aa5ce09715d0903a4ddf16"
 dependencies = [
  "windows-core",
 ]
@@ -1377,7 +1381,7 @@ dependencies = [
 [[package]]
 name = "windows-composition"
 version = "0.100.0"
-source = "git+https://github.com/Tam1SH/windows-rs?rev=afb695ebe#afb695ebebe3c08db96e3e7cf45e8c804842fc71"
+source = "git+https://github.com/Tam1SH/windows-rs?rev=63450fc98#63450fc98caa6168e9aa5ce09715d0903a4ddf16"
 dependencies = [
  "windows-collections",
  "windows-core",
@@ -1388,7 +1392,7 @@ dependencies = [
 [[package]]
 name = "windows-core"
 version = "0.100.0"
-source = "git+https://github.com/Tam1SH/windows-rs?rev=afb695ebe#afb695ebebe3c08db96e3e7cf45e8c804842fc71"
+source = "git+https://github.com/Tam1SH/windows-rs?rev=63450fc98#63450fc98caa6168e9aa5ce09715d0903a4ddf16"
 dependencies = [
  "windows-link 0.100.0",
  "windows-result",
@@ -1398,7 +1402,7 @@ dependencies = [
 [[package]]
 name = "windows-future"
 version = "0.100.0"
-source = "git+https://github.com/Tam1SH/windows-rs?rev=afb695ebe#afb695ebebe3c08db96e3e7cf45e8c804842fc71"
+source = "git+https://github.com/Tam1SH/windows-rs?rev=63450fc98#63450fc98caa6168e9aa5ce09715d0903a4ddf16"
 dependencies = [
  "windows-core",
  "windows-link 0.100.0",
@@ -1414,12 +1418,12 @@ checksum = "f0805222e57f7521d6a62e36fa9163bc891acd422f971defe97d64e70d0a4fe5"
 [[package]]
 name = "windows-link"
 version = "0.100.0"
-source = "git+https://github.com/Tam1SH/windows-rs?rev=afb695ebe#afb695ebebe3c08db96e3e7cf45e8c804842fc71"
+source = "git+https://github.com/Tam1SH/windows-rs?rev=63450fc98#63450fc98caa6168e9aa5ce09715d0903a4ddf16"
 
 [[package]]
 name = "windows-numerics"
 version = "0.100.0"
-source = "git+https://github.com/Tam1SH/windows-rs?rev=afb695ebe#afb695ebebe3c08db96e3e7cf45e8c804842fc71"
+source = "git+https://github.com/Tam1SH/windows-rs?rev=63450fc98#63450fc98caa6168e9aa5ce09715d0903a4ddf16"
 dependencies = [
  "windows-core",
  "windows-link 0.100.0",
@@ -1428,7 +1432,7 @@ dependencies = [
 [[package]]
 name = "windows-reactor"
 version = "0.0.0"
-source = "git+https://github.com/Tam1SH/windows-rs?rev=afb695ebe#afb695ebebe3c08db96e3e7cf45e8c804842fc71"
+source = "git+https://github.com/Tam1SH/windows-rs?rev=63450fc98#63450fc98caa6168e9aa5ce09715d0903a4ddf16"
 dependencies = [
  "rustc-hash",
  "windows-collections",
@@ -1444,7 +1448,7 @@ dependencies = [
 [[package]]
 name = "windows-reference"
 version = "0.100.0"
-source = "git+https://github.com/Tam1SH/windows-rs?rev=afb695ebe#afb695ebebe3c08db96e3e7cf45e8c804842fc71"
+source = "git+https://github.com/Tam1SH/windows-rs?rev=63450fc98#63450fc98caa6168e9aa5ce09715d0903a4ddf16"
 dependencies = [
  "windows-core",
  "windows-time",
@@ -1453,7 +1457,7 @@ dependencies = [
 [[package]]
 name = "windows-result"
 version = "0.100.0"
-source = "git+https://github.com/Tam1SH/windows-rs?rev=afb695ebe#afb695ebebe3c08db96e3e7cf45e8c804842fc71"
+source = "git+https://github.com/Tam1SH/windows-rs?rev=63450fc98#63450fc98caa6168e9aa5ce09715d0903a4ddf16"
 dependencies = [
  "windows-link 0.100.0",
 ]
@@ -1461,7 +1465,7 @@ dependencies = [
 [[package]]
 name = "windows-strings"
 version = "0.100.0"
-source = "git+https://github.com/Tam1SH/windows-rs?rev=afb695ebe#afb695ebebe3c08db96e3e7cf45e8c804842fc71"
+source = "git+https://github.com/Tam1SH/windows-rs?rev=63450fc98#63450fc98caa6168e9aa5ce09715d0903a4ddf16"
 dependencies = [
  "windows-link 0.100.0",
 ]
@@ -1503,7 +1507,7 @@ dependencies = [
 [[package]]
 name = "windows-threading"
 version = "0.100.0"
-source = "git+https://github.com/Tam1SH/windows-rs?rev=afb695ebe#afb695ebebe3c08db96e3e7cf45e8c804842fc71"
+source = "git+https://github.com/Tam1SH/windows-rs?rev=63450fc98#63450fc98caa6168e9aa5ce09715d0903a4ddf16"
 dependencies = [
  "windows-link 0.100.0",
 ]
@@ -1511,7 +1515,7 @@ dependencies = [
 [[package]]
 name = "windows-time"
 version = "0.100.0"
-source = "git+https://github.com/Tam1SH/windows-rs?rev=afb695ebe#afb695ebebe3c08db96e3e7cf45e8c804842fc71"
+source = "git+https://github.com/Tam1SH/windows-rs?rev=63450fc98#63450fc98caa6168e9aa5ce09715d0903a4ddf16"
 dependencies = [
  "windows-core",
  "windows-link 0.100.0",

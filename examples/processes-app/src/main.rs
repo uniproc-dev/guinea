@@ -1,6 +1,7 @@
 //! The WinUI front end. Everything that is not drawing lives in
 //! `processes-core`, which the terminal front end links just the same.
 
+mod layouts;
 mod pages;
 mod routes;
 
@@ -19,10 +20,12 @@ fn initial_route() -> Route {
 fn root(cx: &mut windows_reactor::RenderCx) -> windows_reactor::Element {
     GuineaApp::new()
         .meta(guinea::app_meta!())
-        .plugin(guinea_plugin_store::StorePlugin::for_app(
-            "guinea-processes-app-example",
-            "settings",
-        ))
+        .plugin(
+            guinea_plugin_store::StorePlugin::for_app("guinea-processes-app-example", "settings")
+                // JSON, so both front ends can run at once: redb locks its
+                // file and the second one would refuse to start.
+                .backend(guinea_plugin_store::amethystate::store::builder::Backend::Json),
+        )
         .plugin(guinea_plugin_l10n::L10nPlugin::<processes_core::l10n::L10n>::new("en"))
         .feature(startup::Startup)
         .bootstrap(cx);
@@ -37,9 +40,6 @@ fn main() -> anyhow::Result<()> {
                 .unwrap_or_else(|_| "info,guinea=debug,processes_core=debug".into()),
         )
         .init();
-
-    let runtime = tokio::runtime::Runtime::new()?;
-    let _guard = runtime.enter();
 
     windows_reactor::App::new()
         .title(guinea::app_meta!().window_title)

@@ -1,0 +1,74 @@
+use guinea::feature::FeatureInitContext;
+use guinea::ratatui::{Layout, LayoutCx};
+use guinea::uri::AppUri;
+use ratatui::layout::{Constraint, Direction, Layout as Rows};
+use ratatui::style::{Modifier, Style};
+use ratatui::text::{Line, Span};
+use ratatui::widgets::{Block, Borders, Paragraph};
+
+use processes_core::tabs::contracts::TabsReducer;
+
+use crate::pages::metrics::Metrics;
+use crate::pages::processes::Processes;
+use crate::pages::services::Services;
+
+pub struct TabsLayout;
+
+impl Layout for TabsLayout {
+    fn install(ctx: &FeatureInitContext, uri: &AppUri) -> anyhow::Result<()> {
+        processes_core::tabs::install::install(ctx, uri)
+    }
+
+    fn view(cx: &mut LayoutCx<'_, '_>) {
+        let (state, _) = cx.read::<TabsReducer>();
+
+        let rows = Rows::default()
+            .direction(Direction::Vertical)
+            .constraints([
+                Constraint::Length(1),
+                Constraint::Min(0),
+                Constraint::Length(2),
+            ])
+            .split(cx.area());
+
+        let current = [
+            cx.child_is::<Processes>(),
+            cx.child_is::<Services>(),
+            cx.child_is::<Metrics>(),
+        ];
+        let names = ["processes", "services", "metrics"];
+        let tabs = Line::from(
+            names
+                .iter()
+                .zip(current)
+                .enumerate()
+                .flat_map(|(i, (name, selected))| {
+                    let style = if selected {
+                        Style::default().add_modifier(Modifier::REVERSED)
+                    } else {
+                        Style::default()
+                    };
+                    [
+                        Span::styled(format!(" {} {name} ", i + 1), style),
+                        Span::raw(" "),
+                    ]
+                })
+                .collect::<Vec<_>>(),
+        );
+        cx.frame().render_widget(Paragraph::new(tabs), rows[0]);
+
+        cx.outlet(rows[1]);
+
+        let killed = state
+            .last_killed
+            .as_deref()
+            .map(|name| format!(" · last {name}"))
+            .unwrap_or_default();
+        let status = Paragraph::new(format!(
+            "kills here {} · everywhere {}{killed}\n1/2/3 switch · k kill first · esc back · q quit",
+            state.kills_this_window, state.kills_all_windows,
+        ))
+        .block(Block::default().borders(Borders::TOP));
+        cx.frame().render_widget(status, rows[2]);
+    }
+}

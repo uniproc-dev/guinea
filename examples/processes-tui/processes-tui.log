@@ -1,0 +1,10 @@
+2026-08-25T08:58:25.586592Z  INFO amethystate::store::backend::text::store: initializing TextStore path=C:\Users\ignat\AppData\Roaming\guinea-processes-app-example\config\settings.json
+2026-08-25T08:58:25.594648Z  INFO processes_core::startup: started launches=4
+2026-08-25T08:58:25.595037Z DEBUG guinea_core::actor::event_bus: bus.subscribe_fn event="events::ProcessKilled"
+2026-08-25T08:58:25.595333Z DEBUG guinea_core::actor::event_bus: bus.subscribe_fn event="events::ProcessKilled"
+2026-08-25T08:58:25.595384Z DEBUG guinea_core::actor::event_bus: bus.subscribe_fn event="events::ProcessKilled"
+2026-08-25T08:58:25.595684Z DEBUG scope{scope="core.actor.send" op_id=1 correlation_id="6ca8ca8f-b28c-47a2-b2a4-dfbf6a2b58db" target_fields="" target=""}: guinea_core::actor::addr: actor.send actor="actor::ProcessActor" contracts::Refresh op_id=1 correlation_id="6ca8ca8f-b28c-47a2-b2a4-dfbf6a2b58db"
+2026-08-25T08:58:25.595757Z DEBUG scope{scope="core.actor.send" op_id=1 correlation_id="6ca8ca8f-b28c-47a2-b2a4-dfbf6a2b58db" target_fields="" target=""}: guinea_core::actor::envelope: actor.handle actor="actor::ProcessActor" contracts::Refresh op_id=1 correlation_id="6ca8ca8f-b28c-47a2-b2a4-dfbf6a2b58db"
+2026-08-25T08:58:30.626847Z DEBUG scope{scope="core.actor.send" op_id=2 correlation_id="97066f62-070e-46fa-ab6f-c434fa581dee" target_fields="" target=""}: guinea_core::actor::addr: actor.send actor="startup::Housekeeping" startup::Sweep op_id=2 correlation_id="97066f62-070e-46fa-ab6f-c434fa581dee"
+2026-08-25T08:58:30.626924Z DEBUG scope{scope="core.actor.send" op_id=2 correlation_id="97066f62-070e-46fa-ab6f-c434fa581dee" target_fields="" target=""}: guinea_core::actor::envelope: actor.handle actor="startup::Housekeeping" startup::Sweep op_id=2 correlation_id="97066f62-070e-46fa-ab6f-c434fa581dee"
+2026-08-25T08:58:30.626965Z DEBUG scope{scope="core.actor.send" op_id=2 correlation_id="97066f62-070e-46fa-ab6f-c434fa581dee" target_fields="" target=""}:actor.handle{actor="startup::Housekeeping" startup::Sweep op_id=2 correlation_id="97066f62-070e-46fa-ab6f-c434fa581dee"}: processes_core::startup: housekeeping sweep sweeps=1

@@ -13,8 +13,10 @@
 //! passes down whatever rectangle it wants the page to occupy.
 
 mod dispatcher;
+mod keys;
 mod run;
 
+pub use keys::pressed;
 pub use run::{Flow, run};
 
 use guinea_app::feature::FeatureInitContext;
@@ -172,6 +174,19 @@ impl<'b> LayoutCx<'_, 'b> {
     /// frame existed, and only here is it known where it belongs.
     pub fn outlet(&mut self, area: Rect) {
         self.props.outlet().draw(self.frame, area);
+    }
+
+    /// Whether the segment directly below is `P`.
+    ///
+    /// What a tab strip needs, and cheaper than it looks: the chain already
+    /// says which page is mounted, so highlighting the current tab needs
+    /// neither the route nor a copy of it in state - and a copy is a second
+    /// thing to keep in step.
+    pub fn child_is<P: 'static>(&self) -> bool {
+        self.props
+            .chain
+            .get(self.props.cursor + 1)
+            .is_some_and(|entry| (entry.type_id)() == std::any::TypeId::of::<P>())
     }
 }
 

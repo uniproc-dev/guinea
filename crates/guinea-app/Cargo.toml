@@ -10,6 +10,13 @@ anyhow.workspace = true
 tokio.workspace = true
 
 [features]
+default = ["own-runtime"]
+
+# Start (and enter) a tokio runtime during install, unless the application
+# already brought one. On by default: an application that does not spawn
+# anything pays for a runtime it never uses, which is cheaper than every
+# application repeating the same two lines - and one that has its own keeps it.
+own-runtime = []
 # `TestApp` - an application without a window, for crates that write plugins or
 # features out of tree and need to install them in a test.
 test-utils = []

@@ -19,8 +19,8 @@ inventory = "0.3"
 tokio = { version = "1", features = ["time", "rt-multi-thread"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
-windows-reactor = { git = "https://github.com/Tam1SH/windows-rs", rev = "afb695ebe" }
-windows-canvas = { git = "https://github.com/Tam1SH/windows-rs", rev = "afb695ebe" }
+windows-reactor = { git = "https://github.com/Tam1SH/windows-rs", rev = "63450fc98" }
+windows-canvas = { git = "https://github.com/Tam1SH/windows-rs", rev = "63450fc98" }
 
 # The plugin depends on guinea from git; without this the example would build
 # two copies of guinea and the plugin's `PluginBuilder` would be a different
@@ -32,16 +32,10 @@ guinea-core = { path = "../../crates/guinea-core" }
 # Temporary: looking at the header separator and the composition chart before
 # either is tagged.
 [patch."https://github.com/uniproc-dev/guinea-plugins"]
+guinea-plugin-store = { path = "../../../guinea-plugins/plugins/store" }
 guinea-widgets = { path = "../../../guinea-plugins/widgets" }
-
-# Temporary: the fork branch that moves Direct2D onto the lifted compositor.
-[patch."https://github.com/Tam1SH/windows-rs"]
-windows-reactor = { path = "../../../windows-rs-composition/crates/libs/reactor" }
-windows-canvas = { path = "../../../windows-rs-composition/crates/libs/canvas" }
-windows-composition = { path = "../../../windows-rs-composition/crates/libs/composition" }
-windows-reactor-setup = { path = "../../../windows-rs-composition/crates/libs/reactor-setup" }
 
 [build-dependencies]
 guinea-meta-build = { git = "https://github.com/uniproc-dev/guinea-meta", tag = "v0.1.0" }
-windows-reactor-setup = { git = "https://github.com/Tam1SH/windows-rs", rev = "afb695ebe" }
+windows-reactor-setup = { git = "https://github.com/Tam1SH/windows-rs", rev = "63450fc98" }
 guinea-codegen = { path = "../../crates/guinea-codegen" }

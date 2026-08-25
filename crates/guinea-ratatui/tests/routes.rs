@@ -107,3 +107,78 @@ fn a_route_still_round_trips_through_its_uri() {
     assert_eq!(route.to_uri(), AppUri::parse("/ubuntu/services").unwrap());
     assert_eq!(route.chain().len(), 2, "layout plus page");
 }
+
+/// A navigator over a route cell, the way `run` builds one.
+fn navigator() -> (
+    std::rc::Rc<Router<Tui>>,
+    guinea_router::router::NavigateHandle<Tui, Route>,
+    std::rc::Rc<std::cell::RefCell<Route>>,
+) {
+    use guinea_router::router::{NavigateHandle, RouteSink};
+
+    let token = UiThreadToken::dangerously_create_token_unchecked();
+    let router = std::rc::Rc::new(Router::<Tui>::new(token));
+    let here = Route::Processes {
+        host: "ubuntu".to_string(),
+    };
+    let cell = std::rc::Rc::new(std::cell::RefCell::new(here.clone()));
+    let nav = NavigateHandle::new(router.clone(), {
+        let cell = cell.clone();
+        RouteSink::new(move |next: Route| *cell.borrow_mut() = next)
+    });
+    router.navigate(here.clone(), &here.to_uri()).expect("first");
+    (router, nav, cell)
+}
+
+fn services() -> Route {
+    Route::Services {
+        host: "ubuntu".to_string(),
+    }
+}
+
+#[test]
+fn back_returns_to_where_it_came_from() {
+    let (_router, nav, here) = navigator();
+
+    assert!(!nav.can_go_back(), "nothing visited yet");
+    nav.to(services());
+    assert_eq!(*here.borrow(), services());
+
+    assert!(nav.back(), "there is somewhere to go");
+    assert_eq!(
+        *here.borrow(),
+        Route::Processes {
+            host: "ubuntu".to_string()
+        },
+        "back publishes the route too, not just installs it"
+    );
+}
+
+#[test]
+fn back_at_the_beginning_says_so_instead_of_moving() {
+    let (_router, nav, here) = navigator();
+    let before = here.borrow().clone();
+
+    assert!(!nav.back(), "nowhere to go");
+    assert_eq!(*here.borrow(), before, "and nothing moved");
+}
+
+#[test]
+fn forward_undoes_a_back_and_an_ordinary_move_discards_it() {
+    let (_router, nav, here) = navigator();
+
+    nav.to(services());
+    nav.back();
+    assert!(nav.can_go_forward());
+
+    assert!(nav.forward());
+    assert_eq!(*here.borrow(), services());
+
+    // Going somewhere new cuts off what was ahead - the same rule a browser
+    // follows, and for the same reason: that future no longer exists.
+    nav.back();
+    nav.to(Route::Processes {
+        host: "fedora".to_string(),
+    });
+    assert!(!nav.can_go_forward(), "the forward stack was cut");
+}

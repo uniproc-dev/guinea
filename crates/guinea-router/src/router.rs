@@ -268,7 +268,69 @@ where
     }
 
     pub fn to(&self, route: R) {
+        if let Some(current) = self.current() {
+            self.router.remember(Box::new(current.0), current.1);
+        }
+        self.go(route);
+    }
+
+    /// Back one step, if there is one. Reports whether it moved, so a key
+    /// handler can fall through to something else - closing a dialog, or
+    /// quitting - when there is nowhere to go.
+    pub fn back(&self) -> bool {
+        let leaving = self
+            .current()
+            .map(|(route, uri)| (Box::new(route) as Box<dyn Any>, uri));
+        let Some(entry) = self.router.take_back(leaving) else {
+            return false;
+        };
+        self.arrive(entry)
+    }
+
+    /// Forward one step, undoing a [`back`](Self::back).
+    pub fn forward(&self) -> bool {
+        let leaving = self
+            .current()
+            .map(|(route, uri)| (Box::new(route) as Box<dyn Any>, uri));
+        let Some(entry) = self.router.take_forward(leaving) else {
+            return false;
+        };
+        self.arrive(entry)
+    }
+
+    pub fn can_go_back(&self) -> bool {
+        self.router.can_go_back()
+    }
+
+    pub fn can_go_forward(&self) -> bool {
+        self.router.can_go_forward()
+    }
+
+    /// Where the router is now, as this handle's route type.
+    fn current(&self) -> Option<(R, AppUri)> {
+        let route = self.router.current_route::<R>()?;
         let uri = route.to_uri();
+        Some((route, uri))
+    }
+
+    fn arrive(&self, entry: Visited) -> bool {
+        let uri = entry.uri().clone();
+        let Some(route) = entry.route::<R>() else {
+            // Two route types on one router. Nothing in guinea builds that,
+            // and silently doing nothing beats navigating somewhere wrong.
+            tracing::warn!("history holds a route of another type; ignoring it");
+            return false;
+        };
+        self.go_at(route, uri);
+        true
+    }
+
+    fn go(&self, route: R) {
+        let uri = route.to_uri();
+        self.go_at(route, uri);
+    }
+
+    fn go_at(&self, route: R, uri: AppUri) {
         self.router.navigate(route.clone(), &uri).expect("navigate");
         self.router.route_changed(&uri.to_string());
         self.sink.publish(route);
@@ -359,9 +421,37 @@ impl StateCache {
     }
 }
 
+/// A place the application has been: the route itself, erased, and the path
+/// it produced.
+pub struct Visited {
+    route: Box<dyn Any>,
+    uri: AppUri,
+}
+
+impl Visited {
+    /// The route, if it is the type asked for. Anything else means two route
+    /// types shared one router, which nothing in guinea sets up.
+    pub fn route<R: 'static>(self) -> Option<R> {
+        self.route.downcast::<R>().ok().map(|route| *route)
+    }
+
+    pub fn uri(&self) -> &AppUri {
+        &self.uri
+    }
+}
+
 pub struct Router<U: Ui> {
     pub(crate) active: RefCell<Option<ActiveChain<U>>>,
     prev_route: RefCell<Option<Box<dyn Any>>>,
+    /// Where the application has been, and where it was pulled back from.
+    ///
+    /// Kept here rather than in the application because the browser is the
+    /// only shell that supplies a history: WinUI and a terminal have none, and
+    /// every one of them would otherwise grow the same stack next to the
+    /// router. Routes are held erased - the router never learns `R` - and
+    /// [`NavigateHandle`] downcasts them back on the way out.
+    back: RefCell<Vec<Visited>>,
+    forward: RefCell<Vec<Visited>>,
     /// Installing a feature is not a routing concern - the router asks the
     /// host for a context and does the part that is its own: which scopes to
     /// keep, which to tear down, and in what order.
@@ -386,6 +476,8 @@ impl<U: Ui> Router<U> {
         Self {
             active: RefCell::new(None),
             prev_route: RefCell::new(None),
+            back: RefCell::new(Vec::new()),
+            forward: RefCell::new(Vec::new()),
             host,
             state_cache: RefCell::new(StateCache::new()),
             route_hooks: RefCell::new(Vec::new()),
@@ -559,6 +651,52 @@ impl<U: Ui> Router<U> {
             .borrow()
             .as_ref()
             .and_then(|active| active.scopes.get(cursor).cloned())
+    }
+
+    /// The route the router is on, if it is the type asked for.
+    ///
+    /// The router keeps it erased - it never learns `R` - so this is the way
+    /// back to the typed route, and it is `None` before the first navigation.
+    pub fn current_route<R: Clone + 'static>(&self) -> Option<R> {
+        self.prev_route
+            .borrow()
+            .as_ref()
+            .and_then(|route| route.downcast_ref::<R>())
+            .cloned()
+    }
+
+    /// Records where the application is leaving from. Called by
+    /// [`NavigateHandle::to`]; a forward stack only survives until the next
+    /// ordinary navigation, exactly as a browser's does.
+    pub fn remember(&self, route: Box<dyn Any>, uri: AppUri) {
+        self.back.borrow_mut().push(Visited { route, uri });
+        self.forward.borrow_mut().clear();
+    }
+
+    /// Takes the previous entry, putting `leaving` on the forward stack.
+    pub fn take_back(&self, leaving: Option<(Box<dyn Any>, AppUri)>) -> Option<Visited> {
+        let entry = self.back.borrow_mut().pop()?;
+        if let Some((route, uri)) = leaving {
+            self.forward.borrow_mut().push(Visited { route, uri });
+        }
+        Some(entry)
+    }
+
+    /// Takes the next entry, putting `leaving` back on the history.
+    pub fn take_forward(&self, leaving: Option<(Box<dyn Any>, AppUri)>) -> Option<Visited> {
+        let entry = self.forward.borrow_mut().pop()?;
+        if let Some((route, uri)) = leaving {
+            self.back.borrow_mut().push(Visited { route, uri });
+        }
+        Some(entry)
+    }
+
+    pub fn can_go_back(&self) -> bool {
+        !self.back.borrow().is_empty()
+    }
+
+    pub fn can_go_forward(&self) -> bool {
+        !self.forward.borrow().is_empty()
     }
 
     /// The chain the active route installed, and the scopes it installed it
