@@ -17,6 +17,10 @@ use guinea_core::uri::AppUri;
 /// with methods here would have to name a common denominator of every
 /// toolkit, and each backend would then be forced to fake the parts that do
 /// not fit its model.
+#[diagnostic::on_unimplemented(
+    message = "`{Self}` is not a guinea backend",
+    note = "with more than one backend feature enabled there is no default one, so a route tree has to name it: `routes! {{ backend = guinea::winui::WinUi, .. }}` or `backend = guinea::ratatui::Tui`"
+)]
 pub trait Ui: Sized + 'static {
     /// What a view produces: an element tree for a reconciler, a deferred draw
     /// closure for immediate mode, `()` for a backend that pushes into

@@ -12,16 +12,18 @@ guinea-meta = { git = "https://github.com/uniproc-dev/guinea-meta", tag = "v0.1.
 
 # Nothing else: this crate is re-exports. Anything it appears to need is a
 # sign that something which belongs in a real crate ended up here.
+guinea-ratatui = { workspace = true, optional = true }
+
 [target.'cfg(target_os = "windows")'.dependencies]
 guinea-winui = { workspace = true, optional = true }
 
 [features]
 default = ["winui"]
 
-# The windows-reactor backend. On by default because it is the one that
-# exists; off, this crate is the router, the application runtime and the
-# macros, which is what a build for another toolkit starts from.
+# Backends. Enable one and it becomes `Backend`, which `routes!` uses without
+# being told; enable several and each route tree names its own.
 winui = ["dep:guinea-winui"]
+ratatui = ["dep:guinea-ratatui"]
 
 # `app::TestApp` - an application without a window, for crates that write
 # plugins or features out of tree and need to install them in a test.
