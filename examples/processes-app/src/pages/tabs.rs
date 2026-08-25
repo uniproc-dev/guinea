@@ -5,16 +5,16 @@ use guinea::winui::{Layout, LayoutCx};
 use guinea::uri::AppUri;
 use windows_reactor::{Element, ReactorWindow, button, hstack, text_block, vstack};
 
-use crate::l10n::L10n;
+use processes_core::l10n::L10n;
 use crate::routes::Route;
 
-use super::contracts::TabsReducer;
+use processes_core::tabs::contracts::TabsReducer;
 
 pub struct TabsLayout;
 
 impl Layout for TabsLayout {
     fn install(ctx: &FeatureInitContext, uri: &AppUri) -> anyhow::Result<()> {
-        super::install::install(ctx, uri)
+        processes_core::tabs::install::install(ctx, uri)
     }
 
     fn view(cx: &mut LayoutCx) -> Element {

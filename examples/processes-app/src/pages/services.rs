@@ -3,13 +3,13 @@ use guinea::winui::{Page, PageCx};
 use guinea::uri::AppUri;
 use windows_reactor::{Element, text_block, title, vstack};
 
-use super::contracts::ServicesReducer;
+use processes_core::services::contracts::ServicesReducer;
 
 pub struct Services;
 
 impl Page for Services {
     fn install(ctx: &FeatureInitContext, uri: &AppUri) -> anyhow::Result<()> {
-        super::install::install(ctx, uri)
+        processes_core::services::install::install(ctx, uri)
     }
 
     fn view(cx: &mut PageCx) -> Element {

@@ -4,7 +4,7 @@ use guinea::uri::AppUri;
 use guinea_widgets::table::{ColumnSpec, table};
 use windows_reactor::{Element, button, text_block, title, vstack};
 
-use super::contracts::{Kill, ProcessesReducer};
+use processes_core::processes::contracts::{Kill, ProcessesReducer};
 
 pub struct Processes;
 
@@ -15,7 +15,7 @@ struct Row {
 
 impl Page for Processes {
     fn install(ctx: &FeatureInitContext, uri: &AppUri) -> anyhow::Result<()> {
-        super::install::install(ctx, uri)
+        processes_core::processes::install::install(ctx, uri)
     }
 
     fn view(cx: &mut PageCx) -> Element {

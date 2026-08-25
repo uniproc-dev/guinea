@@ -1,16 +1,14 @@
-mod events;
-mod l10n;
-mod metrics;
-mod processes;
+//! The WinUI front end. Everything that is not drawing lives in
+//! `processes-core`, which the terminal front end links just the same.
+
+mod pages;
 mod routes;
-mod services;
-mod startup;
-mod tabs;
 
 use routes::Route;
 
-use guinea::app::GuineaApp;
 use guinea::Bootstrap;
+use guinea::app::GuineaApp;
+use processes_core::startup;
 
 fn initial_route() -> Route {
     Route::Processes {
@@ -25,7 +23,7 @@ fn root(cx: &mut windows_reactor::RenderCx) -> windows_reactor::Element {
             "guinea-processes-app-example",
             "settings",
         ))
-        .plugin(guinea_plugin_l10n::L10nPlugin::<l10n::L10n>::new("en"))
+        .plugin(guinea_plugin_l10n::L10nPlugin::<processes_core::l10n::L10n>::new("en"))
         .feature(startup::Startup)
         .bootstrap(cx);
 
@@ -36,7 +34,7 @@ fn main() -> anyhow::Result<()> {
     tracing_subscriber::fmt()
         .with_env_filter(
             tracing_subscriber::EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| "info,guinea=debug,guinea_processes_app_example=debug".into()),
+                .unwrap_or_else(|_| "info,guinea=debug,processes_core=debug".into()),
         )
         .init();
 

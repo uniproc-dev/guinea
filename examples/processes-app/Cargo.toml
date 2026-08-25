@@ -8,6 +8,7 @@ publish = false
 
 [dependencies]
 guinea = { path = "../../crates/guinea" }
+processes-core = { path = "../processes-core" }
 guinea-core = { path = "../../crates/guinea-core" }
 guinea-macros = { path = "../../crates/guinea-macros" }
 guinea-plugin-store = { git = "https://github.com/uniproc-dev/guinea-plugins", tag = "v0.2.3" }
@@ -28,8 +29,19 @@ windows-canvas = { git = "https://github.com/Tam1SH/windows-rs", rev = "afb695eb
 guinea = { path = "../../crates/guinea" }
 guinea-core = { path = "../../crates/guinea-core" }
 
+# Temporary: looking at the header separator and the composition chart before
+# either is tagged.
+[patch."https://github.com/uniproc-dev/guinea-plugins"]
+guinea-widgets = { path = "../../../guinea-plugins/widgets" }
+
+# Temporary: the fork branch that moves Direct2D onto the lifted compositor.
+[patch."https://github.com/Tam1SH/windows-rs"]
+windows-reactor = { path = "../../../windows-rs-composition/crates/libs/reactor" }
+windows-canvas = { path = "../../../windows-rs-composition/crates/libs/canvas" }
+windows-composition = { path = "../../../windows-rs-composition/crates/libs/composition" }
+windows-reactor-setup = { path = "../../../windows-rs-composition/crates/libs/reactor-setup" }
+
 [build-dependencies]
-guinea-plugin-l10n-build = { git = "https://github.com/uniproc-dev/guinea-plugins", tag = "v0.2.3" }
 guinea-meta-build = { git = "https://github.com/uniproc-dev/guinea-meta", tag = "v0.1.0" }
 windows-reactor-setup = { git = "https://github.com/Tam1SH/windows-rs", rev = "afb695ebe" }
 guinea-codegen = { path = "../../crates/guinea-codegen" }

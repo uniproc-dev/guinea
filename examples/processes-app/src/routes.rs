@@ -1,9 +1,9 @@
 use guinea_macros::routes;
 
-use crate::metrics::Metrics;
-use crate::processes::Processes;
-use crate::services::Services;
-use crate::tabs::TabsLayout;
+use crate::pages::metrics::Metrics;
+use crate::pages::processes::Processes;
+use crate::pages::services::Services;
+use crate::pages::tabs::TabsLayout;
 
 routes! {
     Route {
