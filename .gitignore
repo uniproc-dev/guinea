@@ -3,3 +3,6 @@
 /.idea
 /.vscode
 .cache/
+
+# Written next to whichever terminal front end is run.
+*.log
