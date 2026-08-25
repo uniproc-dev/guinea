@@ -18,6 +18,34 @@ fn guinea_crate_path() -> proc_macro2::TokenStream {
     }
 }
 
+/// Where the router's own types live.
+///
+/// An application usually reaches them through the facade, but a backend crate
+/// depends on `guinea-router` directly and has no facade at all - and the
+/// generated `RouteChain` impl has to name the same types either way.
+fn router_path(guinea: &TokenStream) -> TokenStream {
+    match crate_name("guinea-router") {
+        Ok(FoundCrate::Itself) => quote!(crate::router),
+        Ok(FoundCrate::Name(name)) => {
+            let ident = syn::Ident::new(&name, proc_macro2::Span::call_site());
+            quote!(::#ident::router)
+        }
+        Err(_) => quote!(#guinea::router),
+    }
+}
+
+/// Where `AppUri` lives, by the same reasoning.
+fn core_path(guinea: &TokenStream) -> TokenStream {
+    match crate_name("guinea-core") {
+        Ok(FoundCrate::Itself) => quote!(crate),
+        Ok(FoundCrate::Name(name)) => {
+            let ident = syn::Ident::new(&name, proc_macro2::Span::call_site());
+            quote!(::#ident)
+        }
+        Err(_) => quote!(#guinea),
+    }
+}
+
 enum Segment {
     Literal(String),
     Capture(String),
@@ -208,10 +236,57 @@ fn parse_pattern(pattern: &str) -> Vec<Segment> {
         .unwrap_or_else(|_| panic!("invalid route pattern {pattern:?}"))
 }
 
+/// The backend a route tree mounts on, and the module its entry constructors
+/// live in.
+///
+/// Written as one type - `backend = guinea_ratatui::Tui` - because that is
+/// what an application knows. The module is its parent: a backend keeps
+/// `segment_entry`/`layout_entry` next to the type they build for.
+fn parse_backend(slice: &mut Tokens) -> Option<(TokenStream, TokenStream)> {
+    let tokens = *slice;
+    match tokens.first() {
+        Some(TokenTree::Ident(id)) if id == "backend" => {}
+        _ => return None,
+    }
+    match tokens.get(1) {
+        Some(TokenTree::Punct(p)) if p.as_char() == '=' => {}
+        _ => panic!("routes! expects `backend = path::To::Backend,`"),
+    }
+
+    let mut end = 2;
+    while end < tokens.len() {
+        match &tokens[end] {
+            TokenTree::Punct(p) if p.as_char() == ',' => break,
+            _ => end += 1,
+        }
+    }
+    if end == tokens.len() {
+        panic!("routes! expects `,` after the backend");
+    }
+
+    let ty: syn::Type = syn::parse2(tokens[2..end].iter().cloned().collect())
+        .unwrap_or_else(|e| panic!("routes!: backend is not a type: {e}"));
+    let syn::Type::Path(path) = &ty else {
+        panic!("routes!: backend must be a path, like `guinea_ratatui::Tui`");
+    };
+
+    let mut module = path.path.clone();
+    module.segments.pop();
+    let module: Vec<syn::PathSegment> = module.segments.into_iter().collect();
+    if module.is_empty() {
+        panic!("routes!: backend needs the module too, as in `guinea_ratatui::Tui`");
+    }
+
+    *slice = &tokens[end + 1..];
+    Some((quote!(#ty), quote!(#(#module)::*)))
+}
+
 pub fn routes_impl(input: TokenStream1) -> TokenStream1 {
     let input2: TokenStream = input.into();
     let tokens: Vec<TokenTree> = input2.into_iter().collect();
     let mut slice: Tokens = &tokens;
+
+    let backend = parse_backend(&mut slice);
 
     let enum_ident = any_ident
         .parse_next(&mut slice)
@@ -275,19 +350,25 @@ pub fn routes_impl(input: TokenStream1) -> TokenStream1 {
     });
 
     let guinea = guinea_crate_path();
+    // Default to the facade's backend, so an application that has only one
+    // never mentions it.
+    let (backend_ty, backend_mod) = backend
+        .unwrap_or_else(|| (quote!(#guinea::Backend), quote!(#guinea::backend)));
+    let router = router_path(&guinea);
+    let core = core_path(&guinea);
 
     let chain_consts = leaves.iter().zip(&variant_idents).map(|(leaf, ident)| {
         let const_name = format_ident!("__routes_chain_{}_{}", enum_ident, ident);
         let leaf_ty = &leaf.ty;
         let ancestor_entries = leaf.ancestors.iter().map(|ty| {
-            quote! { #guinea::backend::layout_entry::<#ty>() }
+            quote! { #backend_mod::layout_entry::<#ty>() }
         });
         let len = leaf.ancestors.len() + 1;
         quote! {
             #[allow(non_upper_case_globals)]
-            const #const_name: [#guinea::router::SegmentEntry<#guinea::Backend>; #len] = [
+            const #const_name: [#router::SegmentEntry<#backend_ty>; #len] = [
                 #(#ancestor_entries,)*
-                #guinea::backend::segment_entry::<#leaf_ty>(),
+                #backend_mod::segment_entry::<#leaf_ty>(),
             ];
         }
     });
@@ -319,17 +400,17 @@ pub fn routes_impl(input: TokenStream1) -> TokenStream1 {
 
         #(#chain_consts)*
 
-        impl #guinea::router::RouteChain<#guinea::Backend> for #enum_ident {
-            fn chain(&self) -> &'static [#guinea::router::SegmentEntry<#guinea::Backend>] {
+        impl #router::RouteChain<#backend_ty> for #enum_ident {
+            fn chain(&self) -> &'static [#router::SegmentEntry<#backend_ty>] {
                 match self {
                     #(#chain_arms),*
                 }
             }
         }
 
-        impl #guinea::router::ToUri for #enum_ident {
-            fn to_uri(&self) -> #guinea::uri::AppUri {
-                #guinea::uri::AppUri::parse(self.path())
+        impl #router::ToUri for #enum_ident {
+            fn to_uri(&self) -> #core::uri::AppUri {
+                #core::uri::AppUri::parse(self.path())
                     .expect("routes!-derived path is always a valid PathAndQuery")
             }
         }

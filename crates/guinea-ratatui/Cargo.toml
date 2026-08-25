@@ -10,6 +10,12 @@ guinea-app.workspace = true
 guinea-router.workspace = true
 anyhow.workspace = true
 ratatui = "0.29"
+crossterm = "0.28"
+tracing.workspace = true
 
 [lints]
 workspace = true
+
+[dev-dependencies]
+guinea-macros.workspace = true
+guinea-core = { workspace = true, features = ["test-utils"] }

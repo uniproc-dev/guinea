@@ -12,6 +12,11 @@
 //! built; by the time the frame exists the layout has decided the geometry and
 //! passes down whatever rectangle it wants the page to occupy.
 
+mod dispatcher;
+mod run;
+
+pub use run::{Flow, run};
+
 use guinea_app::feature::FeatureInitContext;
 use guinea_core::scope::Reducer;
 use guinea_core::uri::AppUri;
