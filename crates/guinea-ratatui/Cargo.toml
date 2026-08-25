@@ -1,0 +1,15 @@
+[package]
+name = "guinea-ratatui"
+description = "guinea on ratatui: the router and the application runtime, drawn in a terminal"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+guinea-core.workspace = true
+guinea-app.workspace = true
+guinea-router.workspace = true
+anyhow.workspace = true
+ratatui = "0.29"
+
+[lints]
+workspace = true
