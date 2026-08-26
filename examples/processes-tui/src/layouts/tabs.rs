@@ -6,6 +6,7 @@ use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Borders, Paragraph};
 
+use processes_core::l10n::L10n;
 use processes_core::tabs::contracts::TabsReducer;
 
 use crate::pages::metrics::Metrics;
@@ -19,8 +20,9 @@ impl Layout for TabsLayout {
         processes_core::tabs::install::install(ctx, uri)
     }
 
-    fn view(cx: &mut LayoutCx<'_, '_>) {
+    fn render(cx: &mut LayoutCx<'_, '_>) {
         let (state, _) = cx.read::<TabsReducer>();
+        let strings = L10n::current();
 
         let rows = Rows::default()
             .direction(Direction::Vertical)
@@ -37,24 +39,21 @@ impl Layout for TabsLayout {
             cx.child_is::<Metrics>(),
         ];
         let names = ["processes", "services", "metrics"];
-        let tabs = Line::from(
-            names
-                .iter()
-                .zip(current)
-                .enumerate()
-                .flat_map(|(i, (name, selected))| {
-                    let style = if selected {
-                        Style::default().add_modifier(Modifier::REVERSED)
-                    } else {
-                        Style::default()
-                    };
-                    [
-                        Span::styled(format!(" {} {name} ", i + 1), style),
-                        Span::raw(" "),
-                    ]
-                })
-                .collect::<Vec<_>>(),
-        );
+        let mut spans = vec![Span::raw(format!(" {} · ", strings.app_title()))];
+        spans.extend(names.iter().zip(current).enumerate().flat_map(
+            |(i, (name, selected))| {
+                let style = if selected {
+                    Style::default().add_modifier(Modifier::REVERSED)
+                } else {
+                    Style::default()
+                };
+                [
+                    Span::styled(format!(" {} {name} ", i + 1), style),
+                    Span::raw(" "),
+                ]
+            },
+        ));
+        let tabs = Line::from(spans);
         cx.frame().render_widget(Paragraph::new(tabs), rows[0]);
 
         cx.outlet(rows[1]);
@@ -62,10 +61,10 @@ impl Layout for TabsLayout {
         let killed = state
             .last_killed
             .as_deref()
-            .map(|name| format!(" · last {name}"))
+            .map(|name| format!(" · {}", strings.process_killed_toast(name.to_string())))
             .unwrap_or_default();
         let status = Paragraph::new(format!(
-            "kills here {} · everywhere {}{killed}\n1/2/3 switch · k kill first · esc back · q quit",
+            "kills here {} · everywhere {}{killed}\n1/2/3 switch · ↑/↓ focus · k kill · l language · esc back · q quit",
             state.kills_this_window, state.kills_all_windows,
         ))
         .block(Block::default().borders(Borders::TOP));

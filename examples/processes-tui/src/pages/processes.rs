@@ -6,22 +6,34 @@ use ratatui::widgets::{Block, Borders, List, ListItem};
 
 use processes_core::processes::contracts::ProcessesReducer;
 
+use crate::cursor::{self, Cursor};
+
 pub struct Processes;
 
 impl Page for Processes {
     fn install(ctx: &FeatureInitContext, uri: &AppUri) -> anyhow::Result<()> {
+        ctx.seed_reducer::<Cursor>(0);
         processes_core::processes::install::install(ctx, uri)
     }
 
-    fn view(cx: &mut PageCx<'_, '_>) {
+    fn render(cx: &mut PageCx<'_, '_>) {
         let (state, _) = cx.read::<ProcessesReducer>();
+        let (cursor, _) = cx.read::<Cursor>();
         let area = cx.area();
 
+        let focused = cursor::focused(cursor, state.items.len());
         let items: Vec<ListItem> = state
             .items
             .iter()
             .enumerate()
-            .map(|(i, item)| ListItem::new(format!(" {} {item}", i + 1)))
+            .map(|(i, item)| {
+                let row = ListItem::new(format!(" {} {item}", i + 1));
+                if i == focused {
+                    row.style(Style::default().add_modifier(Modifier::REVERSED))
+                } else {
+                    row
+                }
+            })
             .collect();
 
         let list = List::new(items).block(
@@ -32,15 +44,4 @@ impl Page for Processes {
         );
         cx.frame().render_widget(list, area);
     }
-}
-
-/// The pid a row carries, for the key handler that kills it.
-///
-/// The list is a `Vec<String>` shaped like "name (pid 42)" - the same strings
-/// the WinUI table parses for its Kill button. Reading it back here keeps the
-/// reducer's state identical between the two front ends.
-pub fn pid_at(items: &[String], index: usize) -> Option<u32> {
-    let row = items.get(index)?;
-    row.rsplit_once("(pid ")
-        .and_then(|(_, rest)| rest.trim_end_matches(')').trim().parse().ok())
 }

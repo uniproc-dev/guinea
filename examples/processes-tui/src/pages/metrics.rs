@@ -14,7 +14,7 @@ impl Page for Metrics {
         processes_core::metrics::install::install(ctx, uri)
     }
 
-    fn view(cx: &mut PageCx<'_, '_>) {
+    fn render(cx: &mut PageCx<'_, '_>) {
         let (state, _) = cx.read::<MetricsReducer>();
 
         let rows = Rows::default()

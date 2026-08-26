@@ -1,6 +1,7 @@
 //! The terminal front end. Same application as `processes-app`: same actors,
 //! same reducers, same features - only the pages and the route tree differ.
 
+mod cursor;
 mod layouts;
 mod pages;
 mod routes;
@@ -11,8 +12,14 @@ use guinea_router::router::Router;
 use ratatui::crossterm::event::{Event, KeyCode};
 use routes::Route;
 
+use guinea_core::scope::Scope;
+use guinea_plugin_l10n::Localization;
+use processes_core::l10n::L10n;
 use processes_core::processes::contracts::{Kill, ProcessesReducer};
+use processes_core::services::contracts::ServicesReducer;
 use processes_core::startup;
+
+use cursor::{Cursor, Move};
 
 fn initial_route() -> Route {
     Route::Processes {
@@ -76,19 +83,59 @@ fn on_key(
         KeyCode::Char('3') => nav.to(Route::Metrics { context }),
         // No widget to hang a handler on, so the key reaches the page's
         // actions through the scope the router installed for it.
-        KeyCode::Char('k') => kill_first(router),
+        KeyCode::Up => move_focus(router, -1),
+        KeyCode::Down => move_focus(router, 1),
+        KeyCode::Char('k') => kill_focused(router),
+        KeyCode::Char('l') => toggle_language(),
         _ => {}
     }
 
     Flow::Continue
 }
 
-fn kill_first(router: &Router<Tui>) {
+/// The language lives in the process, not in a window, so this reaches the
+/// WinUI front end too: flip it here and the next run of `processes-app`
+/// starts in the language the terminal left it in.
+fn toggle_language() {
+    let next = if L10n::current().tag() == "ru" {
+        "en"
+    } else {
+        "ru"
+    };
+    if let Some(strings) = L10n::for_tag(next) {
+        guinea_plugin_l10n::L10n::<L10n>::load(strings);
+    }
+}
+
+fn move_focus(router: &Router<Tui>, delta: isize) {
     let Some(scope) = router.active_scope() else {
         return;
     };
-    let state = scope.state::<ProcessesReducer>();
-    let pid = pages::processes::pid_at(&state.borrow().items, 0);
+    let len = rows_on_screen(&scope);
+    scope.push::<Cursor>(Move { delta, len });
+}
+
+/// How long the list the active page is drawing is - asked of the page's own
+/// scope rather than of the route, so a page without a list simply has none.
+fn rows_on_screen(scope: &Scope) -> usize {
+    if let Some(state) = scope.peek::<ProcessesReducer>() {
+        return state.borrow().items.len();
+    }
+    if let Some(state) = scope.peek::<ServicesReducer>() {
+        return state.borrow().items.len();
+    }
+    0
+}
+
+fn kill_focused(router: &Router<Tui>) {
+    let Some(scope) = router.active_scope() else {
+        return;
+    };
+    let Some(state) = scope.peek::<ProcessesReducer>() else {
+        return;
+    };
+    let focused = cursor::focused(*scope.state::<Cursor>().borrow(), state.borrow().items.len());
+    let pid = processes_core::processes::pid_at(&state.borrow().items, focused);
     if let Some(pid) = pid {
         scope.actions::<ProcessesReducer>().emit(Kill(pid));
     }

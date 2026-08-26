@@ -11,9 +11,9 @@ guinea = { path = "../../crates/guinea" }
 processes-core = { path = "../processes-core" }
 guinea-core = { path = "../../crates/guinea-core" }
 guinea-macros = { path = "../../crates/guinea-macros" }
-guinea-plugin-store = { git = "https://github.com/uniproc-dev/guinea-plugins", tag = "v0.2.3" }
-guinea-widgets = { git = "https://github.com/uniproc-dev/guinea-plugins", tag = "v0.2.3" }
-guinea-plugin-l10n = { git = "https://github.com/uniproc-dev/guinea-plugins", tag = "v0.2.3", features = ["winui"] }
+guinea-plugin-store = { git = "https://github.com/uniproc-dev/guinea-plugins", tag = "v0.4.0" }
+guinea-widgets = { git = "https://github.com/uniproc-dev/guinea-plugins", tag = "v0.4.0" }
+guinea-plugin-l10n = { git = "https://github.com/uniproc-dev/guinea-plugins", tag = "v0.4.0", features = ["winui"] }
 anyhow = "1.0"
 inventory = "0.3"
 tokio = { version = "1", features = ["time", "rt-multi-thread"] }
@@ -29,11 +29,6 @@ windows-canvas = { git = "https://github.com/Tam1SH/windows-rs", rev = "63450fc9
 guinea = { path = "../../crates/guinea" }
 guinea-core = { path = "../../crates/guinea-core" }
 
-# Temporary: looking at the header separator and the composition chart before
-# either is tagged.
-[patch."https://github.com/uniproc-dev/guinea-plugins"]
-guinea-plugin-store = { path = "../../../guinea-plugins/plugins/store" }
-guinea-widgets = { path = "../../../guinea-plugins/widgets" }
 
 [build-dependencies]
 guinea-meta-build = { git = "https://github.com/uniproc-dev/guinea-meta", tag = "v0.1.0" }
