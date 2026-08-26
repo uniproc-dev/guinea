@@ -470,6 +470,15 @@ impl<U: Ui> Router<U> {
         Self::with_host(FeatureHost::new(token))
     }
 
+    /// Which root this router belongs to.
+    ///
+    /// One per host, so routers sharing a host share a root - and a router
+    /// with a host of its own is a root of its own, which is what a second
+    /// window gets.
+    pub fn root(&self) -> guinea_app::app::roots::RootId {
+        self.host.root()
+    }
+
     /// For a caller that already has a host - one window hosting more than a
     /// single router, say, where features must share an event bus.
     pub fn with_host(host: FeatureHost) -> Self {

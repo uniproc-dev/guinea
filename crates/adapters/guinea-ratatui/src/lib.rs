@@ -61,7 +61,12 @@ pub trait Page: 'static {
         Ok(())
     }
 
-    fn view(cx: &mut PageCx<'_, '_>);
+    /// Draws the page into the frame it is handed.
+    ///
+    /// `render` and not `view`: ratatui is immediate, so this is not a
+    /// description of what the page is - it is the drawing itself, run again
+    /// for every frame.
+    fn render(cx: &mut PageCx<'_, '_>);
 }
 
 /// A branch: draws its own chrome and decides where its child goes.
@@ -70,7 +75,7 @@ pub trait Layout: 'static {
         Ok(())
     }
 
-    fn view(cx: &mut LayoutCx<'_, '_>);
+    fn render(cx: &mut LayoutCx<'_, '_>);
 }
 
 pub const fn segment_entry<P: Page>() -> SegmentEntry<Tui> {
@@ -88,7 +93,7 @@ pub const fn layout_entry<L: Layout>() -> SegmentEntry<Tui> {
 
 pub fn mount_page<P: Page>(props: SegmentProps<Tui>) -> Node {
     Node::new(move |frame, area| {
-        P::view(&mut PageCx {
+        P::render(&mut PageCx {
             frame,
             area,
             props,
@@ -98,7 +103,7 @@ pub fn mount_page<P: Page>(props: SegmentProps<Tui>) -> Node {
 
 pub fn mount_layout<L: Layout>(props: SegmentProps<Tui>) -> Node {
     Node::new(move |frame, area| {
-        L::view(&mut LayoutCx {
+        L::render(&mut LayoutCx {
             frame,
             area,
             props,
@@ -202,7 +207,7 @@ mod tests {
     struct Shell;
 
     impl Layout for Shell {
-        fn view(cx: &mut LayoutCx<'_, '_>) {
+        fn render(cx: &mut LayoutCx<'_, '_>) {
             let chunks = RLayout::default()
                 .direction(Direction::Vertical)
                 .constraints([Constraint::Length(1), Constraint::Min(0)])
@@ -218,7 +223,7 @@ mod tests {
     struct Processes;
 
     impl Page for Processes {
-        fn view(cx: &mut PageCx<'_, '_>) {
+        fn render(cx: &mut PageCx<'_, '_>) {
             let area = cx.area();
             cx.frame().render_widget(Paragraph::new("processes"), area);
         }

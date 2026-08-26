@@ -1,0 +1,26 @@
+[package]
+name = "guinea-eframe"
+description = "guinea on egui: the router and the application runtime, drawn immediately"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+guinea-core.workspace = true
+guinea-app.workspace = true
+guinea-router.workspace = true
+anyhow.workspace = true
+eframe = { version = "0.36", default-features = false, features = [
+    # A renderer has to be named or eframe builds without one; glow is the
+    # cheap default and does not pull in wgpu.
+    "glow",
+    "default_fonts",
+] }
+egui = "0.36"
+tracing.workspace = true
+
+[lints]
+workspace = true
+
+[dev-dependencies]
+guinea-macros.workspace = true
+guinea-core = { workspace = true, features = ["test-utils"] }

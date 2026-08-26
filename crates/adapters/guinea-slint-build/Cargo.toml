@@ -1,0 +1,15 @@
+[package]
+name = "guinea-slint-build"
+description = "Compiles an application's .slint tree for guinea-slint"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+slint-build = "1.17"
+guinea-route-dsl.workspace = true
+syn = { version = "2.0", features = ["full"] }
+walkdir.workspace = true
+anyhow.workspace = true
+
+[lints]
+workspace = true

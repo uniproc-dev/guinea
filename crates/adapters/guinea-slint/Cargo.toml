@@ -1,0 +1,34 @@
+[package]
+name = "guinea-slint"
+description = "guinea on Slint: the router and the application runtime, drawn by a Slint component tree"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+guinea-core.workspace = true
+guinea-app.workspace = true
+guinea-router.workspace = true
+anyhow.workspace = true
+# No backend and no renderer: which one to draw with is the application's
+# choice, and an adapter that picked one would decide it for every application
+# that links it.
+slint = { version = "1.17", default-features = false, features = ["std", "compat-1-2"] }
+tracing.workspace = true
+
+[features]
+# Reaches the winit window Slint is standing on, for the part of the window
+# contract Slint's own API does not cover - dragging, and which screens exist.
+#
+# Off by default: pulling in Slint's winit backend means pulling in a renderer,
+# and which renderer to draw with is the application's choice, not an adapter's.
+# An application that wants these turns this on next to the renderer it already
+# named.
+winit = ["slint/unstable-winit-030"]
+
+[lints]
+workspace = true
+
+[dev-dependencies]
+guinea-macros.workspace = true
+guinea-core = { workspace = true, features = ["test-utils"] }
+i-slint-backend-testing = "1.17"

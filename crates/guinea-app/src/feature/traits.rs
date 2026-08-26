@@ -21,6 +21,10 @@ pub struct AppFeatureDeinitContext<'a> {
 pub struct FeatureInitContext {
     pub scope: Rc<Scope>,
     pub ancestors: Rc<[Rc<Scope>]>,
+    /// Which root this feature is being installed into - the second window,
+    /// or the only one. What a service shared between roots uses to tell
+    /// callers apart.
+    pub root: crate::app::roots::RootId,
     pub token: UiThreadToken,
     pub event_bus: Rc<EventBus>,
     pub debug_registry: Rc<DebugRegistry>,

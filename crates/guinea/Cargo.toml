@@ -12,7 +12,9 @@ guinea-meta = { git = "https://github.com/uniproc-dev/guinea-meta", tag = "v0.1.
 
 # Nothing else: this crate is re-exports. Anything it appears to need is a
 # sign that something which belongs in a real crate ended up here.
+guinea-eframe = { workspace = true, optional = true }
 guinea-ratatui = { workspace = true, optional = true }
+guinea-slint = { workspace = true, optional = true }
 
 [target.'cfg(target_os = "windows")'.dependencies]
 guinea-winui = { workspace = true, optional = true }
@@ -24,6 +26,11 @@ default = ["winui", "own-runtime"]
 # being told; enable several and each route tree names its own.
 winui = ["dep:guinea-winui"]
 ratatui = ["dep:guinea-ratatui"]
+eframe = ["dep:guinea-eframe"]
+slint = ["dep:guinea-slint"]
+# The parts of the window contract that need the window manager underneath
+# Slint. Costs a renderer choice - see `guinea-slint`'s own `winit` feature.
+slint-winit = ["slint", "guinea-slint/winit"]
 
 # Let guinea start the async runtime, so an application does not open with
 # `Runtime::new()` and an `enter()` guard it has to keep alive by hand.

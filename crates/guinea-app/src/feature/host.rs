@@ -7,6 +7,7 @@ use guinea_core::actor::UiThreadToken;
 use guinea_core::scope::Scope;
 
 use super::FeatureInitContext;
+use crate::app::roots::{Registration, RootId};
 
 /// What a feature needs to be installed into a scope: the UI thread, the
 /// window's event bus, its debug registry, and whatever plugins provided.
@@ -23,6 +24,9 @@ pub struct FeatureHost {
     event_bus: Rc<EventBus>,
     debug_registry: Rc<DebugRegistry>,
     services: SharedState,
+    /// This host *is* the root, so its registration is held here: the entry
+    /// goes when the host goes, together with the scopes under it.
+    root: Registration,
 }
 
 impl FeatureHost {
@@ -34,11 +38,17 @@ impl FeatureHost {
             event_bus: Rc::new(EventBus::new()),
             debug_registry: Rc::new(DebugRegistry::new()),
             services: crate::app::app_services(),
+            root: Registration::open(),
         }
     }
 
     pub fn token(&self) -> &UiThreadToken {
         &self.token
+    }
+
+    /// Which root this is - the one a feature installed here belongs to.
+    pub fn root(&self) -> RootId {
+        self.root.id()
     }
 
     pub fn event_bus(&self) -> &Rc<EventBus> {
@@ -56,6 +66,7 @@ impl FeatureHost {
         FeatureInitContext {
             scope,
             ancestors,
+            root: self.root.id(),
             token: self.token.clone(),
             event_bus: self.event_bus.clone(),
             debug_registry: self.debug_registry.clone(),

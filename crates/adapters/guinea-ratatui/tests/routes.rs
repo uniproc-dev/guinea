@@ -16,7 +16,7 @@ use ratatui::{Terminal, backend::TestBackend};
 struct Shell;
 
 impl guinea_ratatui::Layout for Shell {
-    fn view(cx: &mut LayoutCx<'_, '_>) {
+    fn render(cx: &mut LayoutCx<'_, '_>) {
         let chunks = RLayout::default()
             .direction(Direction::Vertical)
             .constraints([Constraint::Length(1), Constraint::Min(0)])
@@ -30,7 +30,7 @@ impl guinea_ratatui::Layout for Shell {
 struct Processes;
 
 impl guinea_ratatui::Page for Processes {
-    fn view(cx: &mut PageCx<'_, '_>) {
+    fn render(cx: &mut PageCx<'_, '_>) {
         let area = cx.area();
         cx.frame().render_widget(Paragraph::new("processes"), area);
     }
@@ -39,7 +39,7 @@ impl guinea_ratatui::Page for Processes {
 struct Services;
 
 impl guinea_ratatui::Page for Services {
-    fn view(cx: &mut PageCx<'_, '_>) {
+    fn render(cx: &mut PageCx<'_, '_>) {
         let area = cx.area();
         cx.frame().render_widget(Paragraph::new("services"), area);
     }

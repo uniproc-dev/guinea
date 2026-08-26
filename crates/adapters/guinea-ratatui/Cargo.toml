@@ -9,8 +9,8 @@ guinea-core.workspace = true
 guinea-app.workspace = true
 guinea-router.workspace = true
 anyhow.workspace = true
-ratatui = "0.29"
-crossterm = "0.28"
+ratatui = "0.30"
+crossterm = "0.29"
 tracing.workspace = true
 
 [lints]

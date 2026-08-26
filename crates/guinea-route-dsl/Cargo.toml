@@ -1,19 +1,13 @@
 [package]
-name = "guinea-macros"
+name = "guinea-route-dsl"
+description = "The route tree `routes!` declares, parsed - shared by the macro that expands it and by build scripts that generate from it"
 version.workspace = true
 edition.workspace = true
 
-[lib]
-proc-macro = true
-
 [dependencies]
-guinea-codegen.workspace = true
-guinea-route-dsl.workspace = true
 proc-macro2 = "1.0"
-proc-macro-crate = "3.0"
 quote = "1.0"
 syn = { version = "2.0", features = ["full", "extra-traits"] }
-heck = "0.5"
 winnow = "1.0"
 
 [lints]

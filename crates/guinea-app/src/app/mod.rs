@@ -4,7 +4,9 @@ mod meta;
 mod runtime_host;
 mod plugin;
 mod registry;
+pub mod roots;
 mod runtime;
+pub mod windows;
 
 #[cfg(any(test, feature = "test-utils"))]
 mod harness;
@@ -36,6 +38,7 @@ pub type ReadyHook = Box<dyn FnOnce(&mut FeatureBuilder) + Send>;
 #[derive(Default)]
 pub struct GuineaApp {
     meta: Option<AppMeta>,
+    services: Vec<ReadyHook>,
     registrations: Vec<Registration>,
     ready: Vec<ReadyHook>,
 }
@@ -54,6 +57,19 @@ impl GuineaApp {
     /// plugin declared above this call still sees it.
     pub fn meta(mut self, meta: AppMeta) -> Self {
         self.meta = Some(meta);
+        self
+    }
+
+    /// Provides a service the application did not build itself.
+    ///
+    /// For a backend adapter with something only it can offer - the windows
+    /// its roots live in, say. Installed before any plugin, like
+    /// [`meta`](Self::meta) and for the same reason: a plugin requiring it
+    /// must not depend on where this call sat in the chain.
+    pub fn provide<T: Send + Sync + 'static>(mut self, value: T) -> Self {
+        self.services.push(Box::new(move |app| {
+            app.provide(value);
+        }));
         self
     }
 
@@ -97,6 +113,9 @@ impl GuineaApp {
         // in the chain.
         if let Some(meta) = self.meta {
             builder.provide(meta);
+        }
+        for service in self.services {
+            service(&mut builder);
         }
 
         for register in self.registrations {
