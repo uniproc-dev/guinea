@@ -476,12 +476,24 @@ mod tests {
             RespB(n)
         }
 
-        let panic_message: Arc<Mutex<Option<String>>> = Arc::new(Mutex::new(None));
-        let hook_slot = panic_message.clone();
+        // Every panic, not the first. The hook is process-wide and the test
+        // binary is one process: another test panicking on purpose - and one
+        // does, to poison a lock - would otherwise take this slot and this
+        // test would fail reporting someone else's message.
+        let panics: Arc<Mutex<Vec<String>>> = Arc::new(Mutex::new(Vec::new()));
+        let hook_slot = panics.clone();
         let prev_hook = panic::take_hook();
         panic::set_hook(Box::new(move |info| {
-            *hook_slot.lock().unwrap() = Some(info.to_string());
+            hook_slot.lock().unwrap().push(info.to_string());
         }));
+
+        let seen_the_cycle = || {
+            panics
+                .lock()
+                .unwrap()
+                .iter()
+                .any(|message| message.contains("RPC cycle detected"))
+        };
 
         let addr_a = Addr::new_scoped(ActorA, UiThreadToken::dangerously_create_token_unchecked());
         let addr_b = Addr::new_scoped(ActorB, UiThreadToken::dangerously_create_token_unchecked());
@@ -499,7 +511,7 @@ mod tests {
         while std::time::Instant::now() < deadline {
             tokio::task::yield_now().await;
             EventBus::process_queue();
-            if panic_message.lock().unwrap().is_some() {
+            if seen_the_cycle() {
                 break;
             }
             tokio::time::sleep(StdDuration::from_millis(1)).await;
@@ -508,12 +520,11 @@ mod tests {
         panic::set_hook(prev_hook);
         handle.abort(); // the top-level request never gets a reply; don't wait out its timeout
 
-        let message = panic_message.lock().unwrap().clone();
         assert!(
-            message
-                .as_deref()
-                .is_some_and(|m| m.contains("RPC cycle detected")),
-            "expected AsyncBus's cycle check to panic inside actor B's handler, got: {message:?}"
+            seen_the_cycle(),
+            "expected AsyncBus's cycle check to panic inside actor B's handler; \
+             the panics seen were: {:?}",
+            panics.lock().unwrap()
         );
     }
 
