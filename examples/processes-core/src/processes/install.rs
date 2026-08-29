@@ -6,6 +6,7 @@
 //! feature never sees an address, so there is no segment index to get wrong.
 
 use guinea::feature::{Feature, FeatureInitContext};
+use guinea_macros::installs;
 use guinea_core::feature::Bound;
 
 use super::actor::ProcessActor;
@@ -17,9 +18,8 @@ pub struct ProcessesFeature {
     _listing: Bound<contracts::Processes>,
 }
 
+#[installs]
 impl Feature for ProcessesFeature {
-    type Params = str;
-
     /// One reducer, and pages below may read it. Anything else this feature
     /// claimed would stay its own.
     type Exports = (contracts::Processes,);

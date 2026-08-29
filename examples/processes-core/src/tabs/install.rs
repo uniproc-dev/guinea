@@ -2,6 +2,7 @@
 //! the world through the bus and keeps a count.
 
 use guinea::feature::{Feature, FeatureInitContext};
+use guinea_macros::installs;
 use guinea_core::feature::Bound;
 
 use crate::events::ProcessKilled;
@@ -12,8 +13,8 @@ pub struct TabsFeature {
     _chrome: Bound<contracts::Tabs>,
 }
 
+#[installs]
 impl Feature for TabsFeature {
-    type Params = str;
     type Exports = (contracts::Tabs,);
 
     fn install(cx: &FeatureInitContext, context: &str) -> anyhow::Result<Self> {

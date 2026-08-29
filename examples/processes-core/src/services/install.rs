@@ -18,6 +18,7 @@ use std::rc::Rc;
 use guinea::feature::{Feature, FeatureInitContext};
 use guinea::reactor::Reactor;
 use guinea_core::feature::Push;
+use guinea_macros::installs;
 
 use super::contracts::{self, Listed, Refresh};
 
@@ -47,8 +48,8 @@ pub struct ServicesFeature {
     _catalogue: Rc<RefCell<Catalogue>>,
 }
 
+#[installs]
 impl Feature for ServicesFeature {
-    type Params = ();
     type Exports = (contracts::Services,);
 
     fn install(cx: &FeatureInitContext, _params: &()) -> anyhow::Result<Self> {

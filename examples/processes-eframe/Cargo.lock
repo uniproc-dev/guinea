@@ -1740,7 +1740,6 @@ dependencies = [
 [[package]]
 name = "guinea-plugin-l10n"
 version = "0.4.0"
-source = "git+https://github.com/uniproc-dev/guinea-plugins?tag=v0.4.0#db71a5f93e1687fcfabd874dce1f5d08c8c3f06e"
 dependencies = [
  "anyhow",
  "fluent-bundle",
@@ -1767,7 +1766,6 @@ dependencies = [
 [[package]]
 name = "guinea-plugin-store"
 version = "0.13.0"
-source = "git+https://github.com/uniproc-dev/guinea-plugins?tag=v0.4.0#db71a5f93e1687fcfabd874dce1f5d08c8c3f06e"
 dependencies = [
  "amethystate",
  "anyhow",

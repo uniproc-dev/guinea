@@ -4,8 +4,37 @@ use syn::{ItemFn, parse_macro_input};
 mod actor_dsl;
 mod handler;
 mod iced_node;
+mod installs;
 mod routes_dsl;
 mod segment;
+
+/// Reads a feature's `Params` off its `install`, instead of asking for it
+/// twice.
+///
+/// `type Params = str;` beside `fn install(cx, context: &str)` is one fact
+/// written in two places, and only one of them is load-bearing: the body uses
+/// the argument, so the signature cannot silently be wrong while the
+/// associated type can.
+///
+/// `Exports` stays written down. What a feature publishes is a decision rather
+/// than a consequence - it may claim four reducers and export one - so there
+/// is nothing to read it from.
+///
+/// Named for the method rather than the trait: `#[feature]` is ambiguous with
+/// Rust's own `feature` attribute.
+///
+/// ```ignore
+/// #[installs]
+/// impl Feature for Tabs {
+///     type Exports = (contracts::Tabs,);
+///
+///     fn install(cx: &FeatureInitContext, context: &str) -> anyhow::Result<Self> { .. }
+/// }
+/// ```
+#[proc_macro_attribute]
+pub fn installs(_attr: TokenStream, item: TokenStream) -> TokenStream {
+    installs::installs_impl(item)
+}
 
 /// Writes `type Installs = ();` and the `install` that goes with it, for a
 /// page or layout that installs nothing.

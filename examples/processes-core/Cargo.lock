@@ -617,6 +617,8 @@ dependencies = [
  "anyhow",
  "guinea-app 0.4.0",
  "guinea-core 0.4.0",
+ "serde",
+ "serde_json",
  "tracing",
 ]
 
