@@ -1,19 +1,25 @@
 use guinea::feature::FeatureInitContext;
 use guinea::winui::{Page, PageCx};
-use guinea::uri::AppUri;
 use windows_reactor::{Element, text_block, title, vstack};
 
-use processes_core::services::contracts::ServicesReducer;
+use processes_core::services::contracts::Services as Running;
 
 pub struct Services;
 
 impl Page for Services {
-    fn install(ctx: &FeatureInitContext, uri: &AppUri) -> anyhow::Result<()> {
-        processes_core::services::install::install(ctx, uri)
+    type Params = crate::routes::ServicesParams;
+
+    type Installs = processes_core::services::ServicesFeature;
+
+    fn install(
+        ctx: &FeatureInitContext,
+        _params: &Self::Params,
+    ) -> anyhow::Result<Self::Installs> {
+        ctx.install(&())
     }
 
-    fn view(cx: &mut PageCx) -> Element {
-        let (state, _dispatch) = cx.use_reducer::<ServicesReducer>();
+    fn view(cx: &mut PageCx<Self>) -> Element {
+        let (state, _dispatch) = cx.use_reducer::<Running, _>();
 
         let rows: Vec<Element> = state
             .items

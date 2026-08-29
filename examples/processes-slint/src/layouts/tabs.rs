@@ -2,12 +2,11 @@ use std::rc::Rc;
 
 use guinea::feature::FeatureInitContext;
 use guinea::slint::{Layout, LayoutCx, ToSlint};
-use guinea::uri::AppUri;
 use guinea_plugin_l10n::Localization;
 use slint::ComponentHandle;
 
 use processes_core::l10n::L10n;
-use processes_core::tabs::contracts::{TabsReducer, TabsViewState};
+use processes_core::tabs::contracts::Tabs;
 
 use crate::routes::Route;
 use crate::ui::{AppWindow, TabsModel};
@@ -15,15 +14,19 @@ use crate::ui::{AppWindow, TabsModel};
 pub struct TabsLayout;
 
 impl Layout for TabsLayout {
-    fn install(ctx: &FeatureInitContext, uri: &AppUri) -> anyhow::Result<()> {
-        processes_core::tabs::install::install(ctx, uri)
+    type Params = crate::routes::TabsLayoutParams;
+
+    type Installs = processes_core::tabs::TabsFeature;
+
+    fn install(ctx: &FeatureInitContext, params: &Self::Params) -> anyhow::Result<Self::Installs> {
+        ctx.install(params.context.as_str())
     }
 
-    fn bind(cx: LayoutCx) {
+    fn bind(cx: LayoutCx<Self>) {
         let root = cx.root::<AppWindow>();
         let model = root.global::<TabsModel>();
 
-        let binding = cx.binding::<TabsReducer>();
+        let binding = cx.binding::<Tabs, _>();
         let refresh: Rc<dyn Fn()> = {
             let root = root.clone_strong();
             let binding = binding.clone();
@@ -36,7 +39,7 @@ impl Layout for TabsLayout {
             })
         };
 
-        cx.bind::<TabsReducer>({
+        cx.bind::<Tabs, _>({
             let refresh = refresh.clone();
             move |_| refresh()
         });
@@ -50,8 +53,11 @@ impl Layout for TabsLayout {
         }));
 
         let nav = cx.navigate::<Route>();
+        let context_of = binding.clone();
         model.on_go(move |index| {
-            let context = "ubuntu".to_string();
+            // What this layout was reached with, not one invented here:
+            // `routes!` derived it from the pages below.
+            let context = context_of.peek().context.clone();
             match index {
                 0 => nav.to(Route::Processes { context }),
                 1 => nav.to(Route::Services { context }),
@@ -80,7 +86,7 @@ fn language_label(strings: &L10n) -> &'static str {
     }
 }
 
-fn status_line(strings: &L10n, state: &TabsViewState) -> String {
+fn status_line(strings: &L10n, state: &Tabs) -> String {
     let killed = state
         .last_killed
         .as_deref()

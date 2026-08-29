@@ -1,22 +1,41 @@
-use guinea::feature::FeatureInitContext;
-use guinea::uri::AppUri;
+//! A feature with no actor and nothing to ask one - the chrome hears about
+//! the world through the bus and keeps a count.
+
+use guinea::feature::{Feature, FeatureInitContext};
+use guinea_core::feature::Bound;
+
 use crate::events::ProcessKilled;
 
-use super::contracts::{TabsMsg, TabsReducer};
+use super::contracts::{self, Chrome};
 
-pub fn install(ctx: &FeatureInitContext, _uri: &AppUri) -> anyhow::Result<()> {
-    let count = ctx.scope.peek::<TabsReducer>().map_or(0, |s| s.borrow().install_count);
-    ctx.port::<TabsReducer>()(TabsMsg::Installed(count + 1));
+pub struct TabsFeature {
+    _chrome: Bound<contracts::Tabs>,
+}
 
-    let port = ctx.port::<TabsReducer>();
-    ctx.subscribe::<ProcessKilled>(move |ev: ProcessKilled| {
-        port(TabsMsg::LocalKill(ev.name));
-    });
+impl Feature for TabsFeature {
+    type Params = str;
+    type Exports = (contracts::Tabs,);
 
-    let port = ctx.port::<TabsReducer>();
-    ctx.subscribe_global::<ProcessKilled>(move |_| {
-        port(TabsMsg::GlobalKill);
-    });
+    fn install(cx: &FeatureInitContext, context: &str) -> anyhow::Result<Self> {
+        let chrome = cx.state::<contracts::Tabs>().plain();
 
-    Ok(())
+        let count = cx
+            .scope
+            .peek::<contracts::Tabs>()
+            .map_or(0, |tabs| tabs.borrow().install_count);
+        chrome.push(Chrome::Installed(count + 1));
+        chrome.push(Chrome::Reached(context.to_string()));
+
+        let local = chrome.clone();
+        cx.subscribe::<ProcessKilled>(move |ev: ProcessKilled| {
+            local.push(Chrome::LocalKill(ev.name));
+        });
+
+        let global = chrome.clone();
+        cx.subscribe_global::<ProcessKilled>(move |_| {
+            global.push(Chrome::GlobalKill);
+        });
+
+        Ok(Self { _chrome: chrome })
+    }
 }

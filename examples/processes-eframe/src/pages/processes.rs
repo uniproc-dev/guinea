@@ -1,19 +1,22 @@
 use guinea::eframe::{Page, PageCx};
 use guinea::feature::FeatureInitContext;
-use guinea::uri::AppUri;
 
-use processes_core::processes::contracts::{Kill, ProcessesReducer};
+use processes_core::processes::contracts::{Kill, Processes as Running};
 use processes_core::processes::pid_at;
 
 pub struct Processes;
 
 impl Page for Processes {
-    fn install(ctx: &FeatureInitContext, uri: &AppUri) -> anyhow::Result<()> {
-        processes_core::processes::install::install(ctx, uri)
+    type Params = crate::routes::ProcessesParams;
+
+    type Installs = processes_core::processes::ProcessesFeature;
+
+    fn install(ctx: &FeatureInitContext, params: &Self::Params) -> anyhow::Result<Self::Installs> {
+        ctx.install(params.context.as_str())
     }
 
-    fn render(cx: &mut PageCx<'_>) {
-        let (state, actions) = cx.read::<ProcessesReducer>();
+    fn render(cx: &mut PageCx<'_, Self>) {
+        let (state, dispatch) = cx.state::<Running, _>();
 
         egui::ScrollArea::vertical().show(cx.ui(), |ui| {
             for (index, item) in state.items.iter().enumerate() {
@@ -26,7 +29,7 @@ impl Page for Processes {
                         if ui.button("Kill").clicked()
                             && let Some(pid) = pid_at(&state.items, index)
                         {
-                            actions.emit(Kill(pid));
+                            dispatch.emit(Kill(pid));
                         }
                     });
                 });

@@ -1,21 +1,27 @@
 use guinea::feature::FeatureInitContext;
 use guinea::ratatui::{Page, PageCx};
-use guinea::uri::AppUri;
 use ratatui::layout::{Constraint, Direction, Layout as Rows};
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::widgets::{Block, Borders, Sparkline};
 
-use processes_core::metrics::contracts::MetricsReducer;
+use processes_core::metrics::contracts::Metrics as Sampling;
 
 pub struct Metrics;
 
 impl Page for Metrics {
-    fn install(ctx: &FeatureInitContext, uri: &AppUri) -> anyhow::Result<()> {
-        processes_core::metrics::install::install(ctx, uri)
+    type Params = crate::routes::MetricsParams;
+
+    type Installs = processes_core::metrics::MetricsFeature;
+
+    fn install(
+        ctx: &FeatureInitContext,
+        _params: &Self::Params,
+    ) -> anyhow::Result<Self::Installs> {
+        ctx.install(&())
     }
 
-    fn render(cx: &mut PageCx<'_, '_>) {
-        let (state, _) = cx.read::<MetricsReducer>();
+    fn render(cx: &mut PageCx<'_, '_, Self>) {
+        let (state, _) = cx.state::<Sampling, _>();
 
         let rows = Rows::default()
             .direction(Direction::Vertical)

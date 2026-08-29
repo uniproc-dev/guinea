@@ -2,6 +2,8 @@ pub mod actor;
 pub mod contracts;
 pub mod install;
 
+pub use install::ProcessesFeature;
+
 /// The pid a row carries.
 ///
 /// The list is a `Vec<String>` shaped like "name (pid 42)", and every front

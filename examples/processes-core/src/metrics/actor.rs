@@ -1,27 +1,32 @@
 use std::time::{Duration, Instant};
 
 use guinea_core::actor::Context;
+use guinea_core::feature::Push;
 use guinea_core::messages;
 use guinea_macros::{actor, handler};
 
-use super::contracts::{MetricsMsg, MetricsPort};
+use super::contracts::{Metrics, Sampled};
 
-pub struct MetricsActor<P: MetricsPort> {
-    ui_port: P,
+pub struct MetricsActor {
+    push: Push<Metrics>,
     tick: u64,
     start: Instant,
 }
 
-impl<P: MetricsPort> MetricsActor<P> {
-    pub fn new(ui_port: P) -> Self {
-        Self { ui_port, tick: 0, start: Instant::now() }
+impl MetricsActor {
+    pub fn new(push: Push<Metrics>) -> Self {
+        Self {
+            push,
+            tick: 0,
+            start: Instant::now(),
+        }
     }
 }
 
 messages! { Tick }
 
 actor! {
-    MetricsActor<P: MetricsPort + 'static> {
+    MetricsActor {
         handlers {
             Tick => { bg Tick loop }
         }
@@ -29,7 +34,7 @@ actor! {
 }
 
 #[handler]
-fn tick<P: MetricsPort + 'static>(this: &mut MetricsActor<P>, ctx: Context<MetricsActor<P>, Tick>) {
+fn tick(this: &mut MetricsActor, ctx: Context<MetricsActor, Tick>) {
     this.tick += 1;
     let t = this.tick as f32;
 
@@ -40,7 +45,7 @@ fn tick<P: MetricsPort + 'static>(this: &mut MetricsActor<P>, ctx: Context<Metri
     let memory = (40.0 + 20.0 * (t / 10.0).cos()).clamp(0.0, 100.0);
     let at = this.start.elapsed().as_millis() as u64;
 
-    this.ui_port.send(MetricsMsg::Sample { at, cpu, memory });
+    this.push.send(Sampled::At { at, cpu, memory });
 
     ctx.spawn_bg::<Tick, _>(async {
         tokio::time::sleep(Duration::from_millis(800)).await;

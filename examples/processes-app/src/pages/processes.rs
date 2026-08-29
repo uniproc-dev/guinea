@@ -1,10 +1,9 @@
 use guinea::feature::FeatureInitContext;
 use guinea::winui::{Page, PageCx};
-use guinea::uri::AppUri;
 use guinea_widgets::table::{ColumnSpec, table};
 use windows_reactor::{Element, button, text_block, title, vstack};
 
-use processes_core::processes::contracts::{Kill, ProcessesReducer};
+use processes_core::processes::contracts::{Kill, Processes as Running};
 
 pub struct Processes;
 
@@ -14,12 +13,16 @@ struct Row {
 }
 
 impl Page for Processes {
-    fn install(ctx: &FeatureInitContext, uri: &AppUri) -> anyhow::Result<()> {
-        processes_core::processes::install::install(ctx, uri)
+    type Params = crate::routes::ProcessesParams;
+
+    type Installs = processes_core::processes::ProcessesFeature;
+
+    fn install(ctx: &FeatureInitContext, params: &Self::Params) -> anyhow::Result<Self::Installs> {
+        ctx.install(params.context.as_str())
     }
 
-    fn view(cx: &mut PageCx) -> Element {
-        let (state, dispatch) = cx.use_reducer::<ProcessesReducer>();
+    fn view(cx: &mut PageCx<Self>) -> Element {
+        let (state, dispatch) = cx.use_reducer::<Running, _>();
 
         let rows: Vec<Row> = state
             .items

@@ -1,10 +1,9 @@
 use guinea::eframe::{Layout, LayoutCx};
 use guinea::feature::FeatureInitContext;
-use guinea::uri::AppUri;
 use guinea_plugin_l10n::Localization;
 
 use processes_core::l10n::L10n;
-use processes_core::tabs::contracts::TabsReducer;
+use processes_core::tabs::contracts::Tabs;
 
 use crate::pages::metrics::Metrics;
 use crate::pages::processes::Processes;
@@ -14,12 +13,16 @@ use crate::routes::Route;
 pub struct TabsLayout;
 
 impl Layout for TabsLayout {
-    fn install(ctx: &FeatureInitContext, uri: &AppUri) -> anyhow::Result<()> {
-        processes_core::tabs::install::install(ctx, uri)
+    type Params = crate::routes::TabsLayoutParams;
+
+    type Installs = processes_core::tabs::TabsFeature;
+
+    fn install(ctx: &FeatureInitContext, params: &Self::Params) -> anyhow::Result<Self::Installs> {
+        ctx.install(params.context.as_str())
     }
 
-    fn render(cx: &mut LayoutCx<'_>) {
-        let (state, _) = cx.read::<TabsReducer>();
+    fn render(cx: &mut LayoutCx<'_, Self>) {
+        let (state, _) = cx.state::<Tabs, _>();
         let strings = L10n::current();
         let nav = cx.navigate::<Route>();
 
@@ -40,7 +43,9 @@ impl Layout for TabsLayout {
             ui.strong(strings.app_title());
             ui.separator();
 
-            let context = || "ubuntu".to_string();
+            // What this layout was reached with, not one invented here:
+            // `routes!` derived it from the pages below.
+            let context = || state.context.clone();
             if ui.selectable_label(current[0], "Processes").clicked() {
                 nav.to(Route::Processes { context: context() });
             }
@@ -84,7 +89,7 @@ fn toggle_language(strings: &L10n) {
     }
 }
 
-fn status_line(strings: &L10n, state: &processes_core::tabs::contracts::TabsViewState) -> String {
+fn status_line(strings: &L10n, state: &Tabs) -> String {
     let killed = state
         .last_killed
         .as_deref()

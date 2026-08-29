@@ -2,23 +2,26 @@ use guinea::feature::FeatureInitContext;
 use guinea_plugin_l10n::{Localization, ui::use_l10n};
 use guinea::winui::{UseNavigate, UseRouteChange};
 use guinea::winui::{Layout, LayoutCx};
-use guinea::uri::AppUri;
 use windows_reactor::{Element, ReactorWindow, button, hstack, text_block, vstack};
 
 use processes_core::l10n::L10n;
 use crate::routes::Route;
 
-use processes_core::tabs::contracts::TabsReducer;
+use processes_core::tabs::contracts::Tabs;
 
 pub struct TabsLayout;
 
 impl Layout for TabsLayout {
-    fn install(ctx: &FeatureInitContext, uri: &AppUri) -> anyhow::Result<()> {
-        processes_core::tabs::install::install(ctx, uri)
+    type Params = crate::routes::TabsLayoutParams;
+
+    type Installs = processes_core::tabs::TabsFeature;
+
+    fn install(ctx: &FeatureInitContext, params: &Self::Params) -> anyhow::Result<Self::Installs> {
+        ctx.install(params.context.as_str())
     }
 
-    fn view(cx: &mut LayoutCx) -> Element {
-        let (tabs, _) = cx.use_reducer::<TabsReducer>();
+    fn view(cx: &mut LayoutCx<Self>) -> Element {
+        let (tabs, _) = cx.use_reducer::<Tabs, _>();
         cx.use_route_change(|from, to| tracing::debug!(?from, to, "route"));
 
         let nav = cx.use_navigate::<Route>();
@@ -27,15 +30,19 @@ impl Layout for TabsLayout {
         let is_russian = l10n.tag() == "ru";
         let lang_button_label = if is_russian { "English" } else { "Русский" };
 
+        // What this layout was reached with, not one invented here: `routes!`
+        // derived it from the pages below.
+        let context = || tabs.context.clone();
+
         let tab_bar = hstack((
             button("Processes").on_click(nav.to_handler(Route::Processes {
-                context: "ubuntu".to_string(),
+                context: context(),
             })),
             button("Services").on_click(nav.to_handler(Route::Services {
-                context: "ubuntu".to_string(),
+                context: context(),
             })),
             button("Metrics").on_click(nav.to_handler(Route::Metrics {
-                context: "ubuntu".to_string(),
+                context: context(),
             })),
 
             button("Open window").on_click(|| {

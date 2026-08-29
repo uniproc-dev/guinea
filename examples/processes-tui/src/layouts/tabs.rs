@@ -1,13 +1,12 @@
 use guinea::feature::FeatureInitContext;
 use guinea::ratatui::{Layout, LayoutCx};
-use guinea::uri::AppUri;
 use ratatui::layout::{Constraint, Direction, Layout as Rows};
 use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Borders, Paragraph};
 
 use processes_core::l10n::L10n;
-use processes_core::tabs::contracts::TabsReducer;
+use processes_core::tabs::contracts::Tabs;
 
 use crate::pages::metrics::Metrics;
 use crate::pages::processes::Processes;
@@ -16,12 +15,16 @@ use crate::pages::services::Services;
 pub struct TabsLayout;
 
 impl Layout for TabsLayout {
-    fn install(ctx: &FeatureInitContext, uri: &AppUri) -> anyhow::Result<()> {
-        processes_core::tabs::install::install(ctx, uri)
+    type Params = crate::routes::TabsLayoutParams;
+
+    type Installs = processes_core::tabs::TabsFeature;
+
+    fn install(ctx: &FeatureInitContext, params: &Self::Params) -> anyhow::Result<Self::Installs> {
+        ctx.install(params.context.as_str())
     }
 
-    fn render(cx: &mut LayoutCx<'_, '_>) {
-        let (state, _) = cx.read::<TabsReducer>();
+    fn render(cx: &mut LayoutCx<'_, '_, Self>) {
+        let (state, _) = cx.state::<Tabs, _>();
         let strings = L10n::current();
 
         let rows = Rows::default()

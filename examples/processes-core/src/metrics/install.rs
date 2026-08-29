@@ -1,15 +1,20 @@
-use guinea::feature::FeatureInitContext;
-use guinea::uri::AppUri;
-use guinea_core::actor::Addr;
+use guinea::feature::{Feature, FeatureInitContext};
+use guinea_core::feature::Bound;
 
 use super::actor::{MetricsActor, Tick};
-use super::contracts::MetricsReducer;
+use super::contracts;
 
-pub fn install(ctx: &FeatureInitContext, _uri: &AppUri) -> anyhow::Result<()> {
-    let addr = Addr::new_managed_scoped(MetricsActor::new(ctx.port::<MetricsReducer>()), ctx.token.clone());
+pub struct MetricsFeature {
+    _samples: Bound<contracts::Metrics>,
+}
 
-    addr.send(Tick);
+impl Feature for MetricsFeature {
+    type Params = ();
+    type Exports = (contracts::Metrics,);
 
-    ctx.scope.own(addr);
-    Ok(())
+    fn install(cx: &FeatureInitContext, _params: &()) -> anyhow::Result<Self> {
+        let samples = cx.state::<contracts::Metrics>().driven_by(MetricsActor::new);
+        samples.emit(Tick);
+        Ok(Self { _samples: samples })
+    }
 }

@@ -1,25 +1,35 @@
-use guinea::feature::FeatureInitContext;
-use guinea::uri::AppUri;
-use guinea_core::actor::Addr;
+//! A named unit with its own lifetime, and one expression for the whole of it.
+//!
+//! The actor is created by the very call that claims the reducer, so the pair
+//! is known by construction: there is nothing to wire and nothing to leave
+//! unwired. `context` is what the route captured, handed over typed - the
+//! feature never sees an address, so there is no segment index to get wrong.
+
+use guinea::feature::{Feature, FeatureInitContext};
+use guinea_core::feature::Bound;
 
 use super::actor::ProcessActor;
-use super::contracts::{ProcessesReducer, Refresh};
+use super::contracts::{self, Refresh};
 
-pub fn install(ctx: &FeatureInitContext, uri: &AppUri) -> anyhow::Result<()> {
+pub struct ProcessesFeature {
+    /// Held, not dropped: a feature that a segment wired to another one is
+    /// reached through what `install` returned.
+    _listing: Bound<contracts::Processes>,
+}
 
-    let addr = Addr::new_managed_scoped(
-        ProcessActor::new(
-            uri.segment(0).expect("route always carries a :context segment").to_string(),
-            ctx.port::<ProcessesReducer>(),
-            ctx.event_bus.clone(),
-        ),
-        ctx.token.clone(),
-    );
+impl Feature for ProcessesFeature {
+    type Params = str;
 
-    ctx.wire::<ProcessesReducer, _>(&addr);
+    /// One reducer, and pages below may read it. Anything else this feature
+    /// claimed would stay its own.
+    type Exports = (contracts::Processes,);
 
-    addr.send(Refresh);
+    fn install(cx: &FeatureInitContext, context: &str) -> anyhow::Result<Self> {
+        let listing = cx.state::<contracts::Processes>().driven_by(|push| {
+            ProcessActor::new(context.to_string(), push, cx.event_bus.clone())
+        });
 
-    ctx.scope.own(addr);
-    Ok(())
+        listing.emit(Refresh);
+        Ok(Self { _listing: listing })
+    }
 }

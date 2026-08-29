@@ -1,22 +1,28 @@
 use guinea::feature::FeatureInitContext;
 use guinea::slint::{Page, PageCx};
-use guinea::uri::AppUri;
 use slint::ComponentHandle;
 
-use processes_core::services::contracts::ServicesReducer;
+use processes_core::services::contracts::Services as Running;
 
 use crate::ui::{AppWindow, ServicesModel};
 
 pub struct Services;
 
 impl Page for Services {
-    fn install(ctx: &FeatureInitContext, uri: &AppUri) -> anyhow::Result<()> {
-        processes_core::services::install::install(ctx, uri)
+    type Params = crate::routes::ServicesParams;
+
+    type Installs = processes_core::services::ServicesFeature;
+
+    fn install(
+        ctx: &FeatureInitContext,
+        _params: &Self::Params,
+    ) -> anyhow::Result<Self::Installs> {
+        ctx.install(&())
     }
 
-    fn bind(cx: PageCx) {
+    fn bind(cx: PageCx<Self>) {
         cx.root::<AppWindow>()
             .global::<ServicesModel>()
-            .set_items(cx.rows::<ServicesReducer, _>(|state| &state.items));
+            .set_items(cx.rows::<Running, _, _>(|state| &state.items));
     }
 }

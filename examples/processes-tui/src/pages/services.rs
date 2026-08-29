@@ -1,27 +1,47 @@
+use guinea::core::feature::Bound;
 use guinea::feature::FeatureInitContext;
 use guinea::ratatui::{Page, PageCx};
-use guinea::uri::AppUri;
 use ratatui::style::{Modifier, Style};
 use ratatui::widgets::{Block, Borders, List, ListItem};
 
-use processes_core::services::contracts::ServicesReducer;
+use processes_core::services::contracts::{Listed, Services as Running};
 
-use crate::cursor::{self, Cursor};
+use crate::cursor::{Cursor, Move};
 
 pub struct Services;
 
 impl Page for Services {
-    fn install(ctx: &FeatureInitContext, uri: &AppUri) -> anyhow::Result<()> {
-        ctx.seed_reducer::<Cursor>(0);
-        processes_core::services::install::install(ctx, uri)
+    type Params = crate::routes::ServicesParams;
+
+    /// The feature, and the focus this page keeps of its own - both, because
+    /// both are read below.
+    type Installs = (processes_core::services::ServicesFeature, Bound<Cursor>);
+
+    fn install(
+        ctx: &FeatureInitContext,
+        _params: &Self::Params,
+    ) -> anyhow::Result<Self::Installs> {
+        let cursor = ctx.state::<Cursor>().plain();
+        let catalogue = ctx.install(&())?;
+
+        let observing = cursor.clone();
+        ctx.observe::<Running>(move |update| {
+            let Listed::Items(items) = update;
+            observing.push(Move {
+                delta: 0,
+                len: items.len(),
+            });
+        });
+
+        Ok((catalogue, cursor))
     }
 
-    fn render(cx: &mut PageCx<'_, '_>) {
-        let (state, _) = cx.read::<ServicesReducer>();
-        let (cursor, _) = cx.read::<Cursor>();
+    fn render(cx: &mut PageCx<'_, '_, Self>) {
+        let (state, _) = cx.state::<Running, _>();
+        let (cursor, _) = cx.state::<Cursor, _>();
         let area = cx.area();
 
-        let focused = cursor::focused(cursor, state.items.len());
+        let focused = cursor.row;
         let items: Vec<ListItem> = state
             .items
             .iter()

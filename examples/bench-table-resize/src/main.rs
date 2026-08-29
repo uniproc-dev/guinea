@@ -2,8 +2,7 @@ use std::cell::RefCell;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use guinea::widgets::table::{ColumnSpec, table};
-use guinea::widgets::table::Width;
+use guinea_widgets::table::{ColumnSpec, Width, table};
 use guinea_core::{UiDispatcher, UiTask, invoke_on_ui, set_ui_dispatcher};
 use windows_reactor::{App, Backdrop, Element, RenderCx, SetState, UiMarshaller, WinUIDispatcher, text_block};
 

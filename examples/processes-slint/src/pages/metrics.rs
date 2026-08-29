@@ -1,24 +1,30 @@
 use guinea::feature::FeatureInitContext;
 use guinea::slint::{Page, PageCx, ToSlint};
-use guinea::uri::AppUri;
 use guinea_widgets::chart::RingSeries;
 use slint::ComponentHandle;
 
-use processes_core::metrics::contracts::MetricsReducer;
+use processes_core::metrics::contracts::Metrics as Sampling;
 
 use crate::ui::{AppWindow, MetricsModel};
 
 pub struct Metrics;
 
 impl Page for Metrics {
-    fn install(ctx: &FeatureInitContext, uri: &AppUri) -> anyhow::Result<()> {
-        processes_core::metrics::install::install(ctx, uri)
+    type Params = crate::routes::MetricsParams;
+
+    type Installs = processes_core::metrics::MetricsFeature;
+
+    fn install(
+        ctx: &FeatureInitContext,
+        _params: &Self::Params,
+    ) -> anyhow::Result<Self::Installs> {
+        ctx.install(&())
     }
 
-    fn bind(cx: PageCx) {
+    fn bind(cx: PageCx<Self>) {
         let root = cx.root::<AppWindow>();
 
-        cx.bind_to::<MetricsReducer, _>(&root, |root, state| {
+        cx.bind_to::<Sampling, _, _>(&root, |root, state| {
             let model = root.global::<MetricsModel>();
             let history = values(&state.cpu);
 

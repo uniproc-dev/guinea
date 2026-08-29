@@ -1,18 +1,24 @@
 use guinea::eframe::{Page, PageCx};
 use guinea::feature::FeatureInitContext;
-use guinea::uri::AppUri;
 
-use processes_core::services::contracts::ServicesReducer;
+use processes_core::services::contracts::Services as Running;
 
 pub struct Services;
 
 impl Page for Services {
-    fn install(ctx: &FeatureInitContext, uri: &AppUri) -> anyhow::Result<()> {
-        processes_core::services::install::install(ctx, uri)
+    type Params = crate::routes::ServicesParams;
+
+    type Installs = processes_core::services::ServicesFeature;
+
+    fn install(
+        ctx: &FeatureInitContext,
+        _params: &Self::Params,
+    ) -> anyhow::Result<Self::Installs> {
+        ctx.install(&())
     }
 
-    fn render(cx: &mut PageCx<'_>) {
-        let (state, _) = cx.read::<ServicesReducer>();
+    fn render(cx: &mut PageCx<'_, Self>) {
+        let (state, _) = cx.state::<Running, _>();
 
         egui::ScrollArea::vertical().show(cx.ui(), |ui| {
             for item in &state.items {

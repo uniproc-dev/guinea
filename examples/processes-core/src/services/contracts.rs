@@ -1,23 +1,26 @@
-use guinea_macros::{ReducerState, port, reducer};
+use guinea_core::messages;
+use guinea_core::scope::Reducer;
 
-#[derive(Clone)]
-pub enum ServicesMessages {
-    SetItems(Vec<String>),
-}
+// The one action this feature answers. Who answers it is not written down
+// anywhere - see `install`.
+messages! { Refresh }
 
-#[port]
-pub trait ServicesPort {
-    fn send(&self, msg: ServicesMessages);
-}
-
-#[derive(ReducerState)]
-pub struct ServicesViewState {
+#[derive(Default, Clone, PartialEq, Debug)]
+pub struct Services {
     pub items: Vec<String>,
 }
 
-#[reducer]
-pub fn services_reducer(state: &mut ServicesViewState, msg: ServicesMessages) {
-    match msg {
-        ServicesMessages::SetItems(items) => state.items = items,
+#[derive(Clone)]
+pub enum Listed {
+    Items(Vec<String>),
+}
+
+impl Reducer for Services {
+    type Update = Listed;
+
+    fn reduce(&mut self, update: Listed) {
+        match update {
+            Listed::Items(items) => self.items = items,
+        }
     }
 }

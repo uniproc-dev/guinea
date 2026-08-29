@@ -13,9 +13,9 @@ routes! {
     backend = guinea::eframe::Egui,
     Route {
         layout(TabsLayout) {
-            page(Processes, "/:context/processes") { context: String }
-            page(Services, "/:context/services") { context: String }
-            page(Metrics, "/:context/metrics") { context: String }
+            page(Processes) { context: String }
+            page(Services) { context: String }
+            page(Metrics) link("/:context/metrics") { context: String }
         }
     }
 }

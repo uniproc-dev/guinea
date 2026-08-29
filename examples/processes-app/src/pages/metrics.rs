@@ -1,12 +1,11 @@
 use guinea::feature::FeatureInitContext;
 use guinea::winui::{Page, PageCx};
-use guinea::uri::AppUri;
 use guinea_widgets::chart::{HoverInfo, Interpolation, Series, line_chart};
 use guinea_widgets::color::{hex, hex_alpha};
 use windows_canvas::ColorF;
 use windows_reactor::{Element, LayoutExt, text_block, title, vstack};
 
-use processes_core::metrics::contracts::MetricsReducer;
+use processes_core::metrics::contracts::Metrics as Sampling;
 
 pub struct Metrics;
 
@@ -14,12 +13,19 @@ const CPU_COLOR: ColorF = hex(0x3a82f5);
 const MEMORY_COLOR: ColorF = hex(0xf59e0a);
 
 impl Page for Metrics {
-    fn install(ctx: &FeatureInitContext, uri: &AppUri) -> anyhow::Result<()> {
-        processes_core::metrics::install::install(ctx, uri)
+    type Params = crate::routes::MetricsParams;
+
+    type Installs = processes_core::metrics::MetricsFeature;
+
+    fn install(
+        ctx: &FeatureInitContext,
+        _params: &Self::Params,
+    ) -> anyhow::Result<Self::Installs> {
+        ctx.install(&())
     }
 
-    fn view(cx: &mut PageCx) -> Element {
-        let (state, _) = cx.use_reducer::<MetricsReducer>();
+    fn view(cx: &mut PageCx<Self>) -> Element {
+        let (state, _) = cx.use_reducer::<Sampling, _>();
         // State, not a ref: writing a ref does not schedule a render, so the
         // readout would only refresh when something else happened to redraw
         // the page.

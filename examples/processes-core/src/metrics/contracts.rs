@@ -1,28 +1,26 @@
-use guinea_macros::{ReducerState, port, reducer};
+use guinea_core::scope::Reducer;
 use guinea_widgets::chart::RingSeries;
 
-#[derive(Clone)]
-pub enum MetricsMsg {
-    Sample { at: u64, cpu: f32, memory: f32 },
-}
-
-#[port]
-pub trait MetricsPort {
-    fn send(&self, msg: MetricsMsg);
-}
-
-#[derive(ReducerState)]
-pub struct MetricsViewState {
+#[derive(Default, Clone, PartialEq, Debug)]
+pub struct Metrics {
     pub cpu: RingSeries,
     pub memory: RingSeries,
 }
 
-#[reducer]
-pub fn metrics_reducer(state: &mut MetricsViewState, msg: MetricsMsg) {
-    match msg {
-        MetricsMsg::Sample { at, cpu, memory } => {
-            state.cpu.push((at, cpu));
-            state.memory.push((at, memory));
+#[derive(Clone)]
+pub enum Sampled {
+    At { at: u64, cpu: f32, memory: f32 },
+}
+
+impl Reducer for Metrics {
+    type Update = Sampled;
+
+    fn reduce(&mut self, update: Sampled) {
+        match update {
+            Sampled::At { at, cpu, memory } => {
+                self.cpu.push((at, cpu));
+                self.memory.push((at, memory));
+            }
         }
     }
 }

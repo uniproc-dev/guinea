@@ -884,6 +884,8 @@ dependencies = [
  "anyhow",
  "guinea-app",
  "guinea-core",
+ "serde",
+ "serde_json",
  "tracing",
 ]
 
@@ -1604,6 +1606,7 @@ dependencies = [
  "inventory",
  "processes-core",
  "ratatui",
+ "tempfile",
  "tokio",
  "tracing",
  "tracing-subscriber",

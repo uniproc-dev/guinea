@@ -1,12 +1,13 @@
-//! The egui front end. Same application as the other three: same actors, same
-//! reducers, same features - only the drawing and the route tree differ.
+//! The iced front end. Same application as the other four: same actors, same
+//! reducers, same features - what differs is that this one is Elm all the way
+//! down, so each page keeps a state and a message type of its own.
 
 mod layouts;
 mod pages;
 mod routes;
 
 use guinea::app::GuineaApp;
-use guinea::eframe::run;
+use guinea::iced::run;
 use routes::Route;
 
 use processes_core::startup;
@@ -20,7 +21,7 @@ fn initial_route() -> Route {
 fn main() -> anyhow::Result<()> {
     // To a file, like the other windowed front ends: there is no console to
     // watch, and stdout is block buffered.
-    let log = std::fs::File::create("processes-eframe.log")?;
+    let log = std::fs::File::create("processes-iced.log")?;
     tracing_subscriber::fmt()
         .with_writer(log)
         .with_ansi(false)
@@ -49,8 +50,8 @@ fn main() -> anyhow::Result<()> {
 
     run(
         app,
-        "guinea · processes (egui)",
-        eframe::NativeOptions::default(),
+        "guinea · processes (iced)",
+        iced::window::Settings::default(),
         initial_route,
     )
 }

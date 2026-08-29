@@ -1,27 +1,48 @@
+use guinea::core::feature::Bound;
 use guinea::feature::FeatureInitContext;
 use guinea::ratatui::{Page, PageCx};
-use guinea::uri::AppUri;
 use ratatui::style::{Modifier, Style};
 use ratatui::widgets::{Block, Borders, List, ListItem};
 
-use processes_core::processes::contracts::ProcessesReducer;
+use processes_core::processes::contracts::{Listed, Processes as Running};
 
-use crate::cursor::{self, Cursor};
+use crate::cursor::{Cursor, Move};
 
 pub struct Processes;
 
 impl Page for Processes {
-    fn install(ctx: &FeatureInitContext, uri: &AppUri) -> anyhow::Result<()> {
-        ctx.seed_reducer::<Cursor>(0);
-        processes_core::processes::install::install(ctx, uri)
+    type Params = crate::routes::ProcessesParams;
+
+    /// The feature, and the focus this page keeps of its own - both, because
+    /// both are read below and a claim that goes undeclared is a claim the
+    /// page cannot read.
+    type Installs = (processes_core::processes::ProcessesFeature, Bound<Cursor>);
+
+    fn install(ctx: &FeatureInitContext, params: &Self::Params) -> anyhow::Result<Self::Installs> {
+        let cursor = ctx.state::<Cursor>().plain();
+        let listing = ctx.install(params.context.as_str())?;
+
+        // The focus points into a list the actor owns, so it has to hear when
+        // that list is replaced - killing the last row leaves the focus past
+        // the end otherwise.
+        let observing = cursor.clone();
+        ctx.observe::<Running>(move |update| {
+            let Listed::Items(items) = update;
+            observing.push(Move {
+                delta: 0,
+                len: items.len(),
+            });
+        });
+
+        Ok((listing, cursor))
     }
 
-    fn render(cx: &mut PageCx<'_, '_>) {
-        let (state, _) = cx.read::<ProcessesReducer>();
-        let (cursor, _) = cx.read::<Cursor>();
+    fn render(cx: &mut PageCx<'_, '_, Self>) {
+        let (state, _) = cx.state::<Running, _>();
+        let (cursor, _) = cx.state::<Cursor, _>();
         let area = cx.area();
 
-        let focused = cursor::focused(cursor, state.items.len());
+        let focused = cursor.row;
         let items: Vec<ListItem> = state
             .items
             .iter()

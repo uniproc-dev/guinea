@@ -4,8 +4,11 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-guinea = { path = "../../crates/guinea", features = ["widgets"] }
+guinea = { path = "../../crates/guinea" }
 guinea-core = { path = "../../crates/guinea-core" }
+# The widgets left guinea for the plugin repository: a table is a toolkit
+# component that grows on its own schedule, and has nothing to do with routing.
+guinea-widgets = { git = "https://github.com/uniproc-dev/guinea-plugins", tag = "v0.4.0" }
 windows-reactor = { git = "https://github.com/Tam1SH/windows-rs", rev = "63450fc98" }
 anyhow = "1.0.100"
 
@@ -13,3 +16,9 @@ anyhow = "1.0.100"
 windows-reactor-setup = { git = "https://github.com/Tam1SH/windows-rs", rev = "63450fc98" }
 
 [workspace]
+
+# The plugin depends on guinea from git; without this the benchmark would build
+# two copies of guinea and the widget would be drawing against the other one.
+[patch."https://github.com/uniproc-dev/guinea"]
+guinea = { path = "../../crates/guinea" }
+guinea-core = { path = "../../crates/guinea-core" }
