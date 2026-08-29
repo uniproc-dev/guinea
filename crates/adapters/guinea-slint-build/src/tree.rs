@@ -83,7 +83,7 @@ fn emit_nodes(
                 here.push(name);
             }
 
-            Node::Layout { ty, children } => {
+            Node::Layout { ty, children, .. } => {
                 let (name, takes_route) = component(ty, components, at)?;
 
                 let mut inner = String::new();

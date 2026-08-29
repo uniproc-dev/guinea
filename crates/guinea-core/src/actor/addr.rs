@@ -211,6 +211,10 @@ impl<A: 'static> Addr<A> {
         }
         self.is_processing.set(true);
 
+        crate::notify::turn(|| self.drain_queue());
+    }
+
+    fn drain_queue(&self) {
         loop {
             let mut envelope = {
                 let mut q = self.queue.borrow_mut();

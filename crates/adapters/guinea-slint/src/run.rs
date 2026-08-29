@@ -13,7 +13,7 @@ use guinea_app::app::roots::RootId;
 use guinea_app::app::windows::{SavedGeometry, WindowService, Windows};
 use guinea_app::app::{GuineaApp, install_runtime, shutdown_current};
 use guinea_core::actor::UiThreadToken;
-use guinea_router::router::{NavigateHandle, RouteChain, RouteSink, Router, ToUri};
+use guinea_router::router::{NavigateHandle, RouteChain, RouteSink, Router};
 use slint::ComponentHandle;
 
 use crate::windows::SlintWindows;
@@ -22,13 +22,18 @@ use crate::{Slint, dispatcher, nav, root, windows};
 /// What [`run`] calls the root it opens.
 pub const MAIN: &str = "main";
 
-/// Runs `window`, starting at `initial`.
+/// Runs `window`, starting where `initial` says.
 ///
 /// `show` is called with every route the application arrives at, and does the
 /// one thing only the application can: point its own tree at the right branch.
 ///
+/// `initial` is a closure rather than a value because where an application
+/// starts is often something only the installed plugins know - a route saved
+/// by the last run, read out of the store the store plugin just provided.
+/// Called once, after `install`, before the first frame.
+///
 /// ```ignore
-/// guinea_slint::run(app, AppWindow::new()?, initial_route(), |window, route| {
+/// guinea_slint::run(app, AppWindow::new()?, initial_route, |window, route| {
 ///     window.set_page(match route {
 ///         Route::Processes { .. } => 0,
 ///         Route::Services { .. } => 1,
@@ -36,9 +41,14 @@ pub const MAIN: &str = "main";
 ///     })
 /// })
 /// ```
-pub fn run<R, W, S>(app: GuineaApp, window: W, initial: R, show: S) -> anyhow::Result<()>
+pub fn run<R, W, S>(
+    app: GuineaApp,
+    window: W,
+    initial: impl FnOnce() -> R,
+    show: S,
+) -> anyhow::Result<()>
 where
-    R: RouteChain<Slint> + ToUri + Clone + PartialEq + 'static,
+    R: RouteChain<Slint> + Clone + PartialEq + 'static,
     W: ComponentHandle + 'static,
     S: Fn(&W, &R) + 'static,
 {
@@ -74,6 +84,7 @@ where
     restore(&shell, root_id);
     let _watching = windows::watch(shell.clone());
 
+    let initial = initial();
     let window = Rc::new(window);
     let show = Rc::new(show);
     let route = Rc::new(RefCell::new(initial.clone()));
@@ -90,7 +101,7 @@ where
     nav::install(nav_handle);
 
     // Installing the chain is what wires it - there is nothing to render.
-    router.navigate(initial.clone(), &initial.to_uri())?;
+    router.navigate(initial.clone())?;
     show(&window, &initial);
 
     let outcome = window.run();

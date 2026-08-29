@@ -1,40 +1,16 @@
-/// Declares message types. `messages! { pub Group { .. } }` additionally
-/// declares a feature's UI contract; the flat form declares actor-internal
-/// messages.
+/// Declares message types - the actions an actor handles, and whatever it
+/// sends itself.
+///
+/// It no longer declares a group. A group existed to prove that an action the
+/// view emits belongs to a list somebody wired, and that proof is now
+/// `DrivenBy: Handler<M>` - which the compiler checks at the `emit` itself,
+/// with nothing to keep in sync and nothing to leave unwired.
 #[macro_export]
 macro_rules! messages {
-    ( pub $group:ident {
-        $( $name:ident
-            $( { $($f_name:ident : $f_typ:ty),* $(,)? } )?
-            $( ( $($t_typ:ty),* $(,)? ) )?
-        ),* $(,)?
-    } ) => {
-        $(
-            $crate::messages!(@declare $name $( { $($f_name : $f_typ),* } )? $( ( $($t_typ),* ) )? );
-        )*
-
-        #[derive(Debug, Clone, Copy)]
-        pub struct $group;
-
-        impl $crate::actor::group::ActionsGroup for $group {
-            type Dispatch = $crate::actor::group::GroupDispatch<$group>;
-            type Members = $crate::messages!(@cons $($name),*);
-        }
-
-        $(
-            impl $crate::actor::group::InGroup<$group> for $name {}
-        )*
-    };
-
     ( $($name:ident $( { $($f_name:ident : $f_typ:ty),* $(,)? } )? $( ( $($t_typ:ty),* $(,)? ) )? ),* $(,)? ) => {
         $(
             $crate::messages!(@declare $name $( { $($f_name : $f_typ),* } )? $( ( $($t_typ),* ) )? );
         )*
-    };
-
-    (@cons) => { () };
-    (@cons $head:ident $(, $tail:ident)* ) => {
-        ($head, $crate::messages!(@cons $($tail),*))
     };
 
     (@declare $name:ident { $($f_name:ident : $f_typ:ty),* $(,)? } ) => {

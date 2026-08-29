@@ -59,6 +59,14 @@ impl FeatureHost {
         &self.debug_registry
     }
 
+    /// What plugins provided at startup.
+    ///
+    /// The one thing an enter guard can read: it answers before anything is
+    /// installed, so there is no scope yet - only what the application holds.
+    pub fn services(&self) -> &SharedState {
+        &self.services
+    }
+
     /// The context a feature installs through. `ancestors` is what
     /// `FeatureInitContext::inherit` walks - root first, never including
     /// `scope` itself.

@@ -1,0 +1,417 @@
+//! Where a reducer's change becomes a redraw - after the turn that made it.
+//!
+//! [`Scope::push`](crate::scope::Scope::push) applies the update and marks the
+//! cell. The listeners run when the current *turn* ends: a turn is one delivery
+//! of messages to an actor, or, when nothing opened one, the push itself.
+//!
+//! The unit is deliberately the turn and not the frame. Tying it to a frame
+//! makes the delay a property of the backend - the next tick under an
+//! immediate-mode toolkit, whenever the loop wakes under a retained one - and
+//! a page author cannot say when their change lands. Tying it to the turn puts
+//! the drain microseconds later, in the same place on every backend.
+//!
+//! Two things follow. The actor loop and the drawing loop stop sharing a
+//! stack: the listeners run after `handle` returned, so navigating or dropping
+//! a scope from one cannot pull the ground from under an actor that is still
+//! running. And a burst of pushes inside one turn costs one notification per
+//! cell rather than one per push, because marks are deduplicated.
+
+use std::any::{Any, TypeId};
+use std::cell::{Cell, RefCell};
+use std::rc::{Rc, Weak};
+use std::time::Instant;
+
+use crate::scope::Scope;
+
+/// One applied update, on its way to whoever is watching.
+struct Change {
+    scope: Weak<Scope>,
+    cell: TypeId,
+    update: Option<Box<dyn Any>>,
+}
+
+thread_local! {
+    static MARKED: RefCell<Vec<Change>> = const { RefCell::new(Vec::new()) };
+    static OPENED: Cell<Option<Instant>> = const { Cell::new(None) };
+    static DEPTH: Cell<u32> = const { Cell::new(0) };
+    static DRAINING: Cell<bool> = const { Cell::new(false) };
+}
+
+struct Guard;
+
+impl Drop for Guard {
+    fn drop(&mut self) {
+        let depth = DEPTH.with(|depth| {
+            let now = depth.get().saturating_sub(1);
+            depth.set(now);
+            now
+        });
+
+        if depth == 0 && !std::thread::panicking() {
+            drain();
+        }
+    }
+}
+
+/// Runs `f` as one turn: everything it marks is notified once, after it
+/// returns, and nested turns fold into the outermost one.
+///
+/// For whoever delivers work to the application - an actor's queue, an event
+/// from the toolkit. A push made outside any turn notifies at once, since
+/// there is no frame beneath it to protect.
+pub fn turn<R>(f: impl FnOnce() -> R) -> R {
+    DEPTH.with(|depth| depth.set(depth.get() + 1));
+    let _guard = Guard;
+    f()
+}
+
+pub(crate) fn mark(scope: &Rc<Scope>, cell: TypeId, update: Option<Box<dyn Any>>) {
+    let opened_the_round = MARKED.with(|marked| {
+        let mut marked = marked.borrow_mut();
+        let was_empty = marked.is_empty();
+
+        let seen = marked
+            .iter()
+            .any(|c| c.cell == cell && std::ptr::eq(c.scope.as_ptr(), Rc::as_ptr(scope)));
+
+        // An observed update is kept whole - a rename and a fresh list are
+        // different things to whoever is watching. A bare mark says only that
+        // the cell moved, so one of those is as good as ten.
+        if update.is_some() || !seen {
+            marked.push(Change {
+                scope: Rc::downgrade(scope),
+                cell,
+                update,
+            });
+        }
+
+        was_empty
+    });
+
+    if opened_the_round {
+        OPENED.with(|opened| opened.set(Some(Instant::now())));
+    }
+
+    let free = DEPTH.with(|depth| depth.get()) == 0 && !DRAINING.with(|d| d.get());
+    if free {
+        drain();
+    }
+}
+
+/// Runs the listeners of every cell marked since the last call, in the order
+/// the cells were first marked.
+///
+/// A mark made *by* a listener waits for the next drain rather than extending
+/// this one: a cycle then shows up as a redraw that never settles, which is
+/// visible, rather than as a call that never returns.
+/// How many times state may settle before we stop chasing it.
+///
+/// An observer that pushes into a reducer another observer watches is a chain,
+/// and a legitimate one; a chain that never ends is a bug, and this is where it
+/// surfaces as a message rather than a hang.
+const SETTLE_ROUNDS: usize = 16;
+
+pub fn drain() {
+    if MARKED.with(|marked| marked.borrow().is_empty()) {
+        return;
+    }
+
+    struct Running;
+    impl Drop for Running {
+        fn drop(&mut self) {
+            DRAINING.with(|draining| draining.set(false));
+        }
+    }
+    DRAINING.with(|draining| draining.set(true));
+    let _running = Running;
+
+    let opened = OPENED.with(|opened| opened.take());
+
+    let mut touched: Vec<(Weak<Scope>, TypeId)> = Vec::new();
+    let mut updates = 0usize;
+    let mut gone = 0usize;
+    let mut rounds = 0usize;
+
+    // State first, and until it stops moving: an observer turning someone
+    // else's update into its own is how one piece of state follows another,
+    // and all of it has to settle before anything is told to redraw.
+    while MARKED.with(|marked| !marked.borrow().is_empty()) {
+        rounds += 1;
+        if rounds > SETTLE_ROUNDS {
+            tracing::warn!(
+                target: "core.notify.drain",
+                rounds = SETTLE_ROUNDS,
+                "state did not settle - an observer is feeding itself"
+            );
+            MARKED.with(|marked| marked.borrow_mut().clear());
+            break;
+        }
+
+        let batch = MARKED.with(|marked| std::mem::take(&mut *marked.borrow_mut()));
+
+        for change in batch {
+            let Some(scope) = change.scope.upgrade() else {
+                gone += 1;
+                continue;
+            };
+
+            if !touched
+                .iter()
+                .any(|(s, c)| *c == change.cell && std::ptr::eq(s.as_ptr(), Rc::as_ptr(&scope)))
+            {
+                touched.push((change.scope.clone(), change.cell));
+            }
+
+            let Some(update) = change.update else { continue };
+            for observer in scope.observers_of(change.cell) {
+                updates += 1;
+                observer(&*update);
+            }
+        }
+    }
+
+    let cells = touched.len();
+    let mut listeners = 0usize;
+
+    for (scope, cell) in touched {
+        let Some(scope) = scope.upgrade() else {
+            gone += 1;
+            continue;
+        };
+        for listener in scope.listeners_of(cell) {
+            listeners += 1;
+            listener();
+        }
+    }
+
+    tracing::debug!(
+        target: "core.notify.drain",
+        cells,
+        listeners,
+        updates,
+        rounds,
+        gone,
+        waited_us = opened.map(|at| at.elapsed().as_micros()).unwrap_or(0),
+        "notify.drain"
+    );
+}
+
+/// Whether any cell is waiting to be drained.
+pub fn pending() -> bool {
+    MARKED.with(|marked| !marked.borrow().is_empty())
+}
+
+#[cfg(test)]
+mod tests {
+    use std::cell::Cell as StdCell;
+    use std::cell::RefCell;
+    use std::rc::Rc;
+
+    use crate::scope::{Reducer, Scope};
+
+    #[derive(Default)]
+    struct Count(u32);
+
+    impl Reducer for Count {
+        type Update = u32;
+
+        fn reduce(&mut self, to: u32) {
+            self.0 = to;
+        }
+    }
+
+    /// A second cell, for watching one piece of state follow another.
+    #[derive(Default)]
+    struct Mirror(u32);
+
+    impl Reducer for Mirror {
+        type Update = u32;
+
+        fn reduce(&mut self, to: u32) {
+            self.0 = to;
+        }
+    }
+
+    fn watched() -> (Rc<Scope>, Rc<StdCell<u32>>, crate::scope::Subscription) {
+        let scope = Rc::new(Scope::new());
+        let runs = Rc::new(StdCell::new(0));
+        let sub = scope.subscribe::<Count>({
+            let runs = runs.clone();
+            move || runs.set(runs.get() + 1)
+        });
+        (scope, runs, sub)
+    }
+
+    #[test]
+    fn a_push_outside_a_turn_notifies_at_once() {
+        let (scope, runs, _sub) = watched();
+
+        scope.push::<Count>(7);
+
+        assert_eq!(scope.state::<Count>().borrow().0, 7);
+        assert_eq!(runs.get(), 1, "nothing was underneath, so nothing had to wait");
+    }
+
+    #[test]
+    fn a_push_inside_a_turn_waits_for_it_to_end() {
+        let (scope, runs, _sub) = watched();
+
+        super::turn(|| {
+            scope.push::<Count>(7);
+            assert_eq!(
+                scope.state::<Count>().borrow().0,
+                7,
+                "state is current inside the turn"
+            );
+            assert_eq!(runs.get(), 0, "the listener did not run on the pusher's stack");
+        });
+
+        assert_eq!(runs.get(), 1);
+    }
+
+    #[test]
+    fn a_burst_inside_one_turn_costs_one_notification() {
+        let (scope, runs, _sub) = watched();
+
+        super::turn(|| {
+            for n in 0..5 {
+                scope.push::<Count>(n);
+            }
+        });
+
+        assert_eq!(runs.get(), 1);
+        assert_eq!(scope.state::<Count>().borrow().0, 4);
+    }
+
+    #[test]
+    fn nested_turns_notify_once_at_the_outermost_end() {
+        let (scope, runs, _sub) = watched();
+
+        super::turn(|| {
+            scope.push::<Count>(1);
+            super::turn(|| {
+                scope.push::<Count>(2);
+            });
+            assert_eq!(runs.get(), 0, "the inner turn did not drain under the outer one");
+        });
+
+        assert_eq!(runs.get(), 1);
+    }
+
+    #[test]
+    fn a_scope_dropped_before_the_turn_ends_notifies_nobody() {
+        let runs = Rc::new(StdCell::new(0));
+
+        super::turn(|| {
+            let scope = Rc::new(Scope::new());
+            let _sub = scope.subscribe::<Count>({
+                let runs = runs.clone();
+                move || runs.set(runs.get() + 1)
+            });
+            scope.push::<Count>(1);
+        });
+
+        assert_eq!(runs.get(), 0);
+    }
+
+    #[test]
+    fn an_observer_is_handed_the_update_itself() {
+        let scope = Rc::new(Scope::new());
+        let seen = Rc::new(RefCell::new(Vec::new()));
+
+        let _sub = scope.observe::<Count>({
+            let seen = seen.clone();
+            move |update| seen.borrow_mut().push(*update)
+        });
+
+        super::turn(|| {
+            scope.push::<Count>(1);
+            scope.push::<Count>(2);
+        });
+
+        assert_eq!(
+            *seen.borrow(),
+            vec![1, 2],
+            "every update reaches an observer - a rename is not a fresh list"
+        );
+    }
+
+    #[test]
+    fn observers_run_before_listeners_and_state_settles_first() {
+        let scope = Rc::new(Scope::new());
+        let order = Rc::new(RefCell::new(Vec::new()));
+
+        let _observer = scope.observe::<Count>({
+            let order = order.clone();
+            move |_| order.borrow_mut().push("observe")
+        });
+        let _listener = scope.subscribe::<Count>({
+            let order = order.clone();
+            move || order.borrow_mut().push("listen")
+        });
+
+        super::turn(|| scope.push::<Count>(1));
+
+        assert_eq!(*order.borrow(), vec!["observe", "listen"]);
+    }
+
+    #[test]
+    fn an_observer_feeding_another_cell_settles_before_anything_draws() {
+        let scope = Rc::new(Scope::new());
+        let order = Rc::new(RefCell::new(Vec::new()));
+
+        let _follows = scope.observe::<Count>({
+            let scope = Rc::downgrade(&scope);
+            move |update| {
+                if let Some(scope) = scope.upgrade() {
+                    scope.push::<Mirror>(*update * 10);
+                }
+            }
+        });
+        let _mirror_listener = scope.subscribe::<Mirror>({
+            let order = order.clone();
+            let scope = Rc::downgrade(&scope);
+            move || {
+                let value = scope
+                    .upgrade()
+                    .map(|s| s.state::<Mirror>().borrow().0)
+                    .unwrap_or(0);
+                order.borrow_mut().push(value);
+            }
+        });
+
+        super::turn(|| scope.push::<Count>(4));
+
+        assert_eq!(
+            *order.borrow(),
+            vec![40],
+            "the follower had already caught up by the time its listener ran"
+        );
+    }
+
+    #[test]
+    fn a_push_from_a_listener_waits_for_the_next_drain() {
+        let scope = Rc::new(Scope::new());
+        let runs = Rc::new(StdCell::new(0));
+
+        let _sub = scope.subscribe::<Count>({
+            let runs = runs.clone();
+            let scope = Rc::downgrade(&scope);
+            move || {
+                runs.set(runs.get() + 1);
+                if runs.get() < 3 {
+                    if let Some(scope) = scope.upgrade() {
+                        scope.push::<Count>(99);
+                    }
+                }
+            }
+        });
+
+        super::turn(|| scope.push::<Count>(1));
+
+        assert_eq!(runs.get(), 1, "the re-entrant push did not extend this drain");
+
+        super::drain();
+        assert_eq!(runs.get(), 2);
+    }
+}

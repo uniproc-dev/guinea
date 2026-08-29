@@ -1,0 +1,32 @@
+[package]
+name = "guinea-iced"
+description = "guinea on iced: the router and the application runtime, with Elm inside each node"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+guinea-core.workspace = true
+guinea-app.workspace = true
+guinea-router.workspace = true
+# For `#[page]`/`#[layout]`, re-exported from here so an application imports
+# them beside the traits they belong to.
+guinea-macros.workspace = true
+anyhow.workspace = true
+tracing.workspace = true
+
+# No wgpu: tiny-skia draws this on the CPU, which is what a proof of concept
+# needs and costs about a tenth of the build. `thread-pool` is the executor
+# iced runs subscriptions on, and the wake-up channel is one of those.
+iced = { version = "0.14", default-features = false, features = [
+    "tiny-skia",
+    "thread-pool",
+    "fira-sans",
+    "web-colors",
+    "crisp",
+] }
+
+[lints]
+workspace = true
+
+[dev-dependencies]
+guinea-core = { workspace = true, features = ["test-utils"] }

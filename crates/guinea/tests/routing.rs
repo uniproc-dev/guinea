@@ -11,42 +11,60 @@ mod routing {
     use guinea::feature::FeatureInitContext;
     use std::rc::Rc;
     use guinea::router::*;
-    use guinea::uri::AppUri;
     use guinea_core::actor::UiThreadToken;
-    use guinea_macros::{ReducerState, reducer, routes};
+    use guinea_core::feature::Bound;
+    use guinea_core::scope::Reducer;
+    use guinea_macros::{routes, segment};
 
-    #[derive(ReducerState)]
-    struct ProcessesViewState {
+    /// The reducer is the state; `Processes` below is the page that shows it.
+    #[derive(Default, Clone, PartialEq, Debug)]
+    struct Listing {
         seeded_from: String,
     }
 
-    #[reducer]
-    fn processes_reducer(state: &mut ProcessesViewState, msg: String) {
-        state.seeded_from = msg;
+    impl Reducer for Listing {
+        type Update = String;
+
+        fn reduce(&mut self, from: String) {
+            self.seeded_from = from;
+        }
     }
 
-    fn install_processes(ctx: &FeatureInitContext, uri: &AppUri) -> anyhow::Result<()> {
-        ctx.seed_reducer::<ProcessesReducer>(ProcessesViewState {
-            seeded_from: uri.segment(0).expect("test uri always has a segment").to_string(),
-        });
-        Ok(())
+    fn install_processes(
+        ctx: &FeatureInitContext,
+        params: &ProcessesParams,
+    ) -> anyhow::Result<Bound<Listing>> {
+        Ok(ctx
+            .state::<Listing>()
+            .seed(Listing {
+                seeded_from: params.context.clone(),
+            })
+            .plain())
     }
 
     struct Processes;
 
     routes! {
         AppRoute {
-            page(Processes, "/:context/processes") { context: String }
+            page(Processes) link("/:context/processes") { context: String }
         }
     }
 
+    #[segment]
     impl Page for Processes {
-        fn install(ctx: &FeatureInitContext, uri: &AppUri) -> anyhow::Result<()> {
-            install_processes(ctx, uri)
+        type Params = ProcessesParams;
+        /// The claim itself, which is what makes `Listing` readable here.
+        type Installs = Bound<Listing>;
+
+        fn install(
+            ctx: &FeatureInitContext,
+            params: &ProcessesParams,
+        ) -> anyhow::Result<Bound<Listing>> {
+            install_processes(ctx, params)
         }
 
-        fn view(cx: &mut PageCx<'_>) -> windows_reactor::Element {
-            let (state, _dispatch) = cx.use_reducer::<ProcessesReducer>();
+        fn view(cx: &mut PageCx<'_, Self>) -> windows_reactor::Element {
+            let (state, _dispatch) = cx.use_reducer::<Listing, _>();
             assert_eq!(state.seeded_from, "ubuntu");
             windows_reactor::Element::default()
         }
@@ -67,14 +85,17 @@ mod routing {
 
     struct NeedsAService;
 
+    #[segment]
     impl Page for NeedsAService {
-        fn install(ctx: &FeatureInitContext, _uri: &AppUri) -> anyhow::Result<()> {
+        type Params = ();
+
+        fn install(ctx: &FeatureInitContext, _params: &()) -> anyhow::Result<()> {
             let greeting = ctx.require::<Greeting>()?;
             assert_eq!(greeting.0, "hello");
             Ok(())
         }
 
-        fn view(_cx: &mut PageCx<'_>) -> windows_reactor::Element {
+        fn view(_cx: &mut PageCx<'_, Self>) -> windows_reactor::Element {
             windows_reactor::Element::default()
         }
     }
@@ -89,22 +110,20 @@ mod routing {
             .expect("install");
         guinea_app::app::install_runtime(runtime);
 
-        let router = Router::<WinUi>::new(token);
-        let uri = AppUri::parse("/ubuntu/processes").unwrap();
+        let router = Rc::new(Router::<WinUi>::new(token));
 
         router
-            .activate(&uri, page_chain::<NeedsAService>())
+            .activate(page_chain::<NeedsAService>(), vec![Box::new(())])
             .expect("the page's install must find the service the plugin provided");
     }
 
     #[test]
     fn a_page_without_an_application_gets_a_plain_error_not_a_panic() {
         let token = UiThreadToken::dangerously_create_token_unchecked();
-        let router = Router::<WinUi>::new(token);
-        let uri = AppUri::parse("/ubuntu/processes").unwrap();
+        let router = Rc::new(Router::<WinUi>::new(token));
 
         let err = router
-            .activate(&uri, page_chain::<NeedsAService>())
+            .activate(page_chain::<NeedsAService>(), vec![Box::new(())])
             .map(|_| ())
             .expect_err("nothing provided the service");
 
@@ -148,7 +167,7 @@ mod routing {
         let route = AppRoute::Processes {
             context: "ubuntu".to_string(),
         };
-        assert_eq!(route.path(), "/ubuntu/processes");
+        assert_eq!(route.link().as_deref(), Some("/ubuntu/processes"));
         assert_eq!(
             AppRoute::parse("/ubuntu/processes"),
             Some(AppRoute::Processes {
@@ -158,16 +177,38 @@ mod routing {
     }
 
     #[test]
+    fn a_capture_that_looks_like_a_path_stays_one_segment() {
+        // `Display` used to write this straight into the link, so the address
+        // read as three segments and parsed back as a different route - or as
+        // nothing. The escaping lives in `LinkValue`; this checks it reaches
+        // the generated `link`/`parse` rather than only the trait's own tests.
+        let route = AppRoute::Processes {
+            context: "a/b c".to_string(),
+        };
+
+        let link = route.link().expect("an addressable route");
+        assert_eq!(link, "/a%2Fb%20c/processes");
+        assert_eq!(link.matches('/').count(), 2, "still two separators");
+        assert_eq!(AppRoute::parse(&link), Some(route));
+    }
+
+    #[test]
     fn activating_a_page_runs_install_and_view_can_use_it() {
         let token = UiThreadToken::dangerously_create_token_unchecked();
-        let router = Router::<WinUi>::new(token);
-        let uri = AppUri::parse("/ubuntu/processes").unwrap();
+        let router = Rc::new(Router::<WinUi>::new(token));
 
-        let scope = router.activate(&uri, page_chain::<Processes>()).expect("activate");
+        let scope = router
+            .activate(
+                page_chain::<Processes>(),
+                vec![Box::new(ProcessesParams {
+                    context: "ubuntu".to_string(),
+                })],
+            )
+            .expect("activate");
         assert!(router.active_scope().is_some());
 
         // install already ran (synchronously, inside activate) and seeded state.
-        let state = scope.state::<ProcessesReducer>();
+        let state = scope.state::<Listing>();
         assert_eq!(state.borrow().seeded_from, "ubuntu");
 
         // `Router::render()` returns a mounted `Element::Component`, which
@@ -190,9 +231,15 @@ mod routing {
     #[test]
     fn push_after_first_render_requests_a_rerender() {
         let token = UiThreadToken::dangerously_create_token_unchecked();
-        let router = Router::<WinUi>::new(token);
-        let uri = AppUri::parse("/ubuntu/processes").unwrap();
-        let scope = router.activate(&uri, page_chain::<Processes>()).expect("activate");
+        let router = Rc::new(Router::<WinUi>::new(token));
+        let scope = router
+            .activate(
+                page_chain::<Processes>(),
+                vec![Box::new(ProcessesParams {
+                    context: "ubuntu".to_string(),
+                })],
+            )
+            .expect("activate");
 
         let rerender_count = Rc::new(std::cell::Cell::new(0));
         let count_for_callback = rerender_count.clone();
@@ -209,7 +256,7 @@ mod routing {
         // there's none, so call it manually - this is what runs Scope::subscribe.
 
         // An actor updating data well after the component last rendered.
-        scope.push::<ProcessesReducer>("debian".to_string());
+        scope.push::<Listing>("debian".to_string());
 
         assert!(
             rerender_count.get() > 0,
@@ -224,12 +271,19 @@ mod routing {
         // `Router::navigate` on *every* render, not just when the route
         // value changes (the caller doesn't know whether it changed).
         let token = UiThreadToken::dangerously_create_token_unchecked();
-        let router = Router::<WinUi>::new(token);
-        let uri = AppUri::parse("/ubuntu/processes").unwrap();
+        let router = Rc::new(Router::<WinUi>::new(token));
         let route = AppRoute::Processes { context: "ubuntu".to_string() };
 
-        let scope_a = router.navigate(route.clone(), &uri).expect("first navigate");
-        let scope_b = router.navigate(route, &uri).expect("second navigate, same route value");
+        let scope_a = router
+            .navigate(route.clone())
+            .expect("first navigate")
+            .scope()
+            .expect("nothing guards this route");
+        let scope_b = router
+            .navigate(route)
+            .expect("second navigate, same route value")
+            .scope()
+            .expect("nothing guards this route");
 
         assert!(
             Rc::ptr_eq(&scope_a, &scope_b),
@@ -241,31 +295,43 @@ mod routing {
 
     // --- nested layout persistence (RouteChain / navigate) ---
 
-    #[derive(ReducerState)]
-    struct TabsViewState {
+    #[derive(Default, Clone, PartialEq, Debug)]
+    struct Tabs {
         install_count: i32,
     }
 
-    #[reducer]
-    fn tabs_reducer(state: &mut TabsViewState, msg: i32) {
-        state.install_count = msg;
+    impl Reducer for Tabs {
+        type Update = i32;
+
+        fn reduce(&mut self, count: i32) {
+            self.install_count = count;
+        }
     }
 
     struct ProcsTab;
+    #[segment]
     impl Layout for ProcsTab {
-        fn install(ctx: &FeatureInitContext, _uri: &AppUri) -> anyhow::Result<()> {
-            let count = ctx.scope.peek::<TabsReducer>().map_or(0, |s| s.borrow().install_count);
-            ctx.scope.push::<TabsReducer>(count + 1);
+        // `TabRoute` below is written by hand and declares that this layout
+        // derives nothing from its pages - so a leaf's own parameter changing
+        // is none of its business, which is what the tests here check.
+        type Params = ();
+
+        fn install(ctx: &FeatureInitContext, _params: &Self::Params) -> anyhow::Result<()> {
+            let count = ctx.scope.peek::<Tabs>().map_or(0, |s| s.borrow().install_count);
+            ctx.scope.push::<Tabs>(count + 1);
             Ok(())
         }
-        fn view(cx: &mut LayoutCx<'_>) -> windows_reactor::Element {
+        fn view(cx: &mut LayoutCx<'_, Self>) -> windows_reactor::Element {
             cx.outlet()
         }
     }
 
     struct ServicesLeaf;
+    #[segment]
     impl Page for ServicesLeaf {
-        fn view(cx: &mut PageCx<'_>) -> windows_reactor::Element {
+        type Params = ();
+
+        fn view(cx: &mut PageCx<'_, Self>) -> windows_reactor::Element {
             let _ = cx;
             windows_reactor::Element::default()
         }
@@ -293,16 +359,34 @@ mod routing {
                 TabRoute::Services { .. } => &SERVICES_CHAIN,
             }
         }
+
+        fn params(&self) -> Vec<Box<dyn std::any::Any>> {
+            match self {
+                TabRoute::Processes { context } => vec![
+                    Box::new(()),
+                    Box::new(ProcessesParams {
+                        context: context.clone(),
+                    }),
+                ],
+                TabRoute::Services { .. } => vec![Box::new(()), Box::new(())],
+            }
+        }
+
+        fn name(&self) -> &'static str {
+            match self {
+                TabRoute::Processes { .. } => "Processes",
+                TabRoute::Services { .. } => "Services",
+            }
+        }
     }
 
     #[test]
     fn a_layout_is_not_the_same_props_when_the_page_under_it_changes() {
         let token = UiThreadToken::dangerously_create_token_unchecked();
-        let router = Router::<WinUi>::new(token);
+        let router = Rc::new(Router::<WinUi>::new(token));
 
-        let props_at_layout = |route: TabRoute, path: &str| {
-            let uri = AppUri::parse(path).unwrap();
-            router.navigate(route, &uri).expect("navigate");
+        let props_at_layout = |route: TabRoute| {
+            router.navigate(route).expect("navigate");
             SegmentProps::<WinUi> {
                 chain: router.active_chain().expect("a chain is active"),
                 scopes: router.active_scopes().expect("scopes are installed"),
@@ -310,18 +394,12 @@ mod routing {
             }
         };
 
-        let showing_processes = props_at_layout(
-            TabRoute::Processes {
-                context: "ubuntu".to_string(),
-            },
-            "/tab/processes/ubuntu",
-        );
-        let showing_services = props_at_layout(
-            TabRoute::Services {
-                context: "ubuntu".to_string(),
-            },
-            "/tab/services/ubuntu",
-        );
+        let showing_processes = props_at_layout(TabRoute::Processes {
+            context: "ubuntu".to_string(),
+        });
+        let showing_services = props_at_layout(TabRoute::Services {
+            context: "ubuntu".to_string(),
+        });
 
         // The layout itself is unchanged - same type, same scope, same
         // cursor - and comparing only that is what used to make a reconciler
@@ -337,37 +415,30 @@ mod routing {
     #[test]
     fn navigating_between_siblings_keeps_the_shared_ancestor_scope() {
         let token = UiThreadToken::dangerously_create_token_unchecked();
-        let router = Router::<WinUi>::new(token);
-        let uri = AppUri::parse("/ubuntu/processes").unwrap();
+        let router = Rc::new(Router::<WinUi>::new(token));
 
         router
-            .navigate(
-                TabRoute::Processes {
-                    context: "ubuntu".to_string(),
-                },
-                &uri,
-            )
+            .navigate(TabRoute::Processes {
+                context: "ubuntu".to_string(),
+            })
             .expect("navigate to processes");
         let tabs_installs_after_first = router
             .scope_at(0)
             .unwrap()
-            .state::<TabsReducer>()
+            .state::<Tabs>()
             .borrow()
             .install_count;
         assert_eq!(tabs_installs_after_first, 1);
 
         router
-            .navigate(
-                TabRoute::Services {
-                    context: "ubuntu".to_string(),
-                },
-                &uri,
-            )
+            .navigate(TabRoute::Services {
+                context: "ubuntu".to_string(),
+            })
             .expect("navigate to services");
         let tabs_installs_after_second = router
             .scope_at(0)
             .unwrap()
-            .state::<TabsReducer>()
+            .state::<Tabs>()
             .borrow()
             .install_count;
         assert_eq!(
@@ -379,25 +450,19 @@ mod routing {
     #[test]
     fn navigating_to_the_same_leaf_type_with_different_params_reinstalls_only_the_leaf() {
         let token = UiThreadToken::dangerously_create_token_unchecked();
-        let router = Router::<WinUi>::new(token);
+        let router = Rc::new(Router::<WinUi>::new(token));
 
         router
-            .navigate(
-                TabRoute::Processes {
-                    context: "ubuntu".to_string(),
-                },
-                &AppUri::parse("/ubuntu/processes").unwrap(),
-            )
+            .navigate(TabRoute::Processes {
+                context: "ubuntu".to_string(),
+            })
             .expect("navigate to processes/ubuntu");
         let leaf_scope_1 = router.active_scope().unwrap();
 
         router
-            .navigate(
-                TabRoute::Processes {
-                    context: "fedora".to_string(),
-                },
-                &AppUri::parse("/fedora/processes").unwrap(),
-            )
+            .navigate(TabRoute::Processes {
+                context: "fedora".to_string(),
+            })
             .expect("navigate to processes/fedora");
         let leaf_scope_2 = router.active_scope().unwrap();
 
@@ -409,7 +474,7 @@ mod routing {
             router
                 .scope_at(0)
                 .unwrap()
-                .state::<TabsReducer>()
+                .state::<Tabs>()
                 .borrow()
                 .install_count,
             1,
@@ -422,36 +487,69 @@ mod routing {
         use std::any::TypeId;
 
         struct Services;
+        #[segment]
         impl Page for Services {
-            fn view(cx: &mut PageCx<'_>) -> windows_reactor::Element {
+            type Params = ServicesParams;
+
+            fn view(cx: &mut PageCx<'_, Self>) -> windows_reactor::Element {
                 let _ = cx;
                 windows_reactor::Element::default()
             }
         }
 
+        /// A page of its own rather than the module's `Processes`, for the same
+        /// reason as `DerivedTab` below: a page belongs to one tree, since its
+        /// ancestry is part of what the compiler reads off it.
+        struct DerivedProcesses;
+        #[segment]
+        impl Page for DerivedProcesses {
+            type Params = DerivedProcessesParams;
+
+            fn view(cx: &mut PageCx<'_, Self>) -> windows_reactor::Element {
+                let _ = cx;
+                windows_reactor::Element::default()
+            }
+        }
+
+        /// A layout of its own rather than the module's `ProcsTab`: this tree
+        /// derives parameters for it, and a layout has one `Params` for every
+        /// tree it appears in.
+        struct DerivedTab;
+        #[segment]
+        impl Layout for DerivedTab {
+            type Params = DerivedTabParams;
+
+            fn view(cx: &mut LayoutCx<'_, Self>) -> windows_reactor::Element {
+                cx.outlet()
+            }
+        }
+
         routes! {
             DerivedRoute {
-                layout(ProcsTab) {
-                    page(Processes, "/tab/processes/:context") { context: String }
-                    page(Services, "/tab/services/:context") { context: String }
+                layout(DerivedTab) {
+                    page(DerivedProcesses) link("/tab/processes/:context") { context: String }
+                    page(Services) link("/tab/services/:context") { context: String }
                 }
             }
         }
 
-        let processes_chain = DerivedRoute::Processes {
+        let processes_chain = DerivedRoute::DerivedProcesses {
             context: "ubuntu".to_string(),
         }
         .chain();
         assert_eq!(processes_chain.len(), 2);
-        assert_eq!((processes_chain[0].type_id)(), TypeId::of::<ProcsTab>());
-        assert_eq!((processes_chain[1].type_id)(), TypeId::of::<Processes>());
+        assert_eq!((processes_chain[0].type_id)(), TypeId::of::<DerivedTab>());
+        assert_eq!(
+            (processes_chain[1].type_id)(),
+            TypeId::of::<DerivedProcesses>()
+        );
 
         let services_chain = DerivedRoute::Services {
             context: "ubuntu".to_string(),
         }
         .chain();
         assert_eq!(services_chain.len(), 2);
-        assert_eq!((services_chain[0].type_id)(), TypeId::of::<ProcsTab>());
+        assert_eq!((services_chain[0].type_id)(), TypeId::of::<DerivedTab>());
         assert_eq!((services_chain[1].type_id)(), TypeId::of::<Services>());
 
         // Same ancestor position across siblings - what lets `Router::navigate`
@@ -464,11 +562,12 @@ mod routing {
         // #[layout]/#[end_layout] don't touch path/parse - purely a chain()
         // concern.
         assert_eq!(
-            DerivedRoute::Processes {
+            DerivedRoute::DerivedProcesses {
                 context: "ubuntu".to_string()
             }
-            .path(),
-            "/tab/processes/ubuntu"
+            .link()
+            .as_deref(),
+            Some("/tab/processes/ubuntu")
         );
     }
 
@@ -482,8 +581,11 @@ mod routing {
         // variant or constant, found struct variant"). Every call site must
         // consistently use the same (struct-style) shape.
         struct Home;
+        #[segment]
         impl Page for Home {
-            fn view(cx: &mut PageCx<'_>) -> windows_reactor::Element {
+            type Params = HomeParams;
+
+            fn view(cx: &mut PageCx<'_, Self>) -> windows_reactor::Element {
                 let _ = cx;
                 windows_reactor::Element::default()
             }
@@ -491,13 +593,170 @@ mod routing {
 
         routes! {
             ZeroFieldRoute {
-                page(Home, "/")
+                page(Home) link("/")
             }
         }
 
         let route = ZeroFieldRoute::Home {};
-        assert_eq!(route.path(), "/");
+        assert_eq!(route.link().as_deref(), Some("/"));
         assert_eq!(ZeroFieldRoute::parse("/"), Some(ZeroFieldRoute::Home {}));
+    }
+
+    #[test]
+    fn a_page_without_a_link_has_no_address_at_all() {
+        struct Inner;
+        #[segment]
+        impl Page for Inner {
+            type Params = InnerParams;
+
+            fn view(_cx: &mut PageCx<'_, Self>) -> windows_reactor::Element {
+                windows_reactor::Element::default()
+            }
+        }
+
+        struct Shared;
+        #[segment]
+        impl Page for Shared {
+            type Params = SharedParams;
+
+            fn view(_cx: &mut PageCx<'_, Self>) -> windows_reactor::Element {
+                windows_reactor::Element::default()
+            }
+        }
+
+        routes! {
+            MixedRoute {
+                page(Inner) { token: String }
+                page(Shared) link("/shared/:id") { id: String }
+            }
+        }
+
+        let inner = MixedRoute::Inner {
+            token: "secret".to_string(),
+        };
+        assert_eq!(inner.link(), None, "nothing outside can name it");
+        assert_eq!(inner.name(), "Inner", "but a log still can");
+
+        let surface = MixedRoute::deep_links();
+        assert_eq!(
+            surface.iter().map(|link| link.path).collect::<Vec<_>>(),
+            ["/shared/:id"],
+            "the external surface is exactly what agreed to be on it"
+        );
+        assert_eq!(surface[0].tree, "MixedRoute");
+        assert_eq!(surface[0].route, "Shared");
+        assert_eq!(
+            surface[0].captures,
+            [guinea::link::Capture {
+                name: "id",
+                ty: "String"
+            }],
+            "the capture carries what would silently change the address"
+        );
+
+        assert_eq!(
+            MixedRoute::parse("/secret"),
+            None,
+            "an unaddressed page is unreachable from a path, whatever the path"
+        );
+        assert_eq!(
+            MixedRoute::parse("/shared/42"),
+            Some(MixedRoute::Shared {
+                id: "42".to_string()
+            })
+        );
+    }
+
+    #[test]
+    fn a_literal_wins_over_a_capture_whatever_the_declaration_order() {
+        struct Settings;
+        #[segment]
+        impl Page for Settings {
+            type Params = SettingsParams;
+
+            fn view(_cx: &mut PageCx<'_, Self>) -> windows_reactor::Element {
+                windows_reactor::Element::default()
+            }
+        }
+
+        struct Host;
+        #[segment]
+        impl Page for Host {
+            type Params = HostParams;
+
+            fn view(_cx: &mut PageCx<'_, Self>) -> windows_reactor::Element {
+                windows_reactor::Element::default()
+            }
+        }
+
+        // The capture is declared *first*, and matches anything of this
+        // length. Trying arms in declaration order gave it "/settings/pods"
+        // and the literal page was unreachable.
+        routes! {
+            ShadowRoute {
+                page(Host) link("/:name/pods") { name: String }
+                page(Settings) link("/settings/pods")
+            }
+        }
+
+        assert_eq!(
+            ShadowRoute::parse("/settings/pods"),
+            Some(ShadowRoute::Settings {}),
+            "the literal is more specific, so it wins wherever it was declared"
+        );
+        assert_eq!(
+            ShadowRoute::parse("/kube-01/pods"),
+            Some(ShadowRoute::Host {
+                name: "kube-01".to_string()
+            })
+        );
+    }
+
+    #[test]
+    fn a_capture_that_does_not_parse_falls_through_to_the_next_branch() {
+        struct ById;
+        #[segment]
+        impl Page for ById {
+            type Params = ByIdParams;
+
+            fn view(_cx: &mut PageCx<'_, Self>) -> windows_reactor::Element {
+                windows_reactor::Element::default()
+            }
+        }
+
+        struct ByName;
+        #[segment]
+        impl Page for ByName {
+            type Params = ByNameParams;
+
+            fn view(_cx: &mut PageCx<'_, Self>) -> windows_reactor::Element {
+                windows_reactor::Element::default()
+            }
+        }
+
+        // Two branches of the same shape, told apart by whether the segment
+        // parses as a number. The old emission used `?` on the parse, which
+        // returned from `parse` itself - so a non-numeric path matched
+        // nothing at all instead of falling through.
+        routes! {
+            EitherRoute {
+                page(ById) link("/job/:id") { id: u32 }
+                page(ByName) link("/name/:who") { who: String }
+            }
+        }
+
+        assert_eq!(
+            EitherRoute::parse("/job/42"),
+            Some(EitherRoute::ById { id: 42 })
+        );
+        assert_eq!(
+            EitherRoute::parse("/name/ada"),
+            Some(EitherRoute::ByName {
+                who: "ada".to_string()
+            }),
+            "a branch whose capture failed to parse must not end the search"
+        );
+        assert_eq!(EitherRoute::parse("/job/ada"), None);
     }
 
     #[test]
@@ -519,7 +778,7 @@ mod routing {
             /// `ctx.port::<Reducer>()`. The port must not keep the page scope
             /// alive via a strong Rc, otherwise Scope -> Addr -> Actor -> Port
             /// -> Scope forms an Rc cycle and the actor never drops on navigation.
-            _port: Box<dyn Fn(()) + 'static>,
+            _push: Box<dyn Fn(()) + 'static>,
         }
 
         impl std::fmt::Debug for ProbeActor {
@@ -549,46 +808,59 @@ mod routing {
             static PROBE_DROPPED: RefCell<bool> = RefCell::new(false);
         }
 
-        #[derive(ReducerState)]
-        struct ProbeState {
+        #[derive(Default)]
+        struct Probe {
             value: u32,
         }
 
-        #[reducer]
-        fn probe_reducer(state: &mut ProbeState, _msg: ()) {
-            state.value += 1;
+        impl Reducer for Probe {
+            type Update = ();
+    
+            fn reduce(&mut self, _: ()) {
+                self.value += 1;
+            }
         }
 
         struct ProbePage;
+        #[segment]
         impl Page for ProbePage {
-            fn install(ctx: &FeatureInitContext, _uri: &AppUri) -> anyhow::Result<()> {
+            type Params = ProbePageParams;
+
+            fn install(ctx: &FeatureInitContext, _params: &ProbePageParams) -> anyhow::Result<()> {
                 PROBE_DROPPED.with(|d| *d.borrow_mut() = false);
+                // The real way in; it must not keep the page scope alive via a
+                // strong Rc, otherwise Scope -> Addr -> Actor -> Push -> Scope
+                // forms a cycle.
+                let push = ctx.state::<Probe>().plain().port();
                 let addr = ctx.spawn_actor(ProbeActor {
                     seen: Rc::new(RefCell::new(Vec::new())),
-                    // Use the real port helper; it must not keep the page scope
-                    // alive via a strong Rc, otherwise Scope -> Addr -> Actor
-                    // -> Port -> Scope forms a cycle.
-                    _port: Box::new(ctx.port::<ProbeReducer>()),
+                    _push: Box::new(move |()| push.send(())),
                 });
                 ctx.subscribe_on_global_bus::<ProbeActor, ProbeEvent>(addr.clone());
                 Ok(())
             }
 
-            fn view(_cx: &mut PageCx<'_>) -> windows_reactor::Element {
+            fn view(_cx: &mut PageCx<'_, Self>) -> windows_reactor::Element {
                 windows_reactor::Element::default()
             }
         }
 
         struct OtherPage;
+        #[segment]
         impl Page for OtherPage {
-            fn view(_cx: &mut PageCx<'_>) -> windows_reactor::Element {
+            type Params = OtherPageParams;
+
+            fn view(_cx: &mut PageCx<'_, Self>) -> windows_reactor::Element {
                 windows_reactor::Element::default()
             }
         }
 
         struct ProbeLayout;
+        #[segment]
         impl Layout for ProbeLayout {
-            fn view(cx: &mut LayoutCx<'_>) -> windows_reactor::Element {
+            type Params = ProbeLayoutParams;
+
+            fn view(cx: &mut LayoutCx<'_, Self>) -> windows_reactor::Element {
                 cx.outlet()
             }
         }
@@ -596,17 +868,17 @@ mod routing {
         routes! {
             ProbeRoute {
                 layout(ProbeLayout) {
-                    page(ProbePage, "/probe")
-                    page(OtherPage, "/other")
+                    page(ProbePage)
+                    page(OtherPage)
                 }
             }
         }
 
         let token = UiThreadToken::dangerously_create_token_unchecked();
-        let router = Router::<WinUi>::new(token);
+        let router = Rc::new(Router::<WinUi>::new(token));
 
         router
-            .navigate(ProbeRoute::ProbePage {}, &AppUri::parse("/probe").unwrap())
+            .navigate(ProbeRoute::ProbePage {})
             .expect("navigate to probe");
         assert!(
             GlobalEventBus::has_subscribers::<ProbeEvent>(),
@@ -614,7 +886,7 @@ mod routing {
         );
 
         router
-            .navigate(ProbeRoute::OtherPage {}, &AppUri::parse("/other").unwrap())
+            .navigate(ProbeRoute::OtherPage {})
             .expect("navigate to other");
 
         assert!(
@@ -629,37 +901,33 @@ mod routing {
     }
 }
 
-mod reducer_macro {
-    use guinea_core::scope::{NoopActions, Reducer};
-    use guinea_macros::{ReducerState, reducer};
+mod a_reducer_is_plain_rust {
+    use guinea_core::scope::{Reducer, Scope};
+    use std::rc::Rc;
 
-    // Proves `#[reducer]` turns the reduce fn into a marker (fn `widget_reducer`
-    // -> type `WidgetReducer`, snake_case name UpperCamelCased) with a full
-    // `impl Reducer`, inferring `State`/`Push` from the signature and
-    // defaulting `Actions` to `NoopActions` when there's no `#[dispatch]`.
-    #[derive(ReducerState)]
-    struct WidgetState {
+    /// What `#[reducer]`, `#[derive(ReducerState)]`, `#[dispatch]`, `#[port]`
+    /// and half of `messages!` used to produce between them. The whole
+    /// declaration is here, and the central type of the feature - the one
+    /// every other file names - is written rather than derived from a
+    /// function's name by changing its case.
+    #[derive(Default)]
+    struct Widget {
         value: i32,
     }
 
-    #[reducer]
-    fn widget_reducer(state: &mut WidgetState, msg: i32) {
-        state.value = msg;
+    impl Reducer for Widget {
+        type Update = i32;
+
+        fn reduce(&mut self, to: i32) {
+            self.value = to;
+        }
     }
 
     #[test]
-    fn reducer_macro_infers_state_push_and_defaults_actions() {
-        let _ = WidgetReducer;
+    fn the_state_is_the_reducer() {
+        let scope = Rc::new(Scope::new());
+        scope.push::<Widget>(42);
 
-        fn assert_shape<R>()
-        where
-            R: Reducer<State = WidgetState, Push = i32, Actions = NoopActions>,
-        {
-        }
-        assert_shape::<WidgetReducer>();
-
-        let mut state = WidgetState { value: 0 };
-        WidgetReducer::reduce(&mut state, 42);
-        assert_eq!(state.value, 42);
+        assert_eq!(scope.state::<Widget>().borrow().value, 42);
     }
 }

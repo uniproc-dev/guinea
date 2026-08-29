@@ -22,7 +22,7 @@ use crate::ToSlint;
 /// A [`Model`] over a slice of a reducer's state.
 pub struct Rows<R: Reducer, T: ToSlint> {
     binding: ReducerBinding<R>,
-    select: fn(&R::State) -> &[T],
+    select: fn(&R) -> &[T],
     notify: ModelNotify,
 }
 
@@ -37,7 +37,7 @@ where
     /// The subscription lives as long as the scope, the way every other
     /// binding here does; the model itself lives as long as the property
     /// holding it.
-    pub(crate) fn new(binding: ReducerBinding<R>, select: fn(&R::State) -> &[T]) -> ModelRc<T::Slint> {
+    pub(crate) fn new(binding: ReducerBinding<R>, select: fn(&R) -> &[T]) -> ModelRc<T::Slint> {
         let rows = Rc::new(Self {
             binding: binding.clone(),
             select,
@@ -81,33 +81,29 @@ where
 #[cfg(test)]
 mod tests {
     use super::Rows;
-    use guinea_core::scope::{NoopActions, Reducer, Scope};
+    use guinea_core::scope::{Reducer, Scope};
     use slint::Model;
     use std::rc::Rc;
 
-    struct Items;
+    #[derive(Default)]
+    struct Items(Vec<String>);
 
     impl Reducer for Items {
-        type State = Vec<String>;
-        type Push = Vec<String>;
-        type Group = ();
-        type Actions = NoopActions;
+        type Update = Vec<String>;
 
-        fn reduce(state: &mut Self::State, msg: Self::Push) {
-            *state = msg;
+        fn reduce(&mut self, items: Vec<String>) {
+            self.0 = items;
         }
     }
 
     fn rows(scope: &Rc<Scope>) -> slint::ModelRc<slint::SharedString> {
-        Rows::new(scope.binding::<Items>(), |state: &Vec<String>| {
-            state.as_slice()
-        })
+        Rows::new(scope.binding::<Items>(), |items: &Items| items.0.as_slice())
     }
 
     #[test]
     fn the_model_answers_from_the_state_it_was_given() {
         let scope = Rc::new(Scope::new());
-        scope.seed::<Items>(vec!["systemd".to_string(), "sshd".to_string()]);
+        scope.seed::<Items>(Items(vec!["systemd".to_string(), "sshd".to_string()]));
 
         let model = rows(&scope);
 
@@ -120,7 +116,7 @@ mod tests {
         // Nothing was set on the model and nothing was copied into it: the
         // state moved, and the model reads the state.
         let scope = Rc::new(Scope::new());
-        scope.seed::<Items>(vec!["systemd".to_string(), "sshd".to_string()]);
+        scope.seed::<Items>(Items(vec!["systemd".to_string(), "sshd".to_string()]));
 
         let model = rows(&scope);
         scope.push::<Items>(vec!["systemd".to_string()]);

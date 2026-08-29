@@ -11,8 +11,7 @@ use std::rc::Rc;
 use guinea_app::app::roots;
 use guinea_app::feature::FeatureInitContext;
 use guinea_core::actor::UiThreadToken;
-use guinea_core::scope::{DropGuard, NoopActions, Reducer};
-use guinea_core::uri::AppUri;
+use guinea_core::scope::{DropGuard, Reducer};
 use guinea_router::headless::{Headless, HeadlessCx, Page, segment_entry};
 use guinea_router::router::{Router, SegmentEntry};
 
@@ -21,16 +20,14 @@ thread_local! {
     static TORN_DOWN: Cell<bool> = const { Cell::new(false) };
 }
 
-struct Marker;
+#[derive(Default)]
+struct Marker(u32);
 
 impl Reducer for Marker {
-    type State = u32;
-    type Push = u32;
-    type Group = ();
-    type Actions = NoopActions;
+    type Update = u32;
 
-    fn reduce(state: &mut Self::State, msg: Self::Push) {
-        *state = msg;
+    fn reduce(&mut self, to: u32) {
+        self.0 = to;
     }
 }
 
@@ -46,13 +43,16 @@ impl Drop for Tombstone {
 struct Processes;
 
 impl Page for Processes {
-    fn install(ctx: &FeatureInitContext, _uri: &AppUri) -> anyhow::Result<()> {
-        ctx.seed_reducer::<Marker>(1);
+    type Params = ();
+    type Installs = ();
+
+    fn install(ctx: &FeatureInitContext, _params: &()) -> anyhow::Result<()> {
+        ctx.state::<Marker>().seed(Marker(1)).plain();
         ctx.scope.own(DropGuard(Tombstone));
         Ok(())
     }
 
-    fn view(_cx: &mut HeadlessCx) {}
+    fn view(_cx: &mut HeadlessCx<Self>) {}
 }
 
 const CHAIN: [SegmentEntry<Headless>; 1] = [segment_entry::<Processes>()];
@@ -61,7 +61,7 @@ fn open() -> Rc<Router<Headless>> {
     let token = UiThreadToken::dangerously_create_token_unchecked();
     let router = Rc::new(Router::<Headless>::new(token));
     router
-        .activate(&AppUri::parse("/processes").unwrap(), &CHAIN)
+        .activate(&CHAIN, vec![Box::new(())])
         .expect("activate");
     router
 }

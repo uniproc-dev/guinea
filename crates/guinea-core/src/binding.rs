@@ -9,6 +9,7 @@
 use std::cell::{Ref, RefCell};
 use std::rc::{Rc, Weak};
 
+use crate::feature::Dispatch;
 use crate::scope::{DropGuard, Reducer, Scope, Subscription};
 
 /// A handle to one reducer's state and actions inside one scope.
@@ -21,8 +22,8 @@ use crate::scope::{DropGuard, Reducer, Scope, Subscription};
 /// wiring it by hand.
 pub struct ReducerBinding<R: Reducer> {
     owner: Weak<Scope>,
-    state: Rc<RefCell<R::State>>,
-    actions: Rc<R::Actions>,
+    state: Rc<RefCell<R>>,
+    dispatch: Dispatch,
 }
 
 impl<R: Reducer> Clone for ReducerBinding<R> {
@@ -30,7 +31,7 @@ impl<R: Reducer> Clone for ReducerBinding<R> {
         Self {
             owner: self.owner.clone(),
             state: self.state.clone(),
-            actions: self.actions.clone(),
+            dispatch: self.dispatch.clone(),
         }
     }
 }
@@ -40,32 +41,34 @@ impl<R: Reducer> ReducerBinding<R> {
         Self {
             owner: Rc::downgrade(scope),
             state: scope.state::<R>(),
-            actions: scope.actions::<R>(),
+            dispatch: Dispatch::owning::<R>(scope),
         }
     }
 
     /// Borrows the state in place - no clone, for backends that read every
     /// frame.
-    pub fn peek(&self) -> Ref<'_, R::State> {
+    pub fn peek(&self) -> Ref<'_, R> {
         self.state.borrow()
     }
 
     /// A snapshot, for backends that memoise on equality.
-    pub fn get(&self) -> R::State
+    pub fn get(&self) -> R
     where
-        R::State: Clone,
+        R: Clone,
     {
         self.state.borrow().clone()
     }
 
-    pub fn actions(&self) -> Rc<R::Actions> {
-        self.actions.clone()
+    /// What may be asked of the actors in the scope that owns this reducer.
+    pub fn dispatch(&self) -> Dispatch {
+        self.dispatch.clone()
     }
 
-    /// Sends a message to the reducer. A no-op once the owning scope is gone.
-    pub fn push(&self, msg: R::Push) {
+    /// Applies an update directly, without an actor in between. A no-op once
+    /// the owning scope is gone.
+    pub fn push(&self, update: R::Update) {
         if let Some(scope) = self.owner.upgrade() {
-            scope.push::<R>(msg);
+            scope.push::<R>(update);
         }
     }
 
@@ -75,7 +78,7 @@ impl<R: Reducer> ReducerBinding<R> {
     /// The caller owns the lifetime, which is what a reconciler needs: the
     /// subscription must end with the component instance, not with the scope,
     /// or unmounted components accumulate as live listeners.
-    pub fn on_change(&self, f: impl Fn(&R::State) + 'static) -> Subscription {
+    pub fn on_change(&self, f: impl Fn(&R) + 'static) -> Subscription {
         let Some(scope) = self.owner.upgrade() else {
             return Subscription::inert();
         };
@@ -86,7 +89,7 @@ impl<R: Reducer> ReducerBinding<R> {
 
     /// Like [`Self::on_change`], but the subscription lives as long as the
     /// scope - for backends with no effect system to hang a cleanup on.
-    pub fn on_change_owned(&self, f: impl Fn(&R::State) + 'static) {
+    pub fn on_change_owned(&self, f: impl Fn(&R) + 'static) {
         let Some(scope) = self.owner.upgrade() else {
             return;
         };
@@ -96,7 +99,7 @@ impl<R: Reducer> ReducerBinding<R> {
     }
 
     /// Calls `f` immediately with the current state, then after every change.
-    pub fn bind(&self, f: impl Fn(&R::State) + 'static) -> Subscription {
+    pub fn bind(&self, f: impl Fn(&R) + 'static) -> Subscription {
         f(&self.state.borrow());
         self.on_change(f)
     }
@@ -105,19 +108,16 @@ impl<R: Reducer> ReducerBinding<R> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::scope::NoopActions;
     use std::cell::Cell;
 
-    struct Counter;
+    #[derive(Default)]
+    struct Counter(u32);
 
     impl Reducer for Counter {
-        type State = u32;
-        type Push = u32;
-        type Group = ();
-        type Actions = NoopActions;
+        type Update = u32;
 
-        fn reduce(state: &mut u32, msg: u32) {
-            *state += msg;
+        fn reduce(&mut self, by: u32) {
+            self.0 += by;
         }
     }
 
@@ -131,9 +131,9 @@ mod tests {
         binding.on_change_owned(|_| {});
         drop(scope);
 
-        assert_eq!(*binding.peek(), 0, "the state cell outlives the scope");
+        assert_eq!(binding.peek().0, 0, "the state cell outlives the scope");
         binding.push(1);
-        assert_eq!(*binding.peek(), 0, "pushing into a dead scope is a no-op");
+        assert_eq!(binding.peek().0, 0, "pushing into a dead scope is a no-op");
     }
 
     #[test]
@@ -165,7 +165,7 @@ mod tests {
 
         let seen = Rc::new(Cell::new(0u32));
         let recorder = seen.clone();
-        let subscription = binding.on_change(move |state| recorder.set(*state));
+        let subscription = binding.on_change(move |counter| recorder.set(counter.0));
 
         binding.push(2);
         binding.push(3);
@@ -184,7 +184,7 @@ mod tests {
 
         let seen = Rc::new(Cell::new(None));
         let recorder = seen.clone();
-        let _subscription = binding.bind(move |state| recorder.set(Some(*state)));
+        let _subscription = binding.bind(move |counter| recorder.set(Some(counter.0)));
 
         assert_eq!(seen.get(), Some(7));
     }

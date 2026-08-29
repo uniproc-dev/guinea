@@ -1,7 +1,10 @@
 pub mod actor;
 pub mod binding;
+pub mod feature;
+pub mod guard;
 pub mod lifecycle_tracker;
 pub mod load;
+pub mod notify;
 pub mod page_status;
 pub mod ratelimit_tracing;
 pub mod shared_state;
@@ -13,7 +16,7 @@ pub mod uri;
 
 pub use load::Load;
 pub use shared_state::SharedState;
-pub use scope::{NoopActions, Reducer, Scope, StateHandle, Subscription};
+pub use scope::{Reducer, Scope, StateHandle, Subscription};
 pub use actor::{
     Addr, Context, Handler, ManagedActor, Message, UiDispatcher, UiTask, UiThreadToken,
     invoke_on_ui, set_ui_dispatcher,

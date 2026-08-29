@@ -8,7 +8,7 @@ use std::any::Any;
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use guinea_router::router::{NavigateHandle, RouteChain, ToUri};
+use guinea_router::router::{NavigateHandle, RouteChain};
 
 use crate::Egui;
 
@@ -18,7 +18,7 @@ thread_local! {
 
 pub(crate) fn install<R>(nav: NavigateHandle<Egui, R>)
 where
-    R: RouteChain<Egui> + ToUri + Clone + PartialEq + 'static,
+    R: RouteChain<Egui> + Clone + PartialEq + 'static,
 {
     NAVIGATOR.with(|slot| *slot.borrow_mut() = Some(Rc::new(nav) as Rc<dyn Any>));
 }
@@ -29,7 +29,7 @@ pub(crate) fn clear() {
 
 pub(crate) fn current<R>() -> NavigateHandle<Egui, R>
 where
-    R: RouteChain<Egui> + ToUri + Clone + PartialEq + 'static,
+    R: RouteChain<Egui> + Clone + PartialEq + 'static,
 {
     NAVIGATOR.with(|slot| {
         let parked = slot.borrow().clone().unwrap_or_else(|| {

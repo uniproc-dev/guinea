@@ -1,9 +1,10 @@
 //! `routes!` targeting Slint, and navigation moving the tree from branch to
 //! branch.
 
+use guinea_app::feature::FeatureInitContext;
 use guinea_core::actor::UiThreadToken;
 use guinea_macros::routes;
-use guinea_router::router::{RouteChain, Router, ToUri};
+use guinea_router::router::{RouteChain, Router};
 use guinea_slint::{LayoutCx, PageCx, Slint};
 use i_slint_backend_testing::{ElementHandle, ElementRoot};
 use slint::ComponentHandle;
@@ -48,13 +49,27 @@ slint::slint! {
 struct Shell;
 
 impl guinea_slint::Layout for Shell {
-    fn bind(_cx: LayoutCx) {}
+    type Params = ShellParams;
+    type Installs = ();
+
+    fn install(_ctx: &FeatureInitContext, _params: &ShellParams) -> anyhow::Result<()> {
+        Ok(())
+    }
+
+    fn bind(_cx: LayoutCx<Self>) {}
 }
 
 struct Processes;
 
 impl guinea_slint::Page for Processes {
-    fn bind(cx: PageCx) {
+    type Params = ProcessesParams;
+    type Installs = ();
+
+    fn install(_ctx: &FeatureInitContext, _params: &ProcessesParams) -> anyhow::Result<()> {
+        Ok(())
+    }
+
+    fn bind(cx: PageCx<Self>) {
         cx.root::<Host>()
             .global::<PageModel>()
             .set_processes("processes".into());
@@ -64,7 +79,14 @@ impl guinea_slint::Page for Processes {
 struct Services;
 
 impl guinea_slint::Page for Services {
-    fn bind(cx: PageCx) {
+    type Params = ServicesParams;
+    type Installs = ();
+
+    fn install(_ctx: &FeatureInitContext, _params: &ServicesParams) -> anyhow::Result<()> {
+        Ok(())
+    }
+
+    fn bind(cx: PageCx<Self>) {
         cx.root::<Host>()
             .global::<PageModel>()
             .set_services("services".into());
@@ -75,8 +97,8 @@ routes! {
     backend = guinea_slint::Slint,
     Route {
         layout(Shell) {
-            page(Processes, "/:host/processes") { host: String }
-            page(Services, "/:host/services") { host: String }
+            page(Processes) link("/:host/processes") { host: String }
+            page(Services) link("/:host/services") { host: String }
         }
     }
 }
@@ -97,9 +119,8 @@ fn shown(route: Route, page: i32) -> Vec<String> {
     guinea_slint::testing::set_root(host.clone_strong());
 
     let token = UiThreadToken::dangerously_create_token_unchecked();
-    let router = Router::<Slint>::new(token);
-    let uri = route.to_uri();
-    router.navigate(route, &uri).expect("navigate");
+    let router = std::rc::Rc::new(Router::<Slint>::new(token));
+    router.navigate(route).expect("navigate");
 
     host.set_page(page);
     host.show().expect("show");
@@ -134,13 +155,10 @@ fn the_other_branch_is_wired_by_its_own_route() {
 }
 
 #[test]
-fn a_route_still_round_trips_through_its_uri() {
+fn a_route_still_renders_the_address_it_agreed_to() {
     let route = Route::Services {
         host: "ubuntu".to_string(),
     };
-    assert_eq!(
-        route.to_uri(),
-        guinea_core::uri::AppUri::parse("/ubuntu/services").unwrap()
-    );
+    assert_eq!(route.link().as_deref(), Some("/ubuntu/services"));
     assert_eq!(route.chain().len(), 2, "layout plus page");
 }

@@ -5,7 +5,7 @@ pub mod addr;
 pub mod ctx;
 pub mod envelope;
 pub mod flow;
-pub mod group;
+
 pub mod traits;
 
 pub use addr::*;

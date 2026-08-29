@@ -10,6 +10,7 @@ members = [
     "crates/guinea-core",
     "crates/guinea-app",
     "crates/adapters/guinea-eframe",
+    "crates/adapters/guinea-iced",
     "crates/adapters/guinea-ratatui",
     "crates/adapters/guinea-slint",
     "crates/adapters/guinea-slint-build",
@@ -26,6 +27,7 @@ guinea-codegen = { path = "crates/guinea-codegen" }
 guinea-core = { path = "crates/guinea-core" }
 guinea-app = { path = "crates/guinea-app" }
 guinea-eframe = { path = "crates/adapters/guinea-eframe" }
+guinea-iced = { path = "crates/adapters/guinea-iced" }
 guinea-ratatui = { path = "crates/adapters/guinea-ratatui" }
 guinea-slint = { path = "crates/adapters/guinea-slint" }
 guinea-slint-build = { path = "crates/adapters/guinea-slint-build" }

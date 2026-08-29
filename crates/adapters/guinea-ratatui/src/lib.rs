@@ -12,6 +12,7 @@
 //! built; by the time the frame exists the layout has decided the geometry and
 //! passes down whatever rectangle it wants the page to occupy.
 
+mod dialog;
 mod dispatcher;
 mod keys;
 mod run;
@@ -19,10 +20,9 @@ mod run;
 pub use keys::pressed;
 pub use run::{Flow, run};
 
-use guinea_app::feature::FeatureInitContext;
+use guinea_app::feature::{FeatureInitContext, Reaches, Segment};
 use guinea_core::scope::Reducer;
-use guinea_core::uri::AppUri;
-use guinea_router::router::{SegmentEntry, SegmentProps, Ui, single_entry_chain};
+use guinea_router::router::{Mount, SegmentEntry, SegmentProps, Ui, single_entry_chain};
 use ratatui::Frame;
 use ratatui::layout::Rect;
 
@@ -30,7 +30,10 @@ use ratatui::layout::Rect;
 pub struct Tui;
 
 impl Ui for Tui {
-    type View = Node;
+    type View<'a> = Node;
+    /// Nothing: a terminal view draws from a snapshot inside the frame and
+    /// holds no reference to state afterwards.
+    type Nodes = ();
 }
 
 /// Drawing that has not happened yet.
@@ -52,63 +55,134 @@ impl Node {
 }
 
 /// A leaf of the route tree.
-pub trait Page: 'static {
+pub trait Page: Sized + 'static {
     /// When `true`, the router keeps this page's reducer states in memory
     /// while the page is not mounted.
     const CACHE_STATE_IN_MEMORY: bool = false;
 
-    fn install(_ctx: &FeatureInitContext, _uri: &AppUri) -> anyhow::Result<()> {
-        Ok(())
-    }
+    /// What this page captured from the route, named by `routes!`. `()` for a
+    /// page that captures nothing.
+    ///
+    /// `PartialEq` because the router's one question about a capture is
+    /// whether it is still the same one - which decides what reinstalls and
+    /// which cached state may come back.
+    type Params: PartialEq + 'static;
+
+    /// What this segment installs, and `()` when it installs nothing.
+    ///
+    /// The list is not written beside the body - it *is* the body's
+    /// obligation: `install` returns it, so a feature that stops being
+    /// installed stops type-checking. Which is also why `install` has no
+    /// default any more.
+    ///
+    /// What is returned is owned by the segment's scope, which is what gives a
+    /// feature its own lifetime.
+    type Installs: 'static;
+
+    fn install(ctx: &FeatureInitContext, params: &Self::Params) -> anyhow::Result<Self::Installs>;
 
     /// Draws the page into the frame it is handed.
     ///
     /// `render` and not `view`: ratatui is immediate, so this is not a
     /// description of what the page is - it is the drawing itself, run again
     /// for every frame.
-    fn render(cx: &mut PageCx<'_, '_>);
+    fn render(cx: &mut PageCx<'_, '_, Self>);
 }
 
 /// A branch: draws its own chrome and decides where its child goes.
-pub trait Layout: 'static {
-    fn install(_ctx: &FeatureInitContext, _uri: &AppUri) -> anyhow::Result<()> {
-        Ok(())
-    }
+pub trait Layout: Sized + 'static {
+    /// What every page under this layout carries, derived by `routes!` as the
+    /// intersection of their parameters. A layout declares nothing; it is
+    /// handed what all of its children were reached with.
+    type Params: PartialEq + 'static;
 
-    fn render(cx: &mut LayoutCx<'_, '_>);
+    /// What this segment installs, and `()` when it installs nothing.
+    ///
+    /// The list is not written beside the body - it *is* the body's
+    /// obligation: `install` returns it, so a feature that stops being
+    /// installed stops type-checking. Which is also why `install` has no
+    /// default any more.
+    ///
+    /// What is returned is owned by the segment's scope, which is what gives a
+    /// feature its own lifetime.
+    type Installs: 'static;
+
+    fn install(ctx: &FeatureInitContext, params: &Self::Params) -> anyhow::Result<Self::Installs>;
+
+    fn render(cx: &mut LayoutCx<'_, '_, Self>);
 }
 
 pub const fn segment_entry<P: Page>() -> SegmentEntry<Tui> {
     SegmentEntry::new(
         std::any::TypeId::of::<P>,
-        P::install,
-        mount_page::<P>,
+        install_page::<P>,
+        guinea_router::router::same_params::<P::Params>,
+        &const { MountPage::<P>(std::marker::PhantomData) },
         P::CACHE_STATE_IN_MEMORY,
     )
 }
 
 pub const fn layout_entry<L: Layout>() -> SegmentEntry<Tui> {
-    SegmentEntry::new(std::any::TypeId::of::<L>, L::install, mount_layout::<L>, false)
+    SegmentEntry::new(
+        std::any::TypeId::of::<L>,
+        install_layout::<L>,
+        guinea_router::router::same_params::<L::Params>,
+        &const { MountLayout::<L>(std::marker::PhantomData) },
+        false,
+    )
 }
 
-pub fn mount_page<P: Page>(props: SegmentProps<Tui>) -> Node {
-    Node::new(move |frame, area| {
-        P::render(&mut PageCx {
-            frame,
-            area,
-            props,
-        })
-    })
+fn install_page<P: Page>(
+    ctx: &FeatureInitContext,
+    params: &dyn std::any::Any,
+) -> anyhow::Result<()> {
+    own(ctx, P::install(ctx, guinea_router::router::narrow::<P::Params, P>(params)?)?);
+    Ok(())
 }
 
-pub fn mount_layout<L: Layout>(props: SegmentProps<Tui>) -> Node {
-    Node::new(move |frame, area| {
-        L::render(&mut LayoutCx {
-            frame,
-            area,
-            props,
+/// Hands what a segment installed to its scope - a feature's lifetime is the
+/// segment's, and dropping this here would end it at the end of `install`.
+fn own<T: 'static>(ctx: &FeatureInitContext, installed: T) {
+    ctx.scope.own(guinea_core::scope::DropGuard(installed));
+}
+
+fn install_layout<L: Layout>(
+    ctx: &FeatureInitContext,
+    params: &dyn std::any::Any,
+) -> anyhow::Result<()> {
+    own(ctx, L::install(ctx, guinea_router::router::narrow::<L::Params, L>(params)?)?);
+    Ok(())
+}
+
+/// A zero-sized marker per segment type: what a `const` entry points at to get
+/// its `&'static dyn Mount`.
+pub struct MountPage<P>(pub std::marker::PhantomData<P>);
+pub struct MountLayout<L>(pub std::marker::PhantomData<L>);
+
+impl<P: Page> Mount<Tui> for MountPage<P> {
+    fn view<'a>(&self, props: SegmentProps<Tui>, _nodes: &'a ()) -> Node {
+        Node::new(move |frame, area| {
+            P::render(&mut PageCx {
+                frame,
+                area,
+                props,
+                page: std::marker::PhantomData,
+            })
         })
-    })
+    }
+}
+
+impl<L: Layout> Mount<Tui> for MountLayout<L> {
+    fn view<'a>(&self, props: SegmentProps<Tui>, _nodes: &'a ()) -> Node {
+        Node::new(move |frame, area| {
+            L::render(&mut LayoutCx {
+                frame,
+                area,
+                props,
+                layout: std::marker::PhantomData,
+            })
+        })
+    }
 }
 
 /// A one-segment chain, for a page drawn without a route tree.
@@ -118,13 +192,18 @@ pub fn page_chain<P: Page>() -> &'static [SegmentEntry<Tui>] {
 
 /// What a page's view is handed: the frame it draws into, the rectangle it was
 /// given, and a way to read the state its feature owns.
-pub struct PageCx<'a, 'b> {
+///
+/// Carries the page type, not because drawing needs it, but because reading
+/// does: what a segment may read is a fact about where it sits, and this is
+/// where that fact enters the signature.
+pub struct PageCx<'a, 'b, P> {
     frame: &'a mut Frame<'b>,
     area: Rect,
     props: SegmentProps<Tui>,
+    page: std::marker::PhantomData<fn() -> P>,
 }
 
-impl<'b> PageCx<'_, 'b> {
+impl<'b, P> PageCx<'_, 'b, P> {
     pub fn frame(&mut self) -> &mut Frame<'b> {
         self.frame
     }
@@ -132,45 +211,56 @@ impl<'b> PageCx<'_, 'b> {
     pub fn area(&self) -> Rect {
         self.area
     }
+}
 
+impl<P: Segment> PageCx<'_, '_, P> {
     /// The reducer's state and actions.
     ///
     /// No subscription, unlike the reactor's `use_reducer`: a terminal redraws
     /// the whole frame on its own schedule, so there is nothing to invalidate -
     /// the next pass reads the state again.
-    pub fn read<R>(&self) -> (R::State, std::rc::Rc<R::Actions>)
+    ///
+    /// Which feature answers is settled at build time: this page installed it,
+    /// or a segment above listed it in `Exports`. The `_` is [`Reaches`]'s
+    /// index, which says which of several impls applied - Rust has no partial
+    /// turbofish, so it has to be written.
+    pub fn state<R, I>(&self) -> (R, guinea_core::feature::Dispatch)
     where
-        R: Reducer,
-        R::State: Clone,
+        R: Reducer + Clone,
+        P: Reaches<R, I>,
     {
         let binding = self.props.binding::<R>();
-        (binding.get(), binding.actions())
+        (binding.get(), binding.dispatch())
     }
 }
 
 /// What a layout's view is handed. Same as a page's, plus the child.
-pub struct LayoutCx<'a, 'b> {
+pub struct LayoutCx<'a, 'b, L> {
     frame: &'a mut Frame<'b>,
     area: Rect,
     props: SegmentProps<Tui>,
+    layout: std::marker::PhantomData<fn() -> L>,
 }
 
-impl<'b> LayoutCx<'_, 'b> {
+impl<L: Segment> LayoutCx<'_, '_, L> {
+    /// See [`PageCx::state`].
+    pub fn state<R, I>(&self) -> (R, guinea_core::feature::Dispatch)
+    where
+        R: Reducer + Clone,
+        L: Reaches<R, I>,
+    {
+        let binding = self.props.binding::<R>();
+        (binding.get(), binding.dispatch())
+    }
+}
+
+impl<'b, L> LayoutCx<'_, 'b, L> {
     pub fn frame(&mut self) -> &mut Frame<'b> {
         self.frame
     }
 
     pub fn area(&self) -> Rect {
         self.area
-    }
-
-    pub fn read<R>(&self) -> (R::State, std::rc::Rc<R::Actions>)
-    where
-        R: Reducer,
-        R::State: Clone,
-    {
-        let binding = self.props.binding::<R>();
-        (binding.get(), binding.actions())
     }
 
     /// Draws the next segment down the chain into `area`.
@@ -178,7 +268,7 @@ impl<'b> LayoutCx<'_, 'b> {
     /// The whole reason a view is deferred: the child was mounted before any
     /// frame existed, and only here is it known where it belongs.
     pub fn outlet(&mut self, area: Rect) {
-        self.props.outlet().draw(self.frame, area);
+        self.props.outlet(&()).draw(self.frame, area);
     }
 
     /// Whether the segment directly below is `P`.
@@ -207,7 +297,14 @@ mod tests {
     struct Shell;
 
     impl Layout for Shell {
-        fn render(cx: &mut LayoutCx<'_, '_>) {
+        type Params = ();
+        type Installs = ();
+
+        fn install(_ctx: &FeatureInitContext, _params: &()) -> anyhow::Result<()> {
+            Ok(())
+        }
+
+        fn render(cx: &mut LayoutCx<'_, '_, Self>) {
             let chunks = RLayout::default()
                 .direction(Direction::Vertical)
                 .constraints([Constraint::Length(1), Constraint::Min(0)])
@@ -223,7 +320,14 @@ mod tests {
     struct Processes;
 
     impl Page for Processes {
-        fn render(cx: &mut PageCx<'_, '_>) {
+        type Params = ();
+        type Installs = ();
+
+        fn install(_ctx: &FeatureInitContext, _params: &()) -> anyhow::Result<()> {
+            Ok(())
+        }
+
+        fn render(cx: &mut PageCx<'_, '_, Self>) {
             let area = cx.area();
             cx.frame().render_widget(Paragraph::new("processes"), area);
         }
@@ -234,12 +338,13 @@ mod tests {
     fn rendered() -> String {
         let token = UiThreadToken::dangerously_create_token_unchecked();
         let router = Router::<Tui>::new(token);
-        let uri = AppUri::parse("/processes").unwrap();
-        router.activate(&uri, &CHAIN).expect("activate");
+        router
+            .activate(&CHAIN, vec![Box::new(()), Box::new(())])
+            .expect("activate");
 
         let mut terminal = Terminal::new(TestBackend::new(12, 3)).expect("terminal");
         terminal
-            .draw(|frame| router.render().draw(frame, frame.area()))
+            .draw(|frame| router.render(&()).draw(frame, frame.area()))
             .expect("draw");
 
         let buffer = terminal.backend().buffer();

@@ -4,11 +4,11 @@
 //! macro resolves `guinea` as `Itself`, and what an application compiles is the
 //! other case.
 
+use guinea_app::feature::FeatureInitContext;
 use guinea_core::actor::UiThreadToken;
-use guinea_core::uri::AppUri;
 use guinea_macros::routes;
 use guinea_ratatui::{LayoutCx, PageCx, Tui};
-use guinea_router::router::{RouteChain, Router, ToUri};
+use guinea_router::router::{RouteChain, Router};
 use ratatui::layout::{Constraint, Direction, Layout as RLayout};
 use ratatui::widgets::Paragraph;
 use ratatui::{Terminal, backend::TestBackend};
@@ -16,7 +16,14 @@ use ratatui::{Terminal, backend::TestBackend};
 struct Shell;
 
 impl guinea_ratatui::Layout for Shell {
-    fn render(cx: &mut LayoutCx<'_, '_>) {
+    type Params = ShellParams;
+    type Installs = ();
+
+    fn install(_ctx: &FeatureInitContext, _params: &ShellParams) -> anyhow::Result<()> {
+        Ok(())
+    }
+
+    fn render(cx: &mut LayoutCx<'_, '_, Self>) {
         let chunks = RLayout::default()
             .direction(Direction::Vertical)
             .constraints([Constraint::Length(1), Constraint::Min(0)])
@@ -30,7 +37,14 @@ impl guinea_ratatui::Layout for Shell {
 struct Processes;
 
 impl guinea_ratatui::Page for Processes {
-    fn render(cx: &mut PageCx<'_, '_>) {
+    type Params = ProcessesParams;
+    type Installs = ();
+
+    fn install(_ctx: &FeatureInitContext, _params: &ProcessesParams) -> anyhow::Result<()> {
+        Ok(())
+    }
+
+    fn render(cx: &mut PageCx<'_, '_, Self>) {
         let area = cx.area();
         cx.frame().render_widget(Paragraph::new("processes"), area);
     }
@@ -39,7 +53,14 @@ impl guinea_ratatui::Page for Processes {
 struct Services;
 
 impl guinea_ratatui::Page for Services {
-    fn render(cx: &mut PageCx<'_, '_>) {
+    type Params = ServicesParams;
+    type Installs = ();
+
+    fn install(_ctx: &FeatureInitContext, _params: &ServicesParams) -> anyhow::Result<()> {
+        Ok(())
+    }
+
+    fn render(cx: &mut PageCx<'_, '_, Self>) {
         let area = cx.area();
         cx.frame().render_widget(Paragraph::new("services"), area);
     }
@@ -49,21 +70,20 @@ routes! {
     backend = guinea_ratatui::Tui,
     Route {
         layout(Shell) {
-            page(Processes, "/:host/processes") { host: String }
-            page(Services, "/:host/services") { host: String }
+            page(Processes) link("/:host/processes") { host: String }
+            page(Services) link("/:host/services") { host: String }
         }
     }
 }
 
 fn draw(route: Route) -> String {
     let token = UiThreadToken::dangerously_create_token_unchecked();
-    let router = Router::<Tui>::new(token);
-    let uri = route.to_uri();
-    router.navigate(route, &uri).expect("navigate");
+    let router = std::rc::Rc::new(Router::<Tui>::new(token));
+    router.navigate(route).expect("navigate");
 
     let mut terminal = Terminal::new(TestBackend::new(10, 2)).expect("terminal");
     terminal
-        .draw(|frame| router.render().draw(frame, frame.area()))
+        .draw(|frame| router.render(&()).draw(frame, frame.area()))
         .expect("draw");
 
     let buffer = terminal.backend().buffer();
@@ -100,11 +120,11 @@ fn navigating_between_siblings_keeps_the_layout_and_swaps_the_page() {
 }
 
 #[test]
-fn a_route_still_round_trips_through_its_uri() {
+fn a_route_still_renders_the_address_it_agreed_to() {
     let route = Route::Services {
         host: "ubuntu".to_string(),
     };
-    assert_eq!(route.to_uri(), AppUri::parse("/ubuntu/services").unwrap());
+    assert_eq!(route.link().as_deref(), Some("/ubuntu/services"));
     assert_eq!(route.chain().len(), 2, "layout plus page");
 }
 
@@ -126,7 +146,7 @@ fn navigator() -> (
         let cell = cell.clone();
         RouteSink::new(move |next: Route| *cell.borrow_mut() = next)
     });
-    router.navigate(here.clone(), &here.to_uri()).expect("first");
+    router.navigate(here.clone()).expect("first");
     (router, nav, cell)
 }
 

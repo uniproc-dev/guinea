@@ -402,6 +402,20 @@ fn expand(manifest: Manifest) -> syn::Result<TokenStream> {
         quote! { assert_handler::<#self_ty, #msg>(); }
     });
 
+    // Registering what this actor answers, from the very list that declares
+    // it. Nothing outside names the actor: the scope is keyed by the action,
+    // so an actor is what the domain happens to use, not part of anything's
+    // signature.
+    let served = handlers.iter().map(|decl| {
+        let msg = &decl.msg;
+        quote! {
+            scope.answers::<#msg>({
+                let addr = addr.clone();
+                move |action| addr.send(action)
+            });
+        }
+    });
+
     let flow_marker = format_ident!("__Flow_{}", ident);
     let declares_flow = handlers.iter().any(|decl| decl.edges.is_some());
 
@@ -492,6 +506,15 @@ fn expand(manifest: Manifest) -> syn::Result<TokenStream> {
             for #handlers_marker #where_clause {}
 
         #(#signal_impls)*
+
+        impl #impl_generics #gc::feature::Serves for #self_ty #where_clause {
+            fn serve(
+                addr: &#gc::actor::Addr<Self>,
+                scope: &::std::rc::Rc<#gc::scope::Scope>,
+            ) {
+                #(#served)*
+            }
+        }
 
         impl #impl_generics #gc::actor::traits::ManagedActor for #self_ty #where_clause {
             type Bus = #bus_ty;

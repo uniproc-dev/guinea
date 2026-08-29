@@ -4,10 +4,12 @@ use std::collections::{HashMap, VecDeque};
 use std::rc::Rc;
 
 use guinea_core::binding::ReducerBinding;
+use guinea_core::guard::{Ask, Decision, Verdict};
 use guinea_core::scope::{Reducer, Scope};
 
 use guinea_app::feature::{FeatureHost, FeatureInitContext};
-use guinea_core::uri::AppUri;
+
+use crate::enter::{EnterCx, EnterGuard};
 
 /// A UI backend, described entirely by the types it works in.
 ///
@@ -25,15 +27,48 @@ pub trait Ui: Sized + 'static {
     /// What a view produces: an element tree for a reconciler, a deferred draw
     /// closure for immediate mode, `()` for a backend that pushes into
     /// retained properties.
-    type View: 'static;
+    ///
+    /// Borrowed from [`Nodes`](Self::Nodes) rather than owned, because some
+    /// toolkits build widgets that hold a reference to the state they show -
+    /// iced's `text_editor` keeps a `&Content` for the life of the element.
+    /// A backend whose views own everything ignores the lifetime.
+    type View<'a>;
+
+    /// Where a backend keeps whatever its views borrow from.
+    ///
+    /// Threaded through mounting by reference, so a view can hold `&'a` into
+    /// it. `()` for a backend that borrows nothing - which is four of the five
+    /// here, and why this is an associated type rather than a requirement.
+    type Nodes: 'static;
 }
 
 pub struct SegmentEntry<U: Ui> {
     pub type_id: fn() -> TypeId,
-    pub install: fn(&FeatureInitContext, &AppUri) -> anyhow::Result<()>,
+    /// What this segment captured, erased. The generated glue narrows it back
+    /// to the segment's own params type; nothing hand-written sees `Any`.
+    pub install: fn(&FeatureInitContext, &dyn Any) -> anyhow::Result<()>,
+    /// Whether two captures for this segment are the same capture.
+    ///
+    /// Generated code rather than a trait bound on the route: it is the one
+    /// question the router asks about parameters, and asking it here keeps
+    /// `PartialEq` off the route type itself - which matters for a payload
+    /// that has no identity to compare.
+    pub same_params: fn(&dyn Any, &dyn Any) -> bool,
     /// Built by the backend: the agnostic half only calls it.
-    pub mount: fn(SegmentProps<U>) -> U::View,
+    pub mount: &'static dyn Mount<U>,
     pub cache_state: bool,
+}
+
+/// How a segment turns into a view.
+///
+/// A trait object rather than a function pointer, and only because of a hole
+/// in the compiler. A chain is `&'static`, so the entry cannot carry the
+/// render's lifetime; a pointer would therefore have to be higher-ranked over
+/// it - and rustc will not normalise `U::View<'a>` under a `for<'a>` binder,
+/// so the coercion fails with "expected fn pointer, found fn item". A vtable
+/// is normalised per call instead, and the entries stay `const`.
+pub trait Mount<U: Ui>: 'static {
+    fn view<'a>(&self, props: SegmentProps<U>, nodes: &'a U::Nodes) -> U::View<'a>;
 }
 
 /// Where a segment sits while it renders: the chain it belongs to, the scope
@@ -109,43 +144,94 @@ impl<U: Ui> SegmentProps<U> {
         }
     }
 
-    /// The reducer's owning scope, and a binding to its state.
+    /// The scope that owns `R`, and a binding to its state.
     ///
-    /// Ownership is decided by `note_reducer_owner::<R>()` - set
-    /// synchronously inside `ctx.port`/`ctx.actions`/`ctx.seed_reducer`
-    /// during `install()`, always before the first render for this segment.
-    /// That makes this a reliable signal (unlike checking whether `R`'s state
-    /// cell already exists, which depends on render/actor-response timing,
-    /// not on ownership), so a miss here is a genuine setup bug, not a normal
-    /// race - it panics instead of silently treating the current scope as the
-    /// owner.
+    /// This segment's own scope counts whatever it claimed; an ancestor counts
+    /// only what it *exported*. A feature's internal state used to be
+    /// reachable from anywhere below simply because it existed - now it is
+    /// reachable exactly where the feature said, and `Exports` is where it
+    /// says so.
+    ///
+    /// A miss is a setup bug rather than a race: ownership is recorded
+    /// synchronously during `install()`, always before the first render for
+    /// this segment. So it panics rather than silently treating the current
+    /// scope as the owner.
     pub fn binding<R: Reducer>(&self) -> ReducerBinding<R> {
-        let owner = self.scopes[..=self.cursor]
-            .iter()
-            .rev()
-            .find(|scope| scope.has_feature::<R>())
-            .unwrap_or_else(|| {
-                panic!(
-                    "use_reducer::<{}>() found no scope (this one or any ancestor) whose                      install() called ctx.port/ctx.actions/ctx.seed_reducer for it. Either                      this route never installs the feature that owns it, or that feature                      installs in the wrong branch of the route tree.",
-                    std::any::type_name::<R>()
-                )
-            });
+        let owner = resolve::<R>(&self.scopes[..=self.cursor]).unwrap_or_else(|| {
+            panic!(
+                "reading {} here found no scope that owns it: this segment did not claim \
+                 it, and no ancestor exported it. Either this route never installs the \
+                 feature that owns it, that feature installs in another branch, or it \
+                 owns the reducer without listing it in `Exports`.",
+                std::any::type_name::<R>()
+            )
+        });
         owner.binding::<R>()
     }
 
     /// Mounts the next segment down the chain. Backends expose this to layouts
     /// only: a page is the end of the chain and has no child to render.
-    pub fn outlet(&self) -> U::View {
+    ///
+    /// The child borrows from the same `nodes` the parent does, which is what
+    /// makes the whole tree one borrow of the backend's store rather than a
+    /// chain of temporaries.
+    pub fn outlet<'a>(&self, nodes: &'a U::Nodes) -> U::View<'a> {
         let next = self.cursor + 1;
         assert!(
             next < self.chain.len(),
             "outlet() called on the last segment of the chain (no child to render)"
         );
-        (self.chain[next].mount)(SegmentProps {
-            chain: self.chain,
-            scopes: self.scopes.clone(),
-            cursor: next,
-        })
+        self.chain[next].mount.view(
+            SegmentProps {
+                chain: self.chain,
+                scopes: self.scopes.clone(),
+                cursor: next,
+            },
+            nodes,
+        )
+    }
+}
+
+/// Finds the scope that owns `R` for a segment sitting at the end of `chain`.
+///
+/// Innermost first, and the two ends are asked different questions: the
+/// segment itself may read anything it claimed, an ancestor only what it
+/// exported.
+pub fn resolve<R: Reducer>(chain: &[Rc<Scope>]) -> Option<&Rc<Scope>> {
+    let (here, above) = chain.split_last()?;
+    if here.has_feature::<R>() {
+        return Some(here);
+    }
+    above.iter().rev().find(|scope| Scope::exports::<R>(scope))
+}
+
+/// Narrows what the router carries back to what a segment declared.
+///
+/// For the glue a backend generates around `install`; a mismatch means the
+/// chain and the route were built from different declarations, which is a
+/// wiring bug rather than anything a user did.
+pub fn narrow<'a, T: 'static, Segment: 'static>(
+    params: &'a dyn Any,
+) -> anyhow::Result<&'a T> {
+    params.downcast_ref::<T>().ok_or_else(|| {
+        anyhow::anyhow!(
+            "`{}` expects params of type `{}`, but the route carried something else",
+            std::any::type_name::<Segment>(),
+            std::any::type_name::<T>(),
+        )
+    })
+}
+
+/// Whether two captures for the same segment are the same capture.
+///
+/// For the glue a backend generates around `install`, next to [`narrow`].
+pub fn same_params<T: PartialEq + 'static>(left: &dyn Any, right: &dyn Any) -> bool {
+    match (left.downcast_ref::<T>(), right.downcast_ref::<T>()) {
+        (Some(left), Some(right)) => left == right,
+        // Different types in the same position means the two chains were built
+        // from different declarations. Not the same place, so not the same
+        // capture either.
+        _ => false,
     }
 }
 
@@ -154,13 +240,15 @@ impl<U: Ui> SegmentEntry<U> {
     /// the router only needs something it can install and mount.
     pub const fn new(
         type_id: fn() -> TypeId,
-        install: fn(&FeatureInitContext, &AppUri) -> anyhow::Result<()>,
-        mount: fn(SegmentProps<U>) -> U::View,
+        install: fn(&FeatureInitContext, &dyn Any) -> anyhow::Result<()>,
+        same_params: fn(&dyn Any, &dyn Any) -> bool,
+        mount: &'static dyn Mount<U>,
         cache_state: bool,
     ) -> Self {
         Self {
             type_id,
             install,
+            same_params,
             mount,
             cache_state,
         }
@@ -178,10 +266,34 @@ pub fn single_entry_chain<U: Ui>(entry: SegmentEntry<U>) -> &'static [SegmentEnt
 
 pub trait RouteChain<U: Ui> {
     fn chain(&self) -> &'static [SegmentEntry<U>];
-}
 
-pub trait ToUri {
-    fn to_uri(&self) -> AppUri;
+    /// What each segment of the chain captured, in chain order and the same
+    /// length as [`chain`](Self::chain).
+    fn params(&self) -> Vec<Box<dyn Any>>;
+
+    /// What to call this route in a log or a navigation hook - present even
+    /// for a route nothing outside the application can name.
+    fn name(&self) -> &'static str;
+
+    /// The address this route answers to, when it agreed to have one.
+    fn link(&self) -> Option<String> {
+        None
+    }
+
+    /// What stands in front of this route, outermost declaration first.
+    ///
+    /// Already resolved by `routes!`: the cascade is folded in and the
+    /// opt-outs are taken back out, so this is the list as it applies here
+    /// rather than a tree to walk. The router asks the route because that is
+    /// where enter guards are declared - a `SegmentEntry` is built by the
+    /// backend from a page type, which knows nothing about where in a tree it
+    /// was placed.
+    ///
+    /// Defaulted, so a chain written by hand - a test, a page mounted without
+    /// a tree - says nothing and is guarded by nothing.
+    fn guards(&self) -> &'static [&'static dyn EnterGuard] {
+        &[]
+    }
 }
 
 /// Where a navigation goes once the router has accepted it - a reconciler's
@@ -239,6 +351,13 @@ impl<R> Clone for RouteSink<R> {
     }
 }
 
+/// Which stack a refused step has to be put back on.
+#[derive(Clone, Copy)]
+enum Step {
+    Back,
+    Forward,
+}
+
 pub struct NavigateHandle<U: Ui, R> {
     router: Rc<Router<U>>,
     sink: RouteSink<R>,
@@ -261,41 +380,52 @@ impl<U: Ui, R> PartialEq for NavigateHandle<U, R> {
 
 impl<U: Ui, R> NavigateHandle<U, R>
 where
-    R: RouteChain<U> + ToUri + Clone + PartialEq + 'static,
+    R: RouteChain<U> + Clone + PartialEq + 'static,
 {
     pub fn new(router: Rc<Router<U>>, sink: RouteSink<R>) -> Self {
         Self { router, sink }
     }
 
+    /// Go to `route`, recording where we were.
+    ///
+    /// History moves only if the navigation actually happens: a guard that
+    /// refuses must not leave the place we never left sitting in the back
+    /// stack.
     pub fn to(&self, route: R) {
-        if let Some(current) = self.current() {
-            self.router.remember(Box::new(current.0), current.1);
-        }
-        self.go(route);
+        let leaving = self.current().map(|route| Box::new(route) as Box<dyn Any>);
+        let router = Rc::downgrade(&self.router);
+
+        self.go(route, move |arrived| {
+            if !arrived {
+                return;
+            }
+            if let (Some(router), Some(leaving)) = (router.upgrade(), leaving) {
+                router.remember(leaving);
+            }
+        });
     }
 
     /// Back one step, if there is one. Reports whether it moved, so a key
     /// handler can fall through to something else - closing a dialog, or
     /// quitting - when there is nowhere to go.
+    ///
+    /// A guard can defer this, in which case it reports `false` now and moves
+    /// later - the answer is not available to report on.
     pub fn back(&self) -> bool {
-        let leaving = self
-            .current()
-            .map(|(route, uri)| (Box::new(route) as Box<dyn Any>, uri));
+        let leaving = self.current().map(|route| Box::new(route) as Box<dyn Any>);
         let Some(entry) = self.router.take_back(leaving) else {
             return false;
         };
-        self.arrive(entry)
+        self.arrive(entry, Step::Back)
     }
 
     /// Forward one step, undoing a [`back`](Self::back).
     pub fn forward(&self) -> bool {
-        let leaving = self
-            .current()
-            .map(|(route, uri)| (Box::new(route) as Box<dyn Any>, uri));
+        let leaving = self.current().map(|route| Box::new(route) as Box<dyn Any>);
         let Some(entry) = self.router.take_forward(leaving) else {
             return false;
         };
-        self.arrive(entry)
+        self.arrive(entry, Step::Forward)
     }
 
     pub fn can_go_back(&self) -> bool {
@@ -307,33 +437,59 @@ where
     }
 
     /// Where the router is now, as this handle's route type.
-    fn current(&self) -> Option<(R, AppUri)> {
-        let route = self.router.current_route::<R>()?;
-        let uri = route.to_uri();
-        Some((route, uri))
+    fn current(&self) -> Option<R> {
+        self.router.current_route::<R>()
     }
 
-    fn arrive(&self, entry: Visited) -> bool {
-        let uri = entry.uri().clone();
+    fn arrive(&self, entry: Visited, step: Step) -> bool {
         let Some(route) = entry.route::<R>() else {
             // Two route types on one router. Nothing in guinea builds that,
             // and silently doing nothing beats navigating somewhere wrong.
             tracing::warn!("history holds a route of another type; ignoring it");
             return false;
         };
-        self.go_at(route, uri);
-        true
+
+        // The entry is already out of the stack, so a refusal has to put it
+        // back - otherwise a guarded page would eat a step of history every
+        // time it said no.
+        let router = Rc::downgrade(&self.router);
+        let undo = route.clone();
+        self.go(route, move |arrived| {
+            if arrived {
+                return;
+            }
+            if let Some(router) = router.upgrade() {
+                let entry = Box::new(undo) as Box<dyn Any>;
+                match step {
+                    Step::Back => router.restore_back(entry),
+                    Step::Forward => router.restore_forward(entry),
+                }
+            }
+        })
     }
 
-    fn go(&self, route: R) {
-        let uri = route.to_uri();
-        self.go_at(route, uri);
-    }
+    /// Reports whether it arrived *now*. A deferred navigation reports
+    /// `false`: there is no answer yet to report.
+    fn go(&self, route: R, settled: impl FnOnce(bool) + 'static) -> bool {
+        let name = route.name();
+        let router = Rc::downgrade(&self.router);
+        let sink = self.sink.clone();
+        let published = route.clone();
 
-    fn go_at(&self, route: R, uri: AppUri) {
-        self.router.navigate(route.clone(), &uri).expect("navigate");
-        self.router.route_changed(&uri.to_string());
-        self.sink.publish(route);
+        let outcome = self
+            .router
+            .navigate_then(route, move |arrived| {
+                if arrived {
+                    if let Some(router) = router.upgrade() {
+                        router.route_changed(name);
+                    }
+                    sink.publish(published);
+                }
+                settled(arrived);
+            })
+            .expect("navigate");
+
+        outcome.is_done()
     }
 
     /// A parameterless handler that navigates to `route` - sugar for
@@ -359,17 +515,63 @@ where
 pub(crate) struct ActiveChain<U: Ui> {
     pub(crate) entries: &'static [SegmentEntry<U>],
     pub(crate) scopes: Rc<Vec<Rc<Scope>>>,
+    /// What each segment was installed with, kept so the next navigation can
+    /// ask which of them changed - and so a cached state can refuse to come
+    /// back to a segment that captured something else.
+    pub(crate) params: Vec<Box<dyn Any>>,
 }
 
 impl<U: Ui> ActiveChain<U> {
-    fn root_view(&self) -> U::View {
+    fn root_view<'a>(&self, nodes: &'a U::Nodes) -> U::View<'a> {
         let props = SegmentProps {
             chain: self.entries,
             scopes: self.scopes.clone(),
             cursor: 0,
         };
-        (self.entries[0].mount)(props)
+        self.entries[0].mount.view(props, nodes)
     }
+}
+
+/// Dropping a router is a teardown like any other, and has to run in the same
+/// direction. Without this the field just drops, which takes the chain apart
+/// from the outside in - the case that is hardest to notice, since it is the
+/// one a closing window takes.
+impl<U: Ui> Drop for Router<U> {
+    fn drop(&mut self) {
+        if let Ok(mut active) = self.active.try_borrow_mut()
+            && let Some(active) = active.take()
+        {
+            unwind(active.scopes, 0);
+        }
+    }
+}
+
+/// Tears a chain down to its first `keep` segments and hands back what is
+/// left standing.
+///
+/// Innermost first, which is the direction the declarations point: a segment
+/// says what it installs and what it reads from above, so the one that reads
+/// is the one that has to go before what it reads. Dropping the vector - or
+/// `Vec::truncate`, which was here before - runs the other way and tears a
+/// layout down while the page inside it is still being torn down.
+///
+/// It degraded quietly rather than crashing, because [`Push`] holds its scope
+/// weakly and a late update lands nowhere. That made it invisible, not
+/// harmless: a teardown that touched what it depended on found it gone.
+///
+/// [`Push`]: guinea_core::feature::Push
+fn unwind(scopes: Rc<Vec<Rc<Scope>>>, keep: usize) -> Vec<Rc<Scope>> {
+    let mut standing = match Rc::try_unwrap(scopes) {
+        Ok(owned) => owned,
+        // Something still holds the chain - a view mid-render, say. Those
+        // scopes die with it; the ones this owns still go in the right order.
+        Err(shared) => (*shared).clone(),
+    };
+
+    while standing.len() > keep {
+        standing.pop();
+    }
+    standing
 }
 
 fn common_prefix_len<U: Ui>(prev: &[SegmentEntry<U>], next: &[SegmentEntry<U>]) -> usize {
@@ -382,14 +584,47 @@ fn common_prefix_len<U: Ui>(prev: &[SegmentEntry<U>], next: &[SegmentEntry<U>]) 
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
 struct StateCacheKey {
     segment_index: usize,
-    type_id: TypeId,
+    /// Every segment type from the root down to this one, hashed.
+    ///
+    /// Not this segment's type alone: the same page under two different
+    /// layouts sits at the same depth and is not the same place, and keying on
+    /// depth and type only would let one restore into the other.
+    path: u64,
+}
+
+/// Every segment type from the root down to `index`, hashed.
+///
+/// Public because a backend keeping state of its own per segment has the same
+/// question to answer, and answering it differently is how one page's state
+/// ends up under another.
+pub fn placement_hash<U: Ui>(chain: &[SegmentEntry<U>], index: usize) -> u64 {
+    use std::hash::{Hash, Hasher};
+
+    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+    for entry in &chain[..=index] {
+        (entry.type_id)().hash(&mut hasher);
+    }
+    hasher.finish()
+}
+
+/// Where a segment sits, as a key.
+fn cache_key<U: Ui>(chain: &[SegmentEntry<U>], index: usize) -> StateCacheKey {
+    StateCacheKey {
+        segment_index: index,
+        path: placement_hash(chain, index),
+    }
 }
 
 const MAX_CACHED_STATES: usize = 10;
 
+/// A segment's states, and what it had captured when they were taken.
+struct Cached {
+    states: HashMap<TypeId, Rc<dyn Any>>,
+    params: Box<dyn Any>,
+}
+
 struct StateCache {
-    /// Cached reducer states, keyed by segment position and type.
-    entries: HashMap<StateCacheKey, HashMap<TypeId, Rc<dyn Any>>>,
+    entries: HashMap<StateCacheKey, Cached>,
     /// Order of insertion for LRU eviction.
     order: VecDeque<StateCacheKey>,
 }
@@ -402,8 +637,8 @@ impl StateCache {
         }
     }
 
-    fn insert(&mut self, key: StateCacheKey, states: HashMap<TypeId, Rc<dyn Any>>) {
-        if self.entries.insert(key, states).is_none() {
+    fn insert(&mut self, key: StateCacheKey, cached: Cached) {
+        if self.entries.insert(key, cached).is_none() {
             self.order.push_back(key);
         }
         while self.order.len() > MAX_CACHED_STATES {
@@ -413,7 +648,7 @@ impl StateCache {
         }
     }
 
-    fn take(&mut self, key: StateCacheKey) -> Option<HashMap<TypeId, Rc<dyn Any>>> {
+    fn take(&mut self, key: StateCacheKey) -> Option<Cached> {
         if self.entries.contains_key(&key) {
             self.order.retain(|k| *k != key);
         }
@@ -425,7 +660,6 @@ impl StateCache {
 /// it produced.
 pub struct Visited {
     route: Box<dyn Any>,
-    uri: AppUri,
 }
 
 impl Visited {
@@ -434,14 +668,54 @@ impl Visited {
     pub fn route<R: 'static>(self) -> Option<R> {
         self.route.downcast::<R>().ok().map(|route| *route)
     }
+}
 
-    pub fn uri(&self) -> &AppUri {
-        &self.uri
+/// What became of a navigation.
+///
+/// Three outcomes rather than two, because a guard may not have an answer yet.
+/// A navigation waiting for one has changed nothing, which is what makes it
+/// safe to supersede.
+pub enum Navigation {
+    /// Installed. The leaf's scope.
+    Done(Rc<Scope>),
+    /// A guard is asking. Nothing has changed; see [`Router::pending`].
+    Deferred,
+    /// A guard refused.
+    Blocked,
+}
+
+impl Navigation {
+    pub fn scope(self) -> Option<Rc<Scope>> {
+        match self {
+            Navigation::Done(scope) => Some(scope),
+            _ => None,
+        }
     }
+
+    pub fn is_done(&self) -> bool {
+        matches!(self, Navigation::Done(_))
+    }
+}
+
+/// A navigation waiting on an answer.
+struct Parked<U: Ui> {
+    ask: Ask,
+    decision: Decision,
+    chain: &'static [SegmentEntry<U>],
+    params: Vec<Box<dyn Any>>,
+    shared_len: usize,
+    route: Box<dyn Any>,
+    /// What the caller wanted done once this either happened or did not.
+    settled: Box<dyn FnOnce(bool)>,
 }
 
 pub struct Router<U: Ui> {
     pub(crate) active: RefCell<Option<ActiveChain<U>>>,
+    /// The question on screen, if a guard asked one.
+    pending: RefCell<Option<Parked<U>>>,
+    /// Bumped by every navigation, so an answer to a superseded question can
+    /// be told from an answer to the current one.
+    generation: std::cell::Cell<u64>,
     prev_route: RefCell<Option<Box<dyn Any>>>,
     /// Where the application has been, and where it was pulled back from.
     ///
@@ -484,6 +758,8 @@ impl<U: Ui> Router<U> {
     pub fn with_host(host: FeatureHost) -> Self {
         Self {
             active: RefCell::new(None),
+            pending: RefCell::new(None),
+            generation: std::cell::Cell::new(0),
             prev_route: RefCell::new(None),
             back: RefCell::new(Vec::new()),
             forward: RefCell::new(Vec::new()),
@@ -539,93 +815,280 @@ impl<U: Ui> Router<U> {
     
     /// Installs a chain directly, outside any route tree - one segment, as a
     /// rule. The backend builds the chain, since only it knows how a segment
-    /// is mounted.
+    /// is mounted, and hands over what each segment captured.
     pub fn activate(
         &self,
-        uri: &AppUri,
         chain: &'static [SegmentEntry<U>],
+        params: Vec<Box<dyn Any>>,
     ) -> anyhow::Result<Rc<Scope>> {
         *self.prev_route.borrow_mut() = None;
-        self.install_chain(chain, uri)
+        self.install_from(chain, 0, params)
     }
 
-    pub fn navigate<R>(&self, route: R, uri: &AppUri) -> anyhow::Result<Rc<Scope>>
+    pub fn navigate<R>(self: &Rc<Self>, route: R) -> anyhow::Result<Navigation>
     where
-        R: RouteChain<U> + PartialEq + Clone + 'static,
+        R: RouteChain<U> + 'static,
     {
+        self.navigate_then(route, |_| {})
+    }
+
+    /// Navigate, and run `settled` when the outcome is known.
+    ///
+    /// A callback rather than the return value alone, because a guard can park
+    /// the navigation: whatever the caller meant to do on arrival - announce
+    /// the route, publish it, move history - has to survive until the answer.
+    /// `settled(false)` runs when a guard refuses, and when a later navigation
+    /// supersedes this one.
+    pub fn navigate_then<R>(
+        self: &Rc<Self>,
+        route: R,
+        settled: impl FnOnce(bool) + 'static,
+    ) -> anyhow::Result<Navigation>
+    where
+        R: RouteChain<U> + 'static,
+    {
+        let generation = self.generation.get() + 1;
+        self.generation.set(generation);
+
+        // A question still on screen belongs to a navigation nobody wants any
+        // more. Last intent wins, and it is safe precisely because deciding
+        // mutated nothing.
+        let superseded = self.pending.borrow_mut().take();
+        if let Some(parked) = superseded {
+            (parked.settled)(false);
+        }
+
         let chain = route.chain();
-        let mut shared_len = match &*self.active.borrow() {
-            Some(active) => common_prefix_len(active.entries, chain),
-            None => 0,
+        let params = route.params();
+        let shared_len = self.shared_len(chain, &params);
+
+        // Entering is asked before leaving, and the reason is not the order
+        // between guards of one direction - it is that a question about
+        // unsaved work is pointless when the destination is going to refuse
+        // anyway. Asking "discard changes?" and then blocking is a worse
+        // answer than blocking.
+        let verdict = match self.may_enter(route.guards(), route.name()) {
+            Verdict::Allow => self.may_leave(shared_len),
+            refused => refused,
         };
 
-        if shared_len == chain.len() {
-            let prev_route = self.prev_route.borrow();
-            if let Some(prev) = prev_route.as_ref().and_then(|p| p.downcast_ref::<R>()) {
-                if *prev != route {
-                    // Same shape, different captured params - the leaf's own
-                    // data changed, so it (at least) must reinstall.
-                    shared_len -= 1;
+        match verdict {
+            Verdict::Allow => {
+                *self.prev_route.borrow_mut() = Some(Box::new(route));
+                let leaf = self.install_from(chain, shared_len, params)?;
+                settled(true);
+                Ok(Navigation::Done(leaf))
+            }
+
+            Verdict::Block => {
+                settled(false);
+                Ok(Navigation::Blocked)
+            }
+
+            Verdict::Ask(ask, decision) => {
+                self.pending.borrow_mut().replace(Parked {
+                    ask,
+                    decision: decision.clone(),
+                    chain,
+                    params,
+                    shared_len,
+                    route: Box::new(route),
+                    settled: Box::new(settled),
+                });
+
+                // Wired only now, and weakly: a guard is allowed to settle its
+                // own token before returning, so this may run at once - and
+                // the parked entry has to be in place before it does.
+                let router = Rc::downgrade(self);
+                decision.on_answer(move |allowed| {
+                    let Some(router) = router.upgrade() else {
+                        return;
+                    };
+                    if router.generation.get() != generation {
+                        return;
+                    }
+                    let Some(parked) = router.pending.borrow_mut().take() else {
+                        return;
+                    };
+                    if !allowed {
+                        (parked.settled)(false);
+                        return;
+                    }
+
+                    *router.prev_route.borrow_mut() = Some(parked.route);
+                    match router.install_from(parked.chain, parked.shared_len, parked.params) {
+                        Ok(_) => (parked.settled)(true),
+                        Err(error) => {
+                            tracing::error!(%error, "a navigation resumed after a guard failed");
+                            (parked.settled)(false);
+                        }
+                    }
+                });
+
+                Ok(Navigation::Deferred)
+            }
+        }
+    }
+
+    /// Asks what stands in front of the destination whether it may be reached.
+    ///
+    /// Outermost first: an area's authorisation should refuse before an inner
+    /// page considers anything, and the list arrives already in that order.
+    ///
+    /// Every guard on the route, not only the ones in front of segments about
+    /// to be installed. Navigating between two pages of a guarded area keeps
+    /// the area mounted, but "it let us in once" is not an answer to "may we
+    /// be here now" - a session expires while the layout stays exactly where
+    /// it was. Re-asking costs nothing: `Allow` allocates nothing.
+    fn may_enter(&self, guards: &'static [&'static dyn EnterGuard], route: &str) -> Verdict {
+        for guard in guards {
+            let cx = EnterCx::new(self.host.services(), route);
+            match guard.decide(&cx) {
+                Verdict::Allow => {}
+                refused => {
+                    tracing::debug!(guard = guard.name(), route, "a guard refused a navigation");
+                    return refused;
                 }
             }
         }
 
-        *self.prev_route.borrow_mut() = Some(Box::new(route));
-        self.install_from(chain, shared_len, uri)
+        Verdict::Allow
     }
 
-    fn install_chain(&self, chain: &'static [SegmentEntry<U>], uri: &AppUri) -> anyhow::Result<Rc<Scope>> {
-        self.install_from(chain, 0, uri)
+    /// Asks the scopes about to be torn down whether they may be.
+    ///
+    /// Innermost first: the leaf holds the unsaved form, and it should be the
+    /// one that speaks. The scopes are cloned out before any guard runs - a
+    /// guard is free to start another navigation, and would otherwise
+    /// re-enter this borrow.
+    fn may_leave(&self, shared_len: usize) -> Verdict {
+        let leaving: Vec<Rc<Scope>> = match self.active.borrow().as_ref() {
+            Some(active) => active.scopes.iter().skip(shared_len).cloned().collect(),
+            None => return Verdict::Allow,
+        };
+
+        for scope in leaving.iter().rev() {
+            for guard in scope.leave_guards() {
+                match guard() {
+                    Verdict::Allow => {}
+                    refused => return refused,
+                }
+            }
+        }
+
+        Verdict::Allow
     }
-    
+
+    /// The question a guard is waiting on, if there is one.
+    ///
+    /// Router state, not a call: a backend draws it like anything else it
+    /// draws, and "a question is pending" and [`Navigation::Deferred`] are the
+    /// same condition rather than two.
+    ///
+    /// A backend that draws over its own frame - a terminal, an immediate-mode
+    /// one - **must swallow input while this is `Some`**, or the tabs keep
+    /// switching underneath the dialog.
+    pub fn pending(&self) -> Option<Ask> {
+        self.pending.borrow().as_ref().map(|parked| parked.ask.clone())
+    }
+
+    /// Answers the pending question. Does nothing when there is none.
+    pub fn answer(&self, allowed: bool) {
+        let decision = self
+            .pending
+            .borrow()
+            .as_ref()
+            .map(|parked| parked.decision.clone());
+
+        if let Some(decision) = decision {
+            if allowed {
+                decision.allow();
+            } else {
+                decision.block();
+            }
+        }
+    }
+
+    /// How much of the active chain the next one keeps: the segments that are
+    /// the same type *and* captured the same thing.
+    ///
+    /// Shape alone is not enough. Two routes differing only in a parameter
+    /// have identical chains, and every segment carrying that parameter - the
+    /// leaf and every layout that derived it - has to install again with the
+    /// new value.
+    fn shared_len(&self, chain: &'static [SegmentEntry<U>], params: &[Box<dyn Any>]) -> usize {
+        let active = self.active.borrow();
+        let Some(active) = active.as_ref() else {
+            return 0;
+        };
+
+        let by_shape = common_prefix_len(active.entries, chain);
+        (0..by_shape)
+            .take_while(|&index| match (active.params.get(index), params.get(index)) {
+                (Some(before), Some(now)) => (chain[index].same_params)(&**before, &**now),
+                _ => false,
+            })
+            .count()
+    }
+
     fn install_from(
         &self,
         chain: &'static [SegmentEntry<U>],
         shared_len: usize,
-        uri: &AppUri,
+        params: Vec<Box<dyn Any>>,
     ) -> anyhow::Result<Rc<Scope>> {
-        // Capture the previous chain/scopes before dropping them, so we can
-        // snapshot reducer states for cache-eligible segments.
+        // Taken before anything is dropped, so the states of cache-eligible
+        // segments can be snapshotted along with what they captured.
         let prev = self.active.borrow_mut().take();
 
-        if let Some(prev) = &prev {
-            let mut cache = self.state_cache.borrow_mut();
-            for (index, (entry, scope)) in prev
-                .entries
-                .iter()
-                .zip(prev.scopes.iter())
-                .enumerate()
-                .skip(shared_len)
-            {
-                if entry.cache_state {
-                    let key = StateCacheKey {
-                        segment_index: index,
-                        type_id: (entry.type_id)(),
-                    };
-                    cache.insert(key, scope.snapshot_states());
-                }
-            }
-        }
-
         let mut scopes: Vec<Rc<Scope>> = match prev {
-            Some(prev) => {
-                let mut v = (*prev.scopes).clone();
-                v.truncate(shared_len);
-                v
-            }
             None => Vec::new(),
+            Some(ActiveChain {
+                entries,
+                scopes,
+                params: captured,
+            }) => {
+                {
+                    let mut cache = self.state_cache.borrow_mut();
+                    for (index, ((entry, scope), captured)) in entries
+                        .iter()
+                        .zip(scopes.iter())
+                        .zip(captured)
+                        .enumerate()
+                        .skip(shared_len)
+                    {
+                        if entry.cache_state {
+                            cache.insert(
+                                cache_key(entries, index),
+                                Cached {
+                                    states: scope.snapshot_states(),
+                                    params: captured,
+                                },
+                            );
+                        }
+                    }
+                }
+
+                unwind(scopes, shared_len)
+            }
         };
 
         for (index, entry) in chain.iter().enumerate().skip(shared_len) {
             let scope = Rc::new(Scope::new());
+            let captured: &dyn Any = params
+                .get(index)
+                .map(|p| &**p)
+                .expect("params has one entry per segment - the macro emits them together");
 
-            if entry.cache_state {
-                let key = StateCacheKey {
-                    segment_index: index,
-                    type_id: (entry.type_id)(),
-                };
-                if let Some(states) = self.state_cache.borrow_mut().take(key) {
-                    scope.restore_states(states);
+            if entry.cache_state
+                && let Some(cached) = self.state_cache.borrow_mut().take(cache_key(chain, index))
+            {
+                // Only back to the segment it came from. A page cached under
+                // one set of parameters is a different page's worth of state
+                // under another - restoring it is how metrics for one host
+                // would come back showing another's.
+                if (entry.same_params)(&*cached.params, captured) {
+                    scope.restore_states(cached.states);
                 }
             }
 
@@ -636,7 +1099,7 @@ impl<U: Ui> Router<U> {
             let ctx = self
                 .host
                 .context(scope.clone(), Rc::from(scopes.clone()));
-            (entry.install)(&ctx, uri)?;
+            (entry.install)(&ctx, captured)?;
             scopes.push(scope);
         }
 
@@ -644,12 +1107,19 @@ impl<U: Ui> Router<U> {
         *self.active.borrow_mut() = Some(ActiveChain {
             entries: chain,
             scopes: Rc::new(scopes),
+            params,
         });
         Ok(leaf)
     }
 
     pub fn deactivate(&self) {
-        *self.active.borrow_mut() = None;
+        // Through `unwind` rather than by dropping the chain, so that shutting
+        // down takes the segments apart in the same direction a navigation
+        // does. This is the path a closing window takes, which is the one
+        // place where getting it wrong is hardest to notice.
+        if let Some(active) = self.active.borrow_mut().take() {
+            unwind(active.scopes, 0);
+        }
         *self.prev_route.borrow_mut() = None;
     }
     
@@ -677,27 +1147,40 @@ impl<U: Ui> Router<U> {
     /// Records where the application is leaving from. Called by
     /// [`NavigateHandle::to`]; a forward stack only survives until the next
     /// ordinary navigation, exactly as a browser's does.
-    pub fn remember(&self, route: Box<dyn Any>, uri: AppUri) {
-        self.back.borrow_mut().push(Visited { route, uri });
+    pub fn remember(&self, route: Box<dyn Any>) {
+        self.back.borrow_mut().push(Visited { route });
         self.forward.borrow_mut().clear();
     }
 
     /// Takes the previous entry, putting `leaving` on the forward stack.
-    pub fn take_back(&self, leaving: Option<(Box<dyn Any>, AppUri)>) -> Option<Visited> {
+    pub fn take_back(&self, leaving: Option<Box<dyn Any>>) -> Option<Visited> {
         let entry = self.back.borrow_mut().pop()?;
-        if let Some((route, uri)) = leaving {
-            self.forward.borrow_mut().push(Visited { route, uri });
+        if let Some(route) = leaving {
+            self.forward.borrow_mut().push(Visited { route });
         }
         Some(entry)
     }
 
     /// Takes the next entry, putting `leaving` back on the history.
-    pub fn take_forward(&self, leaving: Option<(Box<dyn Any>, AppUri)>) -> Option<Visited> {
+    pub fn take_forward(&self, leaving: Option<Box<dyn Any>>) -> Option<Visited> {
         let entry = self.forward.borrow_mut().pop()?;
-        if let Some((route, uri)) = leaving {
-            self.back.borrow_mut().push(Visited { route, uri });
+        if let Some(route) = leaving {
+            self.back.borrow_mut().push(Visited { route });
         }
         Some(entry)
+    }
+
+    /// Puts back a step a guard refused. The counterpart of
+    /// [`take_back`](Self::take_back): the entry left the stack before anyone
+    /// asked whether the move was allowed.
+    pub fn restore_back(&self, route: Box<dyn Any>) {
+        self.forward.borrow_mut().pop();
+        self.back.borrow_mut().push(Visited { route });
+    }
+
+    pub fn restore_forward(&self, route: Box<dyn Any>) {
+        self.back.borrow_mut().pop();
+        self.forward.borrow_mut().push(Visited { route });
     }
 
     pub fn can_go_back(&self) -> bool {
@@ -725,11 +1208,16 @@ impl<U: Ui> Router<U> {
         self.active.borrow().as_ref().and_then(|a| a.scopes.last().cloned())
     }
     
-    pub fn render(&self) -> U::View {
+    /// The active chain, mounted.
+    ///
+    /// `nodes` is the backend's own store, borrowed for as long as the view
+    /// lives - which is what lets a widget hold a reference into the state it
+    /// shows instead of a copy of it.
+    pub fn render<'a>(&self, nodes: &'a U::Nodes) -> U::View<'a> {
         self.active
             .borrow()
             .as_ref()
             .expect("Router::render called with no active chain - call activate/navigate first")
-            .root_view()
+            .root_view(nodes)
     }
 }

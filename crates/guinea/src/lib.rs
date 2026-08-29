@@ -20,7 +20,7 @@
 //! With no backend at all what is left is the router, the application runtime
 //! and the macros - which is what a port to another toolkit starts from.
 
-pub use guinea_router::{headless, router};
+pub use guinea_router::{enter, headless, link, manifest, restore, router};
 
 #[cfg(feature = "winui")]
 pub use guinea_winui as winui;
@@ -34,53 +34,117 @@ pub use guinea_slint as slint;
 #[cfg(feature = "eframe")]
 pub use guinea_eframe as eframe;
 
+#[cfg(feature = "iced")]
+pub use guinea_iced as iced;
+
 /// The backend this build renders with, as a module and as a type.
 ///
 /// Defined only while exactly one backend feature is on. `routes!` falls back
 /// to these when a route tree does not name a backend itself.
 #[cfg(all(
     feature = "winui",
-    not(any(feature = "ratatui", feature = "slint", feature = "eframe"))
+    not(any(
+        feature = "ratatui",
+        feature = "slint",
+        feature = "eframe",
+        feature = "iced"
+    ))
 ))]
 pub use guinea_winui as backend;
 #[cfg(all(
     feature = "winui",
-    not(any(feature = "ratatui", feature = "slint", feature = "eframe"))
+    not(any(
+        feature = "ratatui",
+        feature = "slint",
+        feature = "eframe",
+        feature = "iced"
+    ))
 ))]
 pub type Backend = guinea_winui::WinUi;
 
 #[cfg(all(
     feature = "ratatui",
-    not(any(feature = "winui", feature = "slint", feature = "eframe"))
+    not(any(
+        feature = "winui",
+        feature = "slint",
+        feature = "eframe",
+        feature = "iced"
+    ))
 ))]
 pub use guinea_ratatui as backend;
 #[cfg(all(
     feature = "ratatui",
-    not(any(feature = "winui", feature = "slint", feature = "eframe"))
+    not(any(
+        feature = "winui",
+        feature = "slint",
+        feature = "eframe",
+        feature = "iced"
+    ))
 ))]
 pub type Backend = guinea_ratatui::Tui;
 
 #[cfg(all(
     feature = "slint",
-    not(any(feature = "winui", feature = "ratatui", feature = "eframe"))
+    not(any(
+        feature = "winui",
+        feature = "ratatui",
+        feature = "eframe",
+        feature = "iced"
+    ))
 ))]
 pub use guinea_slint as backend;
 #[cfg(all(
     feature = "slint",
-    not(any(feature = "winui", feature = "ratatui", feature = "eframe"))
+    not(any(
+        feature = "winui",
+        feature = "ratatui",
+        feature = "eframe",
+        feature = "iced"
+    ))
 ))]
 pub type Backend = guinea_slint::Slint;
 
 #[cfg(all(
     feature = "eframe",
-    not(any(feature = "winui", feature = "ratatui", feature = "slint"))
+    not(any(
+        feature = "winui",
+        feature = "ratatui",
+        feature = "slint",
+        feature = "iced"
+    ))
 ))]
 pub use guinea_eframe as backend;
 #[cfg(all(
     feature = "eframe",
-    not(any(feature = "winui", feature = "ratatui", feature = "slint"))
+    not(any(
+        feature = "winui",
+        feature = "ratatui",
+        feature = "slint",
+        feature = "iced"
+    ))
 ))]
 pub type Backend = guinea_eframe::Egui;
+
+#[cfg(all(
+    feature = "iced",
+    not(any(
+        feature = "winui",
+        feature = "ratatui",
+        feature = "slint",
+        feature = "eframe"
+    ))
+))]
+pub use guinea_iced as backend;
+#[cfg(all(
+    feature = "iced",
+    not(any(
+        feature = "winui",
+        feature = "ratatui",
+        feature = "slint",
+        feature = "eframe"
+    ))
+))]
+pub type Backend = guinea_iced::Iced;
 
 /// Stands in for `Backend` when more than one backend is enabled.
 ///
@@ -90,25 +154,44 @@ pub type Backend = guinea_eframe::Egui;
 #[cfg(any(
     all(
         feature = "winui",
-        any(feature = "ratatui", feature = "slint", feature = "eframe")
+        any(
+            feature = "ratatui",
+            feature = "slint",
+            feature = "eframe",
+            feature = "iced"
+        )
     ),
-    all(feature = "ratatui", any(feature = "slint", feature = "eframe")),
-    all(feature = "slint", feature = "eframe"),
+    all(
+        feature = "ratatui",
+        any(feature = "slint", feature = "eframe", feature = "iced")
+    ),
+    all(feature = "slint", any(feature = "eframe", feature = "iced")),
+    all(feature = "eframe", feature = "iced"),
 ))]
 pub enum Backend {}
 
 #[cfg(any(
     all(
         feature = "winui",
-        any(feature = "ratatui", feature = "slint", feature = "eframe")
+        any(
+            feature = "ratatui",
+            feature = "slint",
+            feature = "eframe",
+            feature = "iced"
+        )
     ),
-    all(feature = "ratatui", any(feature = "slint", feature = "eframe")),
-    all(feature = "slint", feature = "eframe"),
+    all(
+        feature = "ratatui",
+        any(feature = "slint", feature = "eframe", feature = "iced")
+    ),
+    all(feature = "slint", any(feature = "eframe", feature = "iced")),
+    all(feature = "eframe", feature = "iced"),
 ))]
 pub mod backend {
     //! Empty on purpose: with more than one backend enabled there is no "the"
     //! backend, so `routes!` has to be told which one - `backend =
-    //! guinea::winui::WinUi`, `guinea::ratatui::Tui` or `guinea::slint::Slint`.
+    //! guinea::winui::WinUi`, `guinea::ratatui::Tui`, `guinea::slint::Slint`,
+    //! `guinea::eframe::Egui` or `guinea::iced::Iced`.
 }
 
 #[cfg(feature = "winui")]

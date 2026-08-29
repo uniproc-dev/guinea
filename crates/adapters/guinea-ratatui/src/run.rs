@@ -11,7 +11,7 @@ use std::time::Duration;
 
 use guinea_app::app::{GuineaApp, install_runtime, shutdown_current};
 use guinea_core::actor::UiThreadToken;
-use guinea_router::router::{NavigateHandle, RouteChain, RouteSink, Router, ToUri};
+use guinea_router::router::{NavigateHandle, RouteChain, RouteSink, Router};
 use ratatui::crossterm::event::{self, Event};
 use ratatui::crossterm::execute;
 use ratatui::crossterm::terminal::{
@@ -20,7 +20,7 @@ use ratatui::crossterm::terminal::{
 use ratatui::prelude::CrosstermBackend;
 use ratatui::Terminal;
 
-use crate::{Tui, dispatcher};
+use crate::{Tui, dialog, dispatcher};
 
 /// What the application wants after an event.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -41,9 +41,13 @@ const TICK: Duration = Duration::from_millis(50);
 /// obeys. The router comes along because a terminal has no widgets to hang
 /// handlers on: a key is the only way to reach a page's actions, and they are
 /// found through the scope the router installed.
-pub fn run<R, F>(app: GuineaApp, initial: R, mut on_event: F) -> anyhow::Result<()>
+/// `initial` is a closure rather than a value because where an application
+/// starts is often something only the installed plugins know - a route saved
+/// by the last run, read out of the store the store plugin just provided.
+/// Called once, after `install`, before the first frame.
+pub fn run<R, F>(app: GuineaApp, initial: impl FnOnce() -> R, mut on_event: F) -> anyhow::Result<()>
 where
-    R: RouteChain<Tui> + ToUri + Clone + PartialEq + 'static,
+    R: RouteChain<Tui> + Clone + PartialEq + 'static,
     F: FnMut(&Event, &NavigateHandle<Tui, R>, &Router<Tui>) -> Flow,
 {
     // Before any actor exists: the first thing a feature does during install
@@ -55,6 +59,7 @@ where
     let token = UiThreadToken::dangerously_create_token_unchecked();
     install_runtime(app.install(token.clone())?);
 
+    let initial = initial();
     let router = Rc::new(Router::<Tui>::new(token));
     let route = Rc::new(RefCell::new(initial.clone()));
     let nav = NavigateHandle::new(router.clone(), {
@@ -62,7 +67,7 @@ where
         RouteSink::new(move |next: R| *route.borrow_mut() = next)
     });
 
-    router.navigate(initial.clone(), &initial.to_uri())?;
+    router.navigate(initial.clone())?;
 
     let mut terminal = enter()?;
     let outcome = pump(&mut terminal, &router, &nav, &mut on_event);
@@ -81,16 +86,33 @@ fn pump<R, F>(
     on_event: &mut F,
 ) -> anyhow::Result<()>
 where
-    R: RouteChain<Tui> + ToUri + Clone + PartialEq + 'static,
+    R: RouteChain<Tui> + Clone + PartialEq + 'static,
     F: FnMut(&Event, &NavigateHandle<Tui, R>, &Router<Tui>) -> Flow,
 {
     loop {
-        terminal.draw(|frame| router.render().draw(frame, frame.area()))?;
+        let asking = router.pending();
+
+        terminal.draw(|frame| {
+            router.render(&()).draw(frame, frame.area());
+            if let Some(ask) = &asking {
+                dialog::draw(frame, ask);
+            }
+        })?;
 
         if event::poll(TICK)? {
             let event = event::read()?;
-            if on_event(&event, nav, router) == Flow::Exit {
-                return Ok(());
+
+            // While a question is up the application does not see the keys.
+            // Without this the tabs keep switching underneath the dialog -
+            // the obligation every backend that draws over its own frame
+            // carries, and the easiest one to forget.
+            match &asking {
+                Some(_) => dialog::answer(router, &event),
+                None => {
+                    if on_event(&event, nav, router) == Flow::Exit {
+                        return Ok(());
+                    }
+                }
             }
         }
 

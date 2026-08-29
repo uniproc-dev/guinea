@@ -10,26 +10,32 @@ use std::rc::Rc;
 
 use guinea_app::app::{GuineaApp, install_runtime, shutdown_current};
 use guinea_core::actor::UiThreadToken;
-use guinea_router::router::{NavigateHandle, RouteChain, RouteSink, Router, ToUri};
+use guinea_router::router::{NavigateHandle, RouteChain, RouteSink, Router};
 
 use crate::{Egui, dispatcher, nav};
 
 /// What [`run`] calls the root it opens.
 pub const MAIN: &str = "main";
 
-/// Runs the application in a window eframe opens, starting at `initial`.
+/// Runs the application in a window eframe opens, starting where `initial`
+/// says.
 ///
 /// ```ignore
-/// guinea_eframe::run(app, "Processes", eframe::NativeOptions::default(), initial_route())
+/// guinea_eframe::run(app, "Processes", eframe::NativeOptions::default(), initial_route)
 /// ```
+///
+/// A closure rather than a value because where an application starts is often
+/// something only the installed plugins know - a route saved by the last run,
+/// read out of the store the store plugin just provided. Called once, after
+/// `install`, before the first frame.
 pub fn run<R>(
     app: GuineaApp,
     title: &str,
     options: eframe::NativeOptions,
-    initial: R,
+    initial: impl FnOnce() -> R,
 ) -> anyhow::Result<()>
 where
-    R: RouteChain<Egui> + ToUri + Clone + PartialEq + 'static,
+    R: RouteChain<Egui> + Clone + PartialEq + 'static,
 {
     // Before any actor exists: the first thing a feature does during install
     // may already queue work back to this thread.
@@ -40,6 +46,7 @@ where
     let token = UiThreadToken::dangerously_create_token_unchecked();
     install_runtime(app.install(token.clone())?);
 
+    let initial = initial();
     let router = Rc::new(Router::<Egui>::new(token));
     guinea_app::app::roots::set_label(router.root(), MAIN);
 
@@ -49,7 +56,7 @@ where
         RouteSink::new(move |next: R| *route.borrow_mut() = next)
     }));
 
-    router.navigate(initial.clone(), &initial.to_uri())?;
+    router.navigate(initial.clone())?;
 
     let front = Frontend {
         router: router.clone(),
@@ -84,6 +91,35 @@ impl eframe::App for Frontend {
     }
 
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
-        self.router.render().draw(ui);
+        let asking = self.router.pending();
+
+        // `add_enabled_ui(false, ..)` is the obligation the adapter contract
+        // puts on every backend that draws over its own frame: while a guard's
+        // question is up, the tree underneath must not take input, or the tabs
+        // keep switching behind the dialog.
+        ui.add_enabled_ui(asking.is_none(), |ui| self.router.render(&()).draw(ui));
+
+        if let Some(ask) = asking {
+            question(ui, &ask, &self.router);
+        }
     }
+}
+
+fn question(ui: &mut egui::Ui, ask: &guinea_core::guard::Ask, router: &Router<Egui>) {
+    egui::Window::new("?")
+        .collapsible(false)
+        .resizable(false)
+        .anchor(egui::Align2::CENTER_CENTER, egui::vec2(0.0, 0.0))
+        .show(ui.ctx(), |ui| {
+            ui.label(&ask.text);
+            ui.add_space(8.0);
+            ui.horizontal(|ui| {
+                if ui.button(&ask.cancel).clicked() {
+                    router.answer(false);
+                }
+                if ui.button(&ask.confirm).clicked() {
+                    router.answer(true);
+                }
+            });
+        });
 }

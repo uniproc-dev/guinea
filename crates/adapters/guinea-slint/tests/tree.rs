@@ -4,10 +4,10 @@
 //! `slint!` macro, which generates code referring to the `slint` crate by
 //! name - the same thing an application compiles.
 
-use guinea_app::feature::FeatureInitContext;
+use guinea_app::feature::{FeatureInitContext, Segment};
 use guinea_core::actor::UiThreadToken;
-use guinea_core::scope::{NoopActions, Reducer};
-use guinea_core::uri::AppUri;
+use guinea_core::feature::Bound;
+use guinea_core::scope::Reducer;
 use guinea_router::router::{Router, SegmentEntry};
 use guinea_slint::{LayoutCx, PageCx, Slint, layout_entry, segment_entry};
 use i_slint_backend_testing::{ElementHandle, ElementRoot};
@@ -42,37 +42,68 @@ slint::slint! {
 
 /// A reducer with nothing but a string in it - enough to watch a binding
 /// reach a global.
-struct Title;
+#[derive(Default)]
+struct Title(String);
 
 impl Reducer for Title {
-    type State = String;
-    type Push = String;
-    type Group = ();
-    type Actions = NoopActions;
+    type Update = String;
 
-    fn reduce(state: &mut Self::State, msg: Self::Push) {
-        *state = msg;
+    fn reduce(&mut self, title: String) {
+        self.0 = title;
     }
 }
 
 struct Tabs;
 
 impl guinea_slint::Layout for Tabs {
-    fn bind(_cx: LayoutCx) {}
+    type Params = ();
+    type Installs = ();
+
+    fn install(_ctx: &FeatureInitContext, _params: &()) -> anyhow::Result<()> {
+        Ok(())
+    }
+
+    fn bind(_cx: LayoutCx<Self>) {}
 }
 
 struct Processes;
 
+/// What `routes!` would generate for a page capturing one segment; this test
+/// builds its chain by hand, so it declares the same shape by hand.
+#[derive(PartialEq)]
+struct ProcessesParams {
+    context: String,
+}
+
 impl guinea_slint::Page for Processes {
-    fn install(ctx: &FeatureInitContext, uri: &AppUri) -> anyhow::Result<()> {
-        ctx.seed_reducer::<Title>(uri.segment(0).unwrap_or("none").to_string());
-        Ok(())
+    type Params = ProcessesParams;
+    /// The claim itself, which is what makes `Title` readable in `bind`.
+    type Installs = Bound<Title>;
+
+    fn install(ctx: &FeatureInitContext, params: &ProcessesParams) -> anyhow::Result<Bound<Title>> {
+        Ok(ctx
+            .state::<Title>()
+            .seed(Title(params.context.clone()))
+            .plain())
     }
 
-    fn bind(cx: PageCx) {
+    fn bind(cx: PageCx<Self>) {
         let root = cx.root::<Shell>();
-        cx.bind::<Title>(move |title| root.global::<TitleModel>().set_label(title.into()));
+        cx.bind::<Title, _>(move |title| {
+            root.global::<TitleModel>().set_label((&title.0).into())
+        });
     }
+}
+
+// What `routes!` writes; a chain built by hand declares it by hand.
+impl Segment for Tabs {
+    type Installs = <Tabs as guinea_slint::Layout>::Installs;
+    type Above = ();
+}
+
+impl Segment for Processes {
+    type Installs = <Processes as guinea_slint::Page>::Installs;
+    type Above = (Tabs, ());
 }
 
 const CHAIN: [SegmentEntry<Slint>; 2] = [layout_entry::<Tabs>(), segment_entry::<Processes>()];
@@ -85,8 +116,17 @@ fn mounted() -> (Shell, Router<Slint>) {
 
     let token = UiThreadToken::dangerously_create_token_unchecked();
     let router = Router::<Slint>::new(token);
-    let uri = AppUri::parse("/ubuntu").unwrap();
-    router.activate(&uri, &CHAIN).expect("activate");
+    router
+        .activate(
+            &CHAIN,
+            vec![
+                Box::new(()),
+                Box::new(ProcessesParams {
+                    context: "ubuntu".to_string(),
+                }),
+            ],
+        )
+        .expect("activate");
 
     shell.set_page(0);
     shell.show().expect("show");

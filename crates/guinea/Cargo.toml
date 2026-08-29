@@ -13,6 +13,7 @@ guinea-meta = { git = "https://github.com/uniproc-dev/guinea-meta", tag = "v0.1.
 # Nothing else: this crate is re-exports. Anything it appears to need is a
 # sign that something which belongs in a real crate ended up here.
 guinea-eframe = { workspace = true, optional = true }
+guinea-iced = { workspace = true, optional = true }
 guinea-ratatui = { workspace = true, optional = true }
 guinea-slint = { workspace = true, optional = true }
 
@@ -27,6 +28,7 @@ default = ["winui", "own-runtime"]
 winui = ["dep:guinea-winui"]
 ratatui = ["dep:guinea-ratatui"]
 eframe = ["dep:guinea-eframe"]
+iced = ["dep:guinea-iced"]
 slint = ["dep:guinea-slint"]
 # The parts of the window contract that need the window manager underneath
 # Slint. Costs a renderer choice - see `guinea-slint`'s own `winit` feature.

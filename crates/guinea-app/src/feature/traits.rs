@@ -9,7 +9,9 @@ use guinea_core::actor::registry::DebugRegistry;
 use guinea_core::actor::{Addr, Handler, ManagedActor, UiThreadToken};
 use guinea_core::actor::event_bus::{EventBus, GlobalEventBus};
 use guinea_core::actor::event_bus::subscribe::Event;
-use guinea_core::scope::{Reducer, Scope, Teardown};
+use guinea_core::feature::{Claim, Exported};
+use guinea_core::guard::{Ask, Verdict};
+use guinea_core::scope::{DropGuard, Reducer, Scope, Teardown};
 
 pub struct AppFeatureDeinitContext<'a> {
     pub token: UiThreadToken,
@@ -32,63 +34,114 @@ pub struct FeatureInitContext {
     pub services: SharedState,
 }
 
+/// A named unit with its own lifetime, its own state, and one bit saying it is
+/// installed here.
+///
+/// The layer that joins the two halves: it claims reducers and gives them
+/// something to drive them, and it is the only thing that may know about both.
+/// What it publishes is [`Exports`](Feature::Exports) - everything else it
+/// claims stays its own.
+///
+/// ```ignore
+/// pub struct Processes {
+///     listing: Bound<contracts::Processes>,
+/// }
+///
+/// impl Feature for Processes {
+///     type Params = str;
+///     type Exports = (contracts::Processes,);
+///
+///     fn install(cx: &FeatureInitContext, context: &str) -> anyhow::Result<Self> {
+///         let listing = cx.state::<contracts::Processes>()
+///             .driven_by(|push| ProcessActor::new(context.to_string(), push, cx.event_bus.clone()));
+///
+///         listing.emit(Refresh);
+///         Ok(Self { listing })
+///     }
+/// }
+/// ```
+///
+/// It is returned rather than dropped so that a segment installing two
+/// features can wire them to each other - which is usually why it installs two.
+pub trait Feature: Sized + 'static {
+    /// What the segment hands it - typically what the route captured.
+    type Params: ?Sized;
+
+    /// The reducers segments below may read. `()` for a feature that publishes
+    /// nothing, `(A,)` for one, `(A, B)` for two.
+    type Exports: Exported;
+
+    fn install(cx: &FeatureInitContext, params: &Self::Params) -> anyhow::Result<Self>;
+}
+
 impl FeatureInitContext {
-    pub fn install<F>(&self, install: F) -> anyhow::Result<()>
-    where
-        F: Fn(&FeatureInitContext) -> anyhow::Result<()> + 'static,
-    {
-        install(self)?;
+    /// Installs `F` here, and publishes what it exports.
+    ///
+    /// Twice for the same feature in one scope is a setup bug rather than
+    /// something to merge silently, so it panics - the same rule as before,
+    /// now with something real behind the bit.
+    pub fn install<F: Feature>(&self, params: &F::Params) -> anyhow::Result<F> {
         self.scope.mark_feature_installed::<F>();
-        Ok(())
-    }
+        F::Exports::mark(&self.scope);
 
-    pub fn inherit<F>(&self, _install: F)
-    where
-        F: Fn(&FeatureInitContext) -> anyhow::Result<()> + 'static,
-    {
-        let found = self.ancestors.iter().any(|s| s.has_feature::<F>());
-        assert!(
-            found,
-            "inherit() found no ancestor scope that installed this feature - \
-             an ancestor must call ctx.install(...) for it first"
-        );
-    }
+        // Its own corner of the scope, so that two instances of one feature
+        // answering the same action type do not become one.
+        self.scope.open_section();
+        let installed = F::install(self, params);
+        self.scope.close_section();
 
-    pub fn port<R: Reducer>(&self) -> impl Fn(R::Push) + 'static {
-        // A feature manages exactly one reducer, wired via exactly this
-        // call - `ctx.port::<R>()` inside `install()`, before any render
-        // happens for this segment. That makes it a reliable, non-racy
-        // "this scope owns R" signal for `resolve_owner` to check, unlike
-        // guessing from whether R's state cell happens to exist yet
-        // (which depends on render/actor-response timing, not ownership).
-        self.scope.note_reducer_owner::<R>();
-
-        // Weak, not strong: an actor storing this port closure must not keep
-        // its owning page scope alive. Otherwise Scope -> Addr -> Actor -> Port
-        // -> Scope forms an Rc cycle and the actor leaks across navigation.
-        let scope = Rc::downgrade(&self.scope);
-        move |msg| {
-            if let Some(scope) = scope.upgrade() {
-                scope.push::<R>(msg);
-            }
+        // After the body, because only the body can claim anything. An export
+        // the feature never claimed would otherwise be read below as the
+        // reducer's `Default`, for as long as the application runs, and look
+        // exactly like a feature that has not pushed an update yet.
+        if installed.is_ok()
+            && let Some(name) = F::Exports::unclaimed(&self.scope)
+        {
+            panic!(
+                "{} exports {name}, but nothing in it claimed that reducer - \
+                 either claim it with `cx.state::<{name}>()`, or take it out of `Exports`",
+                std::any::type_name::<F>()
+            );
         }
+
+        installed
     }
 
-    pub fn actions<R: Reducer>(&self) -> Rc<R::Actions> {
-        // Same "this scope owns R" signal as `port` - a feature dispatching
-        // through `ctx.actions::<R>()` directly (without ever calling
-        // `ctx.port::<R>()`) is just as much a declaration of ownership.
-        self.scope.note_reducer_owner::<R>();
-        self.scope.actions::<R>()
+    /// Claims `R` for this scope, and says what else is true of it.
+    ///
+    /// The one way in. Ownership used to be a side effect of which of four
+    /// calls a feature happened to make - `port`, `actions`, `wire`,
+    /// `seed_reducer` - so a reducer could be claimed by accident and an actor
+    /// could be left unwired without anything failing to build. Here the claim
+    /// is the call, and continuing it is optional:
+    ///
+    /// ```ignore
+    /// let processes = cx.state::<Processes>()
+    ///     .driven_by(|push| ProcessActor::new(context.to_string(), push, cx.event_bus.clone()));
+    ///
+    /// processes.emit(Refresh);
+    /// ```
+    ///
+    /// Ending it at [`plain`](Claim::plain) is not a half-written feature - it
+    /// is state the UI owns, and `emit` on it does not compile.
+    pub fn state<R: Reducer>(&self) -> Claim<'_, R> {
+        Claim::new(&self.scope, &self.token)
     }
 
-    /// Seeds `R`'s reducer state for this scope, bypassing `R::State::default()`.
-    /// Call this first thing in `install` - right after a synchronous settings
-    /// read - so the first render already reflects real data instead of the
-    /// default followed by an async actor round-trip. See [`Scope::seed`].
-    pub fn seed_reducer<R: Reducer>(&self, state: R::State) {
-        self.scope.note_reducer_owner::<R>();
-        self.scope.seed::<R>(state);
+    /// Says this segment answers `M`, and how.
+    ///
+    /// The way in for a domain that does not use an actor - a task holding a
+    /// `RefCell`, a channel, a plain closure. Nothing the UI touches can tell
+    /// the difference, which is the point: how a domain implements its logic
+    /// is its own business.
+    ///
+    /// `actor!` calls this for every handler it lists, so a feature with an
+    /// actor never writes it by hand.
+    pub fn answers<M: guinea_core::actor::traits::Message>(
+        &self,
+        answer: impl Fn(M) + 'static,
+    ) {
+        self.scope.answers(answer);
     }
 
     /// A service a plugin provided at startup.
@@ -112,6 +165,84 @@ impl FeatureInitContext {
         self.services.get::<T>()
     }
 
+    /// Reacts to what happens to `R`, wherever `R` lives.
+    ///
+    /// The coherence rule between two pieces of state that reference each
+    /// other rather than nest: a cursor into a list the domain refreshes has
+    /// to hear that the list was replaced, and a rename is not a replacement.
+    /// The update itself is what tells those apart, so this is handed the
+    /// update rather than told that something moved.
+    ///
+    /// Runs before anything is asked to redraw, and the subscription is owned
+    /// by this scope - the rule dies with the segment that declared it.
+    pub fn observe<R: Reducer>(&self, callback: impl Fn(&R::Update) + 'static) {
+        let owner = if self.scope.has_feature::<R>() {
+            self.scope.clone()
+        } else {
+            self.ancestors
+                .iter()
+                .rev()
+                .find(|scope| scope.exports::<R>())
+                .cloned()
+                .unwrap_or_else(|| {
+                    panic!(
+                        "observing {} here found no scope that owns it: this segment did not \
+                         claim it, and no ancestor exported it",
+                        std::any::type_name::<R>()
+                    )
+                })
+        };
+
+        self.scope.own(DropGuard(owner.observe::<R>(callback)));
+    }
+
+    /// Asked before this segment is torn down by a navigation.
+    ///
+    /// Declared here, on the way in, because on the way out the scope exists
+    /// and the guard can read its own state - which is what "unsaved changes"
+    /// is. Entering is the asymmetric case: there is nothing to read yet, so
+    /// an enter guard belongs in the route declaration instead.
+    pub fn on_leave(&self, guard: impl Fn() -> Verdict + 'static) {
+        self.scope.on_leave(guard);
+    }
+
+    /// Refuse to leave while `dirty` says so.
+    ///
+    /// No question and no dialog - for the case where leaving is simply not
+    /// allowed yet. When the user should get a say, use
+    /// [`confirm_leave`](Self::confirm_leave).
+    pub fn block_leave_while<R: Reducer>(&self, dirty: impl Fn(&R) -> bool + 'static) {
+        let state = self.scope.state::<R>();
+        self.scope.on_leave(move || {
+            if dirty(&state.borrow()) {
+                Verdict::Block
+            } else {
+                Verdict::Allow
+            }
+        });
+    }
+
+    /// Ask before leaving while `dirty` says so.
+    ///
+    /// `question` is a closure rather than a value because it is built at the
+    /// moment of asking: the language may have changed since install, and so
+    /// may whatever the text names.
+    pub fn confirm_leave<R: Reducer>(
+        &self,
+        dirty: impl Fn(&R) -> bool + 'static,
+        question: impl Fn(&R) -> Ask + 'static,
+    ) {
+        let state = self.scope.state::<R>();
+        self.scope.on_leave(move || {
+            let state = state.borrow();
+            if dirty(&state) {
+                Verdict::ask(question(&state))
+            } else {
+                Verdict::Allow
+            }
+        });
+    }
+
     pub fn subscribe<M: Event>(&self, callback: impl Fn(M) + 'static) {
         self.scope
             .own_subscription(self.event_bus.subscribe_fn(callback));
@@ -127,17 +258,6 @@ impl FeatureInitContext {
         M: Event,
     {
         self.scope.own(GlobalEventBus::subscribe::<A, M>(addr));
-    }
-
-    /// Wires every message of `R`'s group to `addr`.
-    pub fn wire<R, A>(&self, addr: &Addr<A>)
-    where
-        R: Reducer,
-        R::Actions: guinea_core::actor::group::WireTarget<A, R::Group>,
-        A: 'static,
-    {
-        use guinea_core::actor::group::WireTarget;
-        self.actions::<R>().wire_all(addr);
     }
 
     pub fn spawn_actor<A: ManagedActor + Debug + 'static>(&self, actor: A) -> Addr<A> {
