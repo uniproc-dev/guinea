@@ -84,9 +84,6 @@ impl Page for Processes {
             }),
         ];
 
-        let resized = cx.on(Msg::Resized);
-        let selected = cx.on(Msg::Selected);
-
         StackPanel::new()
             .orientation(Orientation::Vertical)
             .spacing(16.0)
@@ -94,12 +91,8 @@ impl Page for Processes {
                 TextBlock::new().text("Processes"),
                 table(rows, columns, |row: &Row| row.pid.to_string())
                     .widths(&self.widths)
-                    .on_resize(move |drag| {
-                        let _ = resized.call(drag);
-                    })
-                    .selection(self.selected, move |row| {
-                        let _ = selected.call(row);
-                    })
+                    .on_resize(cx.on(Msg::Resized))
+                    .selection(self.selected, cx.on(Msg::Selected))
                     .build(),
             ))
     }

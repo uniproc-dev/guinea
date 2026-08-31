@@ -77,16 +77,12 @@ impl Page for Metrics {
             LineChartOptions::default(),
         );
 
-        let hovered = cx.on(|_: Option<HoverInfo>| Msg::Hovered);
-
         // The chart hands back an erased view, and size is a capability of the
         // widget carrying it - so the size goes on the wrapper.
         let chart = Border::new()
             .width(380.0)
             .height(220.0)
-            .content(self.chart.view(move |info| {
-                let _ = hovered.call(info);
-            }));
+            .content(self.chart.view(cx.on(|_: Option<HoverInfo>| Msg::Hovered)));
 
         // Read here rather than carried in the message: the series tick on
         // their own, so a pointer resting on the chart follows them instead of
