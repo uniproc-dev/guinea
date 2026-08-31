@@ -7,30 +7,14 @@ mod routes;
 
 use routes::Route;
 
-use guinea::Bootstrap;
 use guinea::app::GuineaApp;
+use guinea::winui::{Window, run};
 use processes_core::startup;
 
 fn initial_route() -> Route {
     Route::Processes {
         context: "ubuntu".to_string(),
     }
-}
-
-fn root(cx: &mut windows_reactor::RenderCx) -> windows_reactor::Element {
-    GuineaApp::new()
-        .meta(guinea::app_meta!())
-        .plugin(
-            guinea_plugin_store::StorePlugin::for_app("guinea-processes-app-example", "settings")
-                // JSON, so both front ends can run at once: redb locks its
-                // file and the second one would refuse to start.
-                .backend(guinea_plugin_store::amethystate::store::builder::Backend::Json),
-        )
-        .plugin(guinea_plugin_l10n::L10nPlugin::<processes_core::l10n::L10n>::new("en"))
-        .feature(startup::Startup)
-        .bootstrap(cx);
-
-    guinea::winui::RouterRx::<Route>::render(cx, initial_route())
 }
 
 fn main() -> anyhow::Result<()> {
@@ -47,10 +31,22 @@ fn main() -> anyhow::Result<()> {
         )
         .init();
 
-    windows_reactor::App::new()
-        .title(guinea::app_meta!().window_title)
-        .inner_size(420.0, 420.0)
-        .on_exit(guinea::shutdown)
-        .render(root)
-        .map_err(|e| anyhow::anyhow!("windows-reactor app failed: {e:?}"))
+    let app = GuineaApp::new()
+        .meta(guinea::app_meta!())
+        .plugin(
+            guinea_plugin_store::StorePlugin::for_app("guinea-processes-app-example", "settings")
+                // JSON, so both front ends can run at once: redb locks its
+                // file and the second one would refuse to start.
+                .backend(guinea_plugin_store::amethystate::store::builder::Backend::Json),
+        )
+        .plugin(guinea_plugin_l10n::L10nPlugin::<processes_core::l10n::L10n>::new("en"))
+        .feature(startup::Startup);
+
+    run(
+        app,
+        Window::new()
+            .title(guinea::app_meta!().window_title)
+            .client_size(420.0, 420.0),
+        initial_route,
+    )
 }

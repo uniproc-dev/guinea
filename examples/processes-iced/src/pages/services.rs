@@ -6,7 +6,7 @@
 //! of what this page is: where it sits, what it installs, what it draws.
 
 use guinea::feature::FeatureInitContext;
-use guinea::iced::{Page, PageCx, View, page};
+use guinea::iced::{Element, Page, PageCx, page};
 use iced::Length::Fill;
 use iced::widget::{column, scrollable, text};
 
@@ -28,14 +28,14 @@ impl Page for Services {
         ctx.install::<ServicesFeature>(&())
     }
 
-    fn view(&self, cx: &PageCx<'_, Self>) -> View<'_, Self::Message> {
+    fn view(&self, cx: &PageCx<'_, Self>) -> Element<'_, Self::Message> {
         let (services, _) = cx.state::<Running, _>();
 
         let rows = services
             .items
             .into_iter()
             .map(|item| text(item).into())
-            .collect::<Vec<View<Self::Message>>>();
+            .collect::<Vec<Element<Self::Message>>>();
 
         scrollable(column(rows).spacing(4).padding(8))
             .height(Fill)

@@ -30,7 +30,7 @@
 //!
 //!     fn observes(cx: &Observing<'_, Msg>) { cx.on::<ProcessesReducer>(list_replaced); }
 //!     fn update(&mut self, message: Msg, cx: &mut UpdateCx<'_, Self>) { .. }
-//!     fn view(&self, cx: &PageCx<'_, Self>) -> View<'_, Msg> { .. }
+//!     fn view(&self, cx: &PageCx<'_, Self>) -> Element<'_, Msg> { .. }
 //! }
 //! ```
 
@@ -78,11 +78,15 @@ impl Ui for Iced {
 
 /// What a node's `view` returns.
 ///
+/// iced's own name, kept. An alias exists only to fix the message type at the
+/// seam; calling it anything else would mean a reader of this adapter has to
+/// translate back to iced's vocabulary before reading iced's documentation.
+///
 /// Borrowed from the node, not owned: iced builds widgets that keep a
 /// reference to what they show - `text_editor` holds its `Content` for the
 /// life of the element - and a view that had to own everything could not host
 /// them. See [`Nodes`] for where the borrow comes from and why.
-pub type View<'a, Message> = iced::Element<'a, Message>;
+pub type Element<'a, Message> = iced::Element<'a, Message>;
 
 /// A leaf of the route tree, and an Elm node in its own right.
 ///
@@ -159,7 +163,7 @@ pub trait Page: Default + Sized + 'static {
     /// job, and one that does not is a state change.
     fn update(&mut self, message: Self::Message, cx: &mut UpdateCx<'_, Self>);
 
-    fn view(&self, cx: &PageCx<'_, Self>) -> View<'_, Self::Message>;
+    fn view(&self, cx: &PageCx<'_, Self>) -> Element<'_, Self::Message>;
 }
 
 /// A branch: an Elm node that also decides where its child goes.
@@ -207,7 +211,7 @@ pub trait Layout: Default + Sized + 'static {
     /// design refuses. So the seam is drawn once, here: `cx.mine(..)` seals
     /// the layout's own widgets, `cx.outlet()` hands over the child's already
     /// sealed, and both sides are then the same type.
-    fn view<'a>(&'a self, cx: &LayoutCx<'a, Self>) -> View<'a, Envelope>;
+    fn view<'a>(&'a self, cx: &LayoutCx<'a, Self>) -> Element<'a, Envelope>;
 }
 
 /// Where a node says what it watches.
@@ -324,7 +328,7 @@ impl<'a, L: Layout> LayoutCx<'a, L> {
     }
 
     /// Seals widgets that speak this layout's own message.
-    pub fn mine(&self, element: impl Into<View<'a, L::Message>>) -> View<'a, Envelope> {
+    pub fn mine(&self, element: impl Into<Element<'a, L::Message>>) -> Element<'a, Envelope> {
         let cursor = self.props.cursor;
         element
             .into()
@@ -334,7 +338,7 @@ impl<'a, L: Layout> LayoutCx<'a, L> {
     /// The next segment down the chain, for the layout to place where it
     /// wants. It borrows from the same store this layout does, which is what
     /// makes the whole tree one borrow rather than a chain of temporaries.
-    pub fn outlet(&self) -> View<'a, Envelope> {
+    pub fn outlet(&self) -> Element<'a, Envelope> {
         self.props.outlet(self.nodes)
     }
 
@@ -406,7 +410,7 @@ pub struct MountPage<P>(pub PhantomData<P>);
 pub struct MountLayout<L>(pub PhantomData<L>);
 
 impl<P: Page> Mount<Iced> for MountPage<P> {
-    fn view<'a>(&self, props: SegmentProps<Iced>, nodes: &'a Nodes) -> View<'a, Envelope> {
+    fn view<'a>(&self, props: SegmentProps<Iced>, nodes: &'a Nodes) -> Element<'a, Envelope> {
         let cursor = props.cursor;
         let Some(page) = nodes.get::<P>(cursor) else {
             // A view asked for before the shell caught up with a navigation.
@@ -426,7 +430,7 @@ impl<P: Page> Mount<Iced> for MountPage<P> {
 }
 
 impl<L: Layout> Mount<Iced> for MountLayout<L> {
-    fn view<'a>(&self, props: SegmentProps<Iced>, nodes: &'a Nodes) -> View<'a, Envelope> {
+    fn view<'a>(&self, props: SegmentProps<Iced>, nodes: &'a Nodes) -> Element<'a, Envelope> {
         let cursor = props.cursor;
         let Some(layout) = nodes.get::<L>(cursor) else {
             return iced::widget::text("").into();

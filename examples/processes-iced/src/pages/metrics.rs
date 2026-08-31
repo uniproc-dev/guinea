@@ -6,7 +6,7 @@
 //! left and comes back.
 
 use guinea::feature::FeatureInitContext;
-use guinea::iced::{Page, PageCx, View, page};
+use guinea::iced::{Element, Page, PageCx, page};
 use guinea_widgets::chart::RingSeries;
 use iced::widget::{column, progress_bar, row, text};
 
@@ -31,7 +31,7 @@ impl Page for Metrics {
         ctx.install::<MetricsFeature>(&())
     }
 
-    fn view(&self, cx: &PageCx<'_, Self>) -> View<'_, Quiet> {
+    fn view(&self, cx: &PageCx<'_, Self>) -> Element<'_, Quiet> {
         let (metrics, _) = cx.state::<Sampling, _>();
         let cpu = values(&metrics.cpu);
         let memory = values(&metrics.memory);
@@ -61,7 +61,7 @@ fn latest(samples: &[f32]) -> f32 {
 // `'static`: these build from the numbers rather than borrowing them, so
 // nothing here outlives the call - unlike `Draft`, which is the page that
 // needs the borrow a view is now allowed to take.
-fn gauge(label: &str, samples: &[f32]) -> View<'static, Quiet> {
+fn gauge(label: &str, samples: &[f32]) -> Element<'static, Quiet> {
     let value = latest(samples);
     row![
         text(format!("{label} {value:.0}%")).width(90),
@@ -71,7 +71,7 @@ fn gauge(label: &str, samples: &[f32]) -> View<'static, Quiet> {
     .into()
 }
 
-fn history(samples: &[f32]) -> View<'static, Quiet> {
+fn history(samples: &[f32]) -> Element<'static, Quiet> {
     let bars = samples
         .iter()
         .rev()
@@ -84,7 +84,7 @@ fn history(samples: &[f32]) -> View<'static, Quiet> {
                 .girth(4)
                 .into()
         })
-        .collect::<Vec<View<'static, Quiet>>>();
+        .collect::<Vec<Element<'static, Quiet>>>();
 
     row(bars).spacing(2).into()
 }

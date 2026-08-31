@@ -46,9 +46,16 @@ raw-window-handle = "0.6.2"
 # Pinned to an explicit rev (not just `git = "..."`) so this and
 # examples/processes-app's separate workspace/lockfile can't silently drift
 # onto different commits of the same crate - they did, until this was added.
-windows-reactor = { git = "https://github.com/Tam1SH/windows-rs", rev = "63450fc98" }
-windows-reactor-setup = { git = "https://github.com/Tam1SH/windows-rs", rev = "63450fc98" }
-windows-canvas = { git = "https://github.com/Tam1SH/windows-rs", rev = "63450fc98" }
+#
+# Upstream rather than the fork since #4848, which did not extend the reactor
+# but replaced it: `RenderCx` and its hooks, `Element`, `component()`,
+# `ContextId`, `App::new().render()` and `on_exit` are all gone, and a window
+# is now a component root. The fork's own commit sits on files that rewrite
+# touched, so it has to be redone against the new shape either way.
+windows-reactor = { git = "https://github.com/microsoft/windows-rs", rev = "dc720b367" }
+windows-reactor-setup = { git = "https://github.com/microsoft/windows-rs", rev = "dc720b367" }
+windows-canvas = { git = "https://github.com/microsoft/windows-rs", rev = "dc720b367" }
+windows-core = { git = "https://github.com/microsoft/windows-rs", rev = "dc720b367" }
 
 # --- Async ---
 tokio = { version = "1.49.0", features = ["full"] }

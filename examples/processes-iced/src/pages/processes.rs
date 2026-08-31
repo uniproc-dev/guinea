@@ -9,7 +9,7 @@
 //! index past the end unless something says so.
 
 use guinea::feature::FeatureInitContext;
-use guinea::iced::{Observing, Page, PageCx, UpdateCx, View, page};
+use guinea::iced::{Element, Observing, Page, PageCx, UpdateCx, page};
 use iced::Length::Fill;
 use iced::widget::{button, column, row, scrollable, text};
 
@@ -77,7 +77,7 @@ impl Page for Processes {
         }
     }
 
-    fn view(&self, cx: &PageCx<'_, Self>) -> View<'_, Msg> {
+    fn view(&self, cx: &PageCx<'_, Self>) -> Element<'_, Msg> {
         let (processes, _) = cx.state::<Running, _>();
 
         let rows = processes
@@ -104,7 +104,7 @@ impl Page for Processes {
 
                 row![label, kill].spacing(8).into()
             })
-            .collect::<Vec<View<Msg>>>();
+            .collect::<Vec<Element<Msg>>>();
 
         scrollable(column(rows).spacing(4).padding(8))
             .height(Fill)

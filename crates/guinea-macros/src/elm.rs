@@ -1,4 +1,4 @@
-//! `#[page]` and `#[layout]` for the iced adapter.
+//! `#[page]` and `#[layout]` for the Elm backends.
 //!
 //! One job: write down what the author did not.
 //!
@@ -27,13 +27,16 @@ pub enum Kind {
     Layout,
 }
 
-/// Where the iced adapter's own types live.
+/// Where an Elm adapter's own types live.
 ///
 /// An application reaches them through the facade and a test inside the
 /// adapter does not, and the generated `update` has to name `UpdateCx` either
-/// way.
-fn adapter_path() -> TokenStream {
-    match crate_name("guinea-iced") {
+/// way. `package` is the adapter's own crate, `facade` the module the facade
+/// re-exports it under.
+fn adapter_path(package: &str, facade: &str) -> TokenStream {
+    let facade_module = syn::Ident::new(facade, proc_macro2::Span::call_site());
+
+    match crate_name(package) {
         Ok(FoundCrate::Itself) => return quote!(crate),
         Ok(FoundCrate::Name(name)) => {
             let ident = syn::Ident::new(&name, proc_macro2::Span::call_site());
@@ -43,18 +46,18 @@ fn adapter_path() -> TokenStream {
     }
 
     match crate_name("guinea") {
-        Ok(FoundCrate::Itself) => quote!(crate::iced),
+        Ok(FoundCrate::Itself) => quote!(crate::#facade_module),
         Ok(FoundCrate::Name(name)) => {
             let ident = syn::Ident::new(&name, proc_macro2::Span::call_site());
-            quote!(::#ident::iced)
+            quote!(::#ident::#facade_module)
         }
-        Err(_) => quote!(::guinea::iced),
+        Err(_) => quote!(::guinea::#facade_module),
     }
 }
 
-pub fn node_impl(item: TokenStream1, kind: Kind) -> TokenStream1 {
+pub fn node_impl(item: TokenStream1, kind: Kind, package: &str, facade: &str) -> TokenStream1 {
     let mut item = syn::parse_macro_input!(item as ItemImpl);
-    let adapter = adapter_path();
+    let adapter = adapter_path(package, facade);
 
     let declared_type = |name: &str| {
         item.items

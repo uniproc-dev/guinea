@@ -5,7 +5,7 @@
 //! adding a fourth page changes nothing here except a tab button.
 
 use guinea::feature::FeatureInitContext;
-use guinea::iced::{Envelope, Layout, LayoutCx, UpdateCx, View, layout};
+use guinea::iced::{Element, Envelope, Layout, LayoutCx, UpdateCx, layout};
 use guinea_plugin_l10n::Localization;
 use iced::Length::Fill;
 use iced::widget::{button, column, container, row, space, text};
@@ -70,7 +70,7 @@ impl Layout for TabsLayout {
         }
     }
 
-    fn view<'a>(&'a self, cx: &LayoutCx<'a, Self>) -> View<'a, Envelope> {
+    fn view<'a>(&'a self, cx: &LayoutCx<'a, Self>) -> Element<'a, Envelope> {
         let strings = L10n::current();
         let (tabs, _) = cx.state::<Tabs, _>();
 

@@ -14,7 +14,7 @@ mod routing {
     use guinea_core::actor::UiThreadToken;
     use guinea_core::feature::Bound;
     use guinea_core::scope::Reducer;
-    use guinea_macros::{routes, segment};
+    use guinea_macros::routes;
 
     /// The reducer is the state; `Processes` below is the page that shows it.
     #[derive(Default, Clone, PartialEq, Debug)]
@@ -42,6 +42,7 @@ mod routing {
             .plain())
     }
 
+    #[derive(Default)]
     struct Processes;
 
     routes! {
@@ -50,7 +51,7 @@ mod routing {
         }
     }
 
-    #[segment]
+    #[page]
     impl Page for Processes {
         type Params = ProcessesParams;
         /// The claim itself, which is what makes `Listing` readable here.
@@ -63,10 +64,10 @@ mod routing {
             install_processes(ctx, params)
         }
 
-        fn view(cx: &mut PageCx<'_, Self>) -> windows_reactor::Element {
+        fn view(&self, cx: &mut PageCx<'_, Self>) -> windows_reactor::View {
             let (state, _dispatch) = cx.use_reducer::<Listing, _>();
             assert_eq!(state.seeded_from, "ubuntu");
-            windows_reactor::Element::default()
+            windows_reactor::View::empty()
         }
     }
 
@@ -83,9 +84,10 @@ mod routing {
         }
     }
 
+    #[derive(Default)]
     struct NeedsAService;
 
-    #[segment]
+    #[page]
     impl Page for NeedsAService {
         type Params = ();
 
@@ -95,8 +97,8 @@ mod routing {
             Ok(())
         }
 
-        fn view(_cx: &mut PageCx<'_, Self>) -> windows_reactor::Element {
-            windows_reactor::Element::default()
+        fn view(&self, _cx: &mut PageCx<'_, Self>) -> windows_reactor::View {
+            windows_reactor::View::empty()
         }
     }
 
@@ -133,34 +135,13 @@ mod routing {
         );
     }
 
-    #[test]
-    fn scoped_router_is_call_site_scoped_not_process_global() {
-        let token = UiThreadToken::dangerously_create_token_unchecked();
-
-        let mut cx1 = windows_reactor::RenderCx::new(Rc::new(|| {}));
-        cx1.begin_render();
-        let router_a = scoped_router(&mut cx1, token.clone());
-
-        // A second render pass of the *same* window (hook slots realign) -
-        // must resolve the same Router, not a fresh one.
-        cx1.begin_render();
-        let router_a2 = scoped_router(&mut cx1, token.clone());
-        assert!(
-            Rc::ptr_eq(&router_a, &router_a2),
-            "re-rendering the same window must reuse its own Router"
-        );
-
-        // A different render root (e.g. a second window's own RenderCx) has
-        // its own independent hook storage - must get its own Router, no
-        // process-wide sharing.
-        let mut cx2 = windows_reactor::RenderCx::new(Rc::new(|| {}));
-        cx2.begin_render();
-        let router_b = scoped_router(&mut cx2, token);
-        assert!(
-            !Rc::ptr_eq(&router_a, &router_b),
-            "a different render root must get its own Router, not the first one's"
-        );
-    }
+    // Gone with the render-and-hook API, and gone as a question with it.
+    //
+    // `scoped_router` existed because a router had to be conjured from inside
+    // a render, out of a hook slot, and the test asked whether that slot was
+    // per-window or process-wide. A window is a component now and `RouterRoot`
+    // owns its router as a field, so "one per window" is what the type says
+    // rather than what a hook happened to do.
 
     #[test]
     fn route_roundtrips_through_path() {
@@ -211,59 +192,24 @@ mod routing {
         let state = scope.state::<Listing>();
         assert_eq!(state.borrow().seeded_from, "ubuntu");
 
-        // `Router::render()` returns a mounted `Element::Component`, which
-        // only a real backend's `Reconciler` can invoke - this test instead
-        // calls our own `render_page` directly (same-module access), the
-        // same fn `mount_page::<Processes>` wraps, to exercise the
-        // `SegmentCx`/`PageCx`/`use_reducer` plumbing on its own.
-        let props = SegmentProps {
-            chain: page_chain::<Processes>(),
-            scopes: Rc::new(vec![scope.clone()]),
-            cursor: 0,
-        };
-        let mut cx = windows_reactor::RenderCx::new(Rc::new(|| {}));
-        render_page::<Processes>(&props, &mut cx);
-
         router.deactivate();
         assert!(router.active_scope().is_none());
     }
 
-    #[test]
-    fn push_after_first_render_requests_a_rerender() {
-        let token = UiThreadToken::dangerously_create_token_unchecked();
-        let router = Rc::new(Router::<WinUi>::new(token));
-        let scope = router
-            .activate(
-                page_chain::<Processes>(),
-                vec![Box::new(ProcessesParams {
-                    context: "ubuntu".to_string(),
-                })],
-            )
-            .expect("activate");
-
-        let rerender_count = Rc::new(std::cell::Cell::new(0));
-        let count_for_callback = rerender_count.clone();
-        let mut cx = windows_reactor::RenderCx::new(Rc::new(move || {
-            count_for_callback.set(count_for_callback.get() + 1);
-        }));
-        let props = SegmentProps {
-            chain: page_chain::<Processes>(),
-            scopes: Rc::new(vec![scope.clone()]),
-            cursor: 0,
-        };
-        render_page::<Processes>(&props, &mut cx); // first render registers the effect...
-        cx.flush_effects(); // ...which a real reconciler runs after each render; here
-        // there's none, so call it manually - this is what runs Scope::subscribe.
-
-        // An actor updating data well after the component last rendered.
-        scope.push::<Listing>("debian".to_string());
-
-        assert!(
-            rerender_count.get() > 0,
-            "a push after the first render should have requested a re-render, \
-             not just updated a cell nothing is watching"
-        );
-    }
+    // `push_after_first_render_requests_a_rerender` stood here, and there is
+    // nowhere to put it.
+    //
+    // It drove a page's view with `RenderCx::new(..)` - a render context with
+    // no window behind it - pushed to a reducer afterwards, and asserted that
+    // the component had asked to be drawn again. The component model has no
+    // public way to build a `ViewContext`, and the reconciler harness that
+    // replaces it is documented as unstable and not part of the application
+    // API, so a downstream test suite has nothing to stand on.
+    //
+    // What it guarded is now split in two, and both halves are still covered:
+    // that a subscription is taken and dropped with the component is the
+    // adapter's `use_reducer`, and that a push reaches subscribers at all is
+    // `guinea-core`'s own tests.
 
     #[test]
     fn navigating_to_the_same_route_twice_in_a_row_keeps_the_same_scope_identity() {
@@ -308,8 +254,9 @@ mod routing {
         }
     }
 
+    #[derive(Default)]
     struct ProcsTab;
-    #[segment]
+    #[layout]
     impl Layout for ProcsTab {
         // `TabRoute` below is written by hand and declares that this layout
         // derives nothing from its pages - so a leaf's own parameter changing
@@ -321,19 +268,20 @@ mod routing {
             ctx.scope.push::<Tabs>(count + 1);
             Ok(())
         }
-        fn view(cx: &mut LayoutCx<'_, Self>) -> windows_reactor::Element {
+        fn view(&self, cx: &mut LayoutCx<'_, Self>) -> windows_reactor::View {
             cx.outlet()
         }
     }
 
+    #[derive(Default)]
     struct ServicesLeaf;
-    #[segment]
+    #[page]
     impl Page for ServicesLeaf {
         type Params = ();
 
-        fn view(cx: &mut PageCx<'_, Self>) -> windows_reactor::Element {
+        fn view(&self, cx: &mut PageCx<'_, Self>) -> windows_reactor::View {
             let _ = cx;
-            windows_reactor::Element::default()
+            windows_reactor::View::empty()
         }
     }
 
@@ -486,40 +434,43 @@ mod routing {
     fn routes_macro_nesting_produces_the_right_chain() {
         use std::any::TypeId;
 
+        #[derive(Default)]
         struct Services;
-        #[segment]
+        #[page]
         impl Page for Services {
             type Params = ServicesParams;
 
-            fn view(cx: &mut PageCx<'_, Self>) -> windows_reactor::Element {
+            fn view(&self, cx: &mut PageCx<'_, Self>) -> windows_reactor::View {
                 let _ = cx;
-                windows_reactor::Element::default()
+                windows_reactor::View::empty()
             }
         }
 
         /// A page of its own rather than the module's `Processes`, for the same
         /// reason as `DerivedTab` below: a page belongs to one tree, since its
         /// ancestry is part of what the compiler reads off it.
+        #[derive(Default)]
         struct DerivedProcesses;
-        #[segment]
+        #[page]
         impl Page for DerivedProcesses {
             type Params = DerivedProcessesParams;
 
-            fn view(cx: &mut PageCx<'_, Self>) -> windows_reactor::Element {
+            fn view(&self, cx: &mut PageCx<'_, Self>) -> windows_reactor::View {
                 let _ = cx;
-                windows_reactor::Element::default()
+                windows_reactor::View::empty()
             }
         }
 
         /// A layout of its own rather than the module's `ProcsTab`: this tree
         /// derives parameters for it, and a layout has one `Params` for every
         /// tree it appears in.
+        #[derive(Default)]
         struct DerivedTab;
-        #[segment]
+        #[layout]
         impl Layout for DerivedTab {
             type Params = DerivedTabParams;
 
-            fn view(cx: &mut LayoutCx<'_, Self>) -> windows_reactor::Element {
+            fn view(&self, cx: &mut LayoutCx<'_, Self>) -> windows_reactor::View {
                 cx.outlet()
             }
         }
@@ -580,14 +531,15 @@ mod routing {
         // that fails to compile with E0533 ("expected unit struct, unit
         // variant or constant, found struct variant"). Every call site must
         // consistently use the same (struct-style) shape.
+        #[derive(Default)]
         struct Home;
-        #[segment]
+        #[page]
         impl Page for Home {
             type Params = HomeParams;
 
-            fn view(cx: &mut PageCx<'_, Self>) -> windows_reactor::Element {
+            fn view(&self, cx: &mut PageCx<'_, Self>) -> windows_reactor::View {
                 let _ = cx;
-                windows_reactor::Element::default()
+                windows_reactor::View::empty()
             }
         }
 
@@ -604,23 +556,25 @@ mod routing {
 
     #[test]
     fn a_page_without_a_link_has_no_address_at_all() {
+        #[derive(Default)]
         struct Inner;
-        #[segment]
+        #[page]
         impl Page for Inner {
             type Params = InnerParams;
 
-            fn view(_cx: &mut PageCx<'_, Self>) -> windows_reactor::Element {
-                windows_reactor::Element::default()
+            fn view(&self, _cx: &mut PageCx<'_, Self>) -> windows_reactor::View {
+                windows_reactor::View::empty()
             }
         }
 
+        #[derive(Default)]
         struct Shared;
-        #[segment]
+        #[page]
         impl Page for Shared {
             type Params = SharedParams;
 
-            fn view(_cx: &mut PageCx<'_, Self>) -> windows_reactor::Element {
-                windows_reactor::Element::default()
+            fn view(&self, _cx: &mut PageCx<'_, Self>) -> windows_reactor::View {
+                windows_reactor::View::empty()
             }
         }
 
@@ -669,23 +623,25 @@ mod routing {
 
     #[test]
     fn a_literal_wins_over_a_capture_whatever_the_declaration_order() {
+        #[derive(Default)]
         struct Settings;
-        #[segment]
+        #[page]
         impl Page for Settings {
             type Params = SettingsParams;
 
-            fn view(_cx: &mut PageCx<'_, Self>) -> windows_reactor::Element {
-                windows_reactor::Element::default()
+            fn view(&self, _cx: &mut PageCx<'_, Self>) -> windows_reactor::View {
+                windows_reactor::View::empty()
             }
         }
 
+        #[derive(Default)]
         struct Host;
-        #[segment]
+        #[page]
         impl Page for Host {
             type Params = HostParams;
 
-            fn view(_cx: &mut PageCx<'_, Self>) -> windows_reactor::Element {
-                windows_reactor::Element::default()
+            fn view(&self, _cx: &mut PageCx<'_, Self>) -> windows_reactor::View {
+                windows_reactor::View::empty()
             }
         }
 
@@ -714,23 +670,25 @@ mod routing {
 
     #[test]
     fn a_capture_that_does_not_parse_falls_through_to_the_next_branch() {
+        #[derive(Default)]
         struct ById;
-        #[segment]
+        #[page]
         impl Page for ById {
             type Params = ByIdParams;
 
-            fn view(_cx: &mut PageCx<'_, Self>) -> windows_reactor::Element {
-                windows_reactor::Element::default()
+            fn view(&self, _cx: &mut PageCx<'_, Self>) -> windows_reactor::View {
+                windows_reactor::View::empty()
             }
         }
 
+        #[derive(Default)]
         struct ByName;
-        #[segment]
+        #[page]
         impl Page for ByName {
             type Params = ByNameParams;
 
-            fn view(_cx: &mut PageCx<'_, Self>) -> windows_reactor::Element {
-                windows_reactor::Element::default()
+            fn view(&self, _cx: &mut PageCx<'_, Self>) -> windows_reactor::View {
+                windows_reactor::View::empty()
             }
         }
 
@@ -821,8 +779,9 @@ mod routing {
             }
         }
 
+        #[derive(Default)]
         struct ProbePage;
-        #[segment]
+        #[page]
         impl Page for ProbePage {
             type Params = ProbePageParams;
 
@@ -840,27 +799,29 @@ mod routing {
                 Ok(())
             }
 
-            fn view(_cx: &mut PageCx<'_, Self>) -> windows_reactor::Element {
-                windows_reactor::Element::default()
+            fn view(&self, _cx: &mut PageCx<'_, Self>) -> windows_reactor::View {
+                windows_reactor::View::empty()
             }
         }
 
+        #[derive(Default)]
         struct OtherPage;
-        #[segment]
+        #[page]
         impl Page for OtherPage {
             type Params = OtherPageParams;
 
-            fn view(_cx: &mut PageCx<'_, Self>) -> windows_reactor::Element {
-                windows_reactor::Element::default()
+            fn view(&self, _cx: &mut PageCx<'_, Self>) -> windows_reactor::View {
+                windows_reactor::View::empty()
             }
         }
 
+        #[derive(Default)]
         struct ProbeLayout;
-        #[segment]
+        #[layout]
         impl Layout for ProbeLayout {
             type Params = ProbeLayoutParams;
 
-            fn view(cx: &mut LayoutCx<'_, Self>) -> windows_reactor::Element {
+            fn view(&self, cx: &mut LayoutCx<'_, Self>) -> windows_reactor::View {
                 cx.outlet()
             }
         }

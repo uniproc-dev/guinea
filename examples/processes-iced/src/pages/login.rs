@@ -8,7 +8,7 @@
 //!
 //! It accepts anything: this demonstrates the form, not authentication.
 
-use guinea::iced::{Page, PageCx, UpdateCx, View, page};
+use guinea::iced::{Element, Page, PageCx, UpdateCx, page};
 use iced::Length::Fill;
 use iced::widget::{button, center, column, container, row, text, text_input};
 
@@ -47,7 +47,7 @@ impl Page for Login {
         }
     }
 
-    fn view(&self, _cx: &PageCx<'_, Self>) -> View<'_, Msg> {
+    fn view(&self, _cx: &PageCx<'_, Self>) -> Element<'_, Msg> {
         let form = match &self.signed_in {
             Some(user) => column![
                 text(format!("Signed in as {user}")).size(18),

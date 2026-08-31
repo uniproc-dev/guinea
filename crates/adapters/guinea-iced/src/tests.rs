@@ -12,7 +12,7 @@ use guinea_core::scope::Reducer;
 use guinea_router::router::{Router, SegmentEntry};
 
 use crate::{
-    Envelope, Iced, Layout, LayoutCx, Nodes, Observing, Page, PageCx, UpdateCx, View, deliver_page,
+    Element, Envelope, Iced, Layout, LayoutCx, Nodes, Observing, Page, PageCx, UpdateCx, deliver_page,
     envelope, layout, layout_entry, page, segment_entry,
 };
 
@@ -49,7 +49,7 @@ impl Layout for Shell {
         self.hits += 1;
     }
 
-    fn view<'a>(&'a self, cx: &LayoutCx<'a, Self>) -> View<'a, Envelope> {
+    fn view<'a>(&'a self, cx: &LayoutCx<'a, Self>) -> Element<'a, Envelope> {
         cx.outlet()
     }
 }
@@ -105,7 +105,7 @@ impl Page for Leaf {
         }
     }
 
-    fn view(&self, _cx: &PageCx<'_, Self>) -> View<'_, LeafMsg> {
+    fn view(&self, _cx: &PageCx<'_, Self>) -> Element<'_, LeafMsg> {
         iced::widget::text("").into()
     }
 }
@@ -118,7 +118,7 @@ struct Other;
 
 #[page]
 impl Page for Other {
-    fn view(&self, _cx: &PageCx<'_, Self>) -> View<'_, Self::Message> {
+    fn view(&self, _cx: &PageCx<'_, Self>) -> Element<'_, Self::Message> {
         iced::widget::text("").into()
     }
 }

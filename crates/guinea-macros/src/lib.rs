@@ -2,8 +2,8 @@ use proc_macro::TokenStream;
 use syn::{ItemFn, parse_macro_input};
 
 mod actor_dsl;
+mod elm;
 mod handler;
-mod iced_node;
 mod installs;
 mod routes_dsl;
 mod segment;
@@ -74,13 +74,30 @@ pub fn segment(_attr: TokenStream, item: TokenStream) -> TokenStream {
 /// clothes of one.
 #[proc_macro_attribute]
 pub fn iced_page(_attr: TokenStream, item: TokenStream) -> TokenStream {
-    iced_node::node_impl(item, iced_node::Kind::Page)
+    elm::node_impl(item, elm::Kind::Page, "guinea-iced", "iced")
 }
 
 /// [`iced_page`] for a layout, which has no route parameters of its own.
 #[proc_macro_attribute]
 pub fn iced_layout(_attr: TokenStream, item: TokenStream) -> TokenStream {
-    iced_node::node_impl(item, iced_node::Kind::Layout)
+    elm::node_impl(item, elm::Kind::Layout, "guinea-iced", "iced")
+}
+
+/// [`iced_page`] for the windows-reactor backend.
+///
+/// The same macro because the two backends are the same kind of thing: the
+/// reactor's second preview is Elm - state in structs, events as enums - so a
+/// page there has the same five items a page here does, and leaving out the
+/// empty ones is the same job.
+#[proc_macro_attribute]
+pub fn winui_page(_attr: TokenStream, item: TokenStream) -> TokenStream {
+    elm::node_impl(item, elm::Kind::Page, "guinea-winui", "winui")
+}
+
+/// [`winui_page`] for a layout.
+#[proc_macro_attribute]
+pub fn winui_layout(_attr: TokenStream, item: TokenStream) -> TokenStream {
+    elm::node_impl(item, elm::Kind::Layout, "guinea-winui", "winui")
 }
 
 /// Declares an actor's manifest:

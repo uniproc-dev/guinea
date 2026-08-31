@@ -7,11 +7,15 @@ edition.workspace = true
 guinea-core.workspace = true
 guinea-app.workspace = true
 guinea-router.workspace = true
+guinea-macros.workspace = true
 anyhow.workspace = true
 tracing.workspace = true
 
 [target.'cfg(target_os = "windows")'.dependencies]
 windows-reactor.workspace = true
+# For the generated dispatcher bindings in `src/dispatching`. Same revision as
+# the reactor, so the COM types are the ones it is already using.
+windows-core.workspace = true
 
 [lints]
 workspace = true

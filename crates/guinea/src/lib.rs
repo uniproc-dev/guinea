@@ -194,8 +194,6 @@ pub mod backend {
     //! `guinea::eframe::Egui` or `guinea::iced::Iced`.
 }
 
-#[cfg(feature = "winui")]
-pub use guinea_winui::{Bootstrap, shutdown};
 
 pub use guinea_app::{app, app_meta, feature, lifecycle_tracker};
 pub use guinea_app::timers as reactor;

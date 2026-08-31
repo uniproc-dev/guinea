@@ -1,11 +1,17 @@
 //! guinea on windows-reactor: what a view is, how a segment is mounted, and
-//! the hooks a view reads state through.
+//! what a view reads state through.
 //!
-//! Not the run loop - the reactor keeps that. See [`bootstrap`].
+//! It has a run loop again. Under the render-and-hook API there was nowhere to
+//! put the application, so installing it happened inside the first render and
+//! this backend never labelled its root; a window is a component root now, and
+//! [`run`] is an ordinary `run` like the other four backends have.
 
-mod dispatcher;
-mod bootstrap;
+mod dispatching;
+mod run;
 mod winui;
 
-pub use bootstrap::{Bootstrap, shutdown};
+pub use guinea_app::feature::FeatureInitContext;
+pub use guinea_core::guard::{Ask, Verdict};
+pub use guinea_macros::{winui_layout as layout, winui_page as page};
+pub use run::{MAIN, Window, run, window};
 pub use winui::*;

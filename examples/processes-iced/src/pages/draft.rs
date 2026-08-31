@@ -1,7 +1,7 @@
 //! The page that minds being left - and the one that proves a view may borrow.
 //!
 //! `text_editor` keeps a `&Content` for the life of the element, so this page
-//! is only expressible because a view is `View<'_, Msg>` borrowed from the
+//! is only expressible because a view is `Element<'_, Msg>` borrowed from the
 //! node rather than something the node had to hand over by value. The node
 //! lives in the shell for exactly that reason; see [`guinea::iced::Nodes`].
 //!
@@ -16,7 +16,7 @@
 //! answering "Discard" finishes the move that was already asked for, and
 //! switching to a third tab while the question is open replaces it.
 
-use guinea::iced::{Ask, Page, PageCx, UpdateCx, Verdict, View, page};
+use guinea::iced::{Ask, Element, Page, PageCx, UpdateCx, Verdict, page};
 use iced::Length::Fill;
 use iced::widget::{button, column, row, text, text_editor};
 
@@ -68,7 +68,7 @@ impl Page for Draft {
         }
     }
 
-    fn view(&self, _cx: &PageCx<'_, Self>) -> View<'_, Msg> {
+    fn view(&self, _cx: &PageCx<'_, Self>) -> Element<'_, Msg> {
         let dirty = !self.written().is_empty();
 
         column![
