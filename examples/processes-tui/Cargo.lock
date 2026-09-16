@@ -504,7 +504,7 @@ dependencies = [
  "libc",
  "option-ext",
  "redox_users",
- "windows-sys 0.61.2",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
@@ -557,7 +557,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "39cab71617ae0d63f51a36d69f866391735b51691dbda63cf6f96d042b63efeb"
 dependencies = [
  "libc",
- "windows-sys 0.61.2",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
@@ -797,7 +797,7 @@ dependencies = [
 
 [[package]]
 name = "guinea"
-version = "0.6.0"
+version = "0.6.1"
 dependencies = [
  "guinea-app",
  "guinea-codegen",
@@ -810,7 +810,7 @@ dependencies = [
 
 [[package]]
 name = "guinea-app"
-version = "0.6.0"
+version = "0.6.1"
 dependencies = [
  "anyhow",
  "guinea-core",
@@ -820,7 +820,7 @@ dependencies = [
 
 [[package]]
 name = "guinea-codegen"
-version = "0.6.0"
+version = "0.6.1"
 dependencies = [
  "guinea-core",
  "guinea-meta-build",
@@ -835,7 +835,7 @@ dependencies = [
 
 [[package]]
 name = "guinea-core"
-version = "0.6.0"
+version = "0.6.1"
 dependencies = [
  "anyhow",
  "arc-swap",
@@ -852,7 +852,7 @@ dependencies = [
 
 [[package]]
 name = "guinea-macros"
-version = "0.6.0"
+version = "0.6.1"
 dependencies = [
  "guinea-codegen",
  "guinea-route-dsl",
@@ -881,8 +881,8 @@ dependencies = [
 
 [[package]]
 name = "guinea-plugin-l10n"
-version = "0.6.0"
-source = "git+https://github.com/uniproc-dev/guinea-plugins?tag=v0.6.0#99996d9ab5abe85c97dd0fb85a97349e5bffd67c"
+version = "0.6.1"
+source = "git+https://github.com/uniproc-dev/guinea-plugins?tag=v0.6.1#baba57a15796ad82cb0d77cb2100aa87d16a9083"
 dependencies = [
  "anyhow",
  "fluent-bundle",
@@ -896,8 +896,8 @@ dependencies = [
 
 [[package]]
 name = "guinea-plugin-l10n-build"
-version = "0.6.0"
-source = "git+https://github.com/uniproc-dev/guinea-plugins?tag=v0.6.0#99996d9ab5abe85c97dd0fb85a97349e5bffd67c"
+version = "0.6.1"
+source = "git+https://github.com/uniproc-dev/guinea-plugins?tag=v0.6.1#baba57a15796ad82cb0d77cb2100aa87d16a9083"
 dependencies = [
  "fluent-syntax",
  "proc-macro2",
@@ -909,7 +909,7 @@ dependencies = [
 [[package]]
 name = "guinea-plugin-store"
 version = "0.20.0"
-source = "git+https://github.com/uniproc-dev/guinea-plugins?tag=v0.6.0#99996d9ab5abe85c97dd0fb85a97349e5bffd67c"
+source = "git+https://github.com/uniproc-dev/guinea-plugins?tag=v0.6.1#baba57a15796ad82cb0d77cb2100aa87d16a9083"
 dependencies = [
  "amethystate",
  "anyhow",
@@ -919,7 +919,7 @@ dependencies = [
 
 [[package]]
 name = "guinea-ratatui"
-version = "0.6.0"
+version = "0.6.1"
 dependencies = [
  "anyhow",
  "crossterm",
@@ -932,7 +932,7 @@ dependencies = [
 
 [[package]]
 name = "guinea-route-dsl"
-version = "0.6.0"
+version = "0.6.1"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -942,7 +942,7 @@ dependencies = [
 
 [[package]]
 name = "guinea-router"
-version = "0.6.0"
+version = "0.6.1"
 dependencies = [
  "anyhow",
  "guinea-app",
@@ -954,7 +954,7 @@ dependencies = [
 
 [[package]]
 name = "guinea-trace"
-version = "0.6.0"
+version = "0.6.1"
 dependencies = [
  "anyhow",
  "once_cell",
@@ -967,15 +967,15 @@ dependencies = [
 
 [[package]]
 name = "guinea-widgets"
-version = "0.6.0"
-source = "git+https://github.com/uniproc-dev/guinea-plugins?tag=v0.6.0#99996d9ab5abe85c97dd0fb85a97349e5bffd67c"
+version = "0.6.1"
+source = "git+https://github.com/uniproc-dev/guinea-plugins?tag=v0.6.1#baba57a15796ad82cb0d77cb2100aa87d16a9083"
 dependencies = [
  "tracing",
 ]
 
 [[package]]
 name = "guinea-winui"
-version = "0.6.0"
+version = "0.6.1"
 dependencies = [
  "anyhow",
  "guinea-app",
@@ -1390,7 +1390,7 @@ version = "0.50.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7957b9740744892f114936ab4a57b3f487491bbeafaf8083688b16841a4240e5"
 dependencies = [
- "windows-sys 0.61.2",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
@@ -1947,7 +1947,7 @@ dependencies = [
  "errno",
  "libc",
  "linux-raw-sys",
- "windows-sys 0.61.2",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
@@ -2137,7 +2137,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c3d1e2c7f27f8d4cb10542a02c49005dbd6e93095799d6f3be745fae9f8fedd4"
 dependencies = [
  "libc",
- "windows-sys 0.61.2",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
@@ -2225,7 +2225,7 @@ dependencies = [
  "getrandom 0.4.3",
  "once_cell",
  "rustix",
- "windows-sys 0.61.2",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
@@ -2238,7 +2238,7 @@ dependencies = [
  "parking_lot",
  "rustix",
  "signal-hook",
- "windows-sys 0.61.2",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
@@ -2905,7 +2905,7 @@ version = "0.1.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c2a7b1c03c876122aa43f3020e6c3c3ee5c05081c9a00739faf7503aeba10d22"
 dependencies = [
- "windows-sys 0.61.2",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
