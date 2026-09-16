@@ -52,10 +52,10 @@ raw-window-handle = "0.6.2"
 # `ContextId`, `App::new().render()` and `on_exit` are all gone, and a window
 # is now a component root. The fork's own commit sits on files that rewrite
 # touched, so it has to be redone against the new shape either way.
-windows-reactor = { git = "https://github.com/microsoft/windows-rs", rev = "dc720b367" }
-windows-reactor-setup = { git = "https://github.com/microsoft/windows-rs", rev = "dc720b367" }
-windows-canvas = { git = "https://github.com/microsoft/windows-rs", rev = "dc720b367" }
-windows-core = { git = "https://github.com/microsoft/windows-rs", rev = "dc720b367" }
+windows-reactor = { git = "https://github.com/microsoft/windows-rs", rev = "c14074c45" }
+windows-reactor-setup = { git = "https://github.com/microsoft/windows-rs", rev = "c14074c45" }
+windows-canvas = { git = "https://github.com/microsoft/windows-rs", rev = "c14074c45" }
+windows-core = { git = "https://github.com/microsoft/windows-rs", rev = "c14074c45" }
 
 # --- Async ---
 tokio = { version = "1.49.0", features = ["full"] }

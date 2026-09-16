@@ -1,81 +1,40 @@
-//! Opening a window, and taking it apart again.
-//!
-//! This is new. The old adapter had no run layer at all - `App::new().render(f)`
-//! took a bare render function with nowhere to put a `GuineaApp`, so installing
-//! the application had to happen *inside the first render*, through a
-//! `Bootstrap` trait the caller had to remember to chain. The consequence was
-//! that this backend, alone among the five, never labelled its root: there was
-//! no place to do it.
-//!
-//! `App::run_component::<C>(input)` gives that place back. Installing happens
-//! in the root component's `create`, teardown in its `Drop`, and the shape
-//! matches every other backend's `run`.
+//! Opening windows, and taking the application apart once the last one closes.
 
 use std::cell::{Cell, RefCell};
+use std::marker::PhantomData;
+use std::rc::Rc;
 
 use guinea_app::app::{GuineaApp, install_runtime, shutdown_current};
 use guinea_core::actor::UiThreadToken;
 use guinea_router::router::RouteChain;
-use windows_reactor::{Component, ComponentContext, View, ViewContext, WindowVisuals};
+use windows_reactor::{AppProxy, Component, ComponentContext, View, ViewContext, WindowVisuals};
 
 use crate::winui::{RouterRoot, WinUi};
 
 /// The label this backend gives its first window, matching the other four.
 pub const MAIN: &str = "main";
 
-thread_local! {
-    /// The application, between [`run`] and the root component's `create`.
-    ///
-    /// `App::run_component` takes only `C::Input`, and `Input` has to be
-    /// `Clone + PartialEq` - which a `GuineaApp` is not, being a recipe full of
-    /// boxed plugins. So it is handed over on the side, on the one thread that
-    /// will read it, and taken exactly once.
-    static PENDING: RefCell<Option<GuineaApp>> = const { RefCell::new(None) };
+const E_FAIL: windows_core::HRESULT = windows_core::HRESULT(0x8000_4005_u32 as _);
 
-    /// How many windows are standing.
-    ///
-    /// The application is installed once per UI thread and torn down once, but
-    /// there are as many roots as there are windows. Without counting, closing
-    /// the second window would run cleanups for the first one too.
+thread_local! {
+    static PROXY: RefCell<Option<AppProxy>> = const { RefCell::new(None) };
     static STANDING: Cell<usize> = const { Cell::new(0) };
 }
 
 /// A second window, showing the same route tree from `initial`.
 ///
-/// ```ignore
-/// cx.open_window(guinea_winui::window(
-///     Window::new().title("processes (2)").client_size(420.0, 420.0),
-///     Route::Processes { context: context() },
-/// ));
-/// ```
-///
-/// Its own router, and therefore its own root: scopes, event bus and debug
-/// registry are the window's, and go when it does. What it shares with the
-/// first window is the application - plugins are installed once per thread.
+/// It gets its own router; the application is shared.
 pub fn window<R>(window: Window, initial: R) -> View
 where
     R: RouteChain<WinUi> + Clone + PartialEq + 'static,
 {
-    View::component::<Root<R>>(Opening {
-        window,
-        initial: Starting::new(move || initial),
-    })
+    View::component::<Root<R>>(Opening { window, initial })
 }
 
-/// Runs `app` in a window, starting at `initial`.
+/// Installs `app`, opens a window at `initial`, and runs until the last
+/// window closes.
 ///
-/// ```ignore
-/// guinea_winui::run(
-///     GuineaApp::new().plugin(StorePlugin::for_app("app", "settings")).feature(Startup),
-///     Window::new().title("Processes").client_size(420.0, 420.0),
-///     initial_route,
-/// )
-/// ```
-///
-/// `initial` is a closure rather than a value for the same reason as in the
-/// other backends: where an application starts is often something only the
-/// installed plugins know, and they are not installed until the component is
-/// created.
+/// `initial` runs after the plugins are installed, so it can ask them.
 pub fn run<R>(
     app: GuineaApp,
     window: Window,
@@ -84,20 +43,46 @@ pub fn run<R>(
 where
     R: RouteChain<WinUi> + Clone + PartialEq + 'static,
 {
-    PENDING.with(|pending| *pending.borrow_mut() = Some(app));
+    let failure = Rc::new(RefCell::new(None));
+    let startup_failure = failure.clone();
 
-    windows_reactor::App::run_component::<Root<R>>(Opening {
-        window,
-        initial: Starting::new(initial),
-    })
-    .map_err(|error| anyhow::anyhow!("windows-reactor: {error}"))
+    let result = windows_reactor::App::run_with(move |cx| {
+        let proxy = cx.proxy();
+        crate::dispatching::install(proxy.clone());
+        PROXY.with(|slot| *slot.borrow_mut() = Some(proxy));
+
+        let token = UiThreadToken::dangerously_create_token_unchecked();
+        match app.install(token) {
+            Ok(runtime) => install_runtime(runtime),
+            Err(error) => {
+                *startup_failure.borrow_mut() = Some(error);
+                return Err(windows_core::Error::new(E_FAIL, "installing the application"));
+            }
+        }
+        let installed = Installed;
+
+        cx.open_window(self::window(window, initial()))?;
+        Ok(installed)
+    });
+
+    PROXY.with(|slot| slot.borrow_mut().take());
+
+    if let Some(error) = failure.borrow_mut().take() {
+        return Err(error.context("guinea: installing the application"));
+    }
+    result.map_err(|error| anyhow::anyhow!("windows-reactor: {error}"))
+}
+
+/// Tears the application down when the reactor lets go of it.
+struct Installed;
+
+impl Drop for Installed {
+    fn drop(&mut self) {
+        shutdown_current();
+    }
 }
 
 /// How the window looks, declared by the application and applied by the root.
-///
-/// Reactor moved this out of an `App` builder and into each window's root
-/// component, which is the better place for it: a second window is a second
-/// component with a title of its own.
 #[derive(Clone, PartialEq)]
 pub struct Window {
     title: String,
@@ -129,48 +114,14 @@ impl Default for Window {
     }
 }
 
-/// The closure that says where to start, in something `Input` can hold.
-///
-/// `Input` must be `Clone + PartialEq`, and a `FnOnce` is neither. It is only
-/// ever read once, by `create`, so the box is taken out on first use and the
-/// two compare equal for as long as they both exist - there is exactly one of
-/// these per window, and re-publishing the root must not read as a change.
-struct Starting<R>(RefCell<Option<Box<dyn FnOnce() -> R>>>);
-
-impl<R> Starting<R> {
-    fn new(initial: impl FnOnce() -> R + 'static) -> Self {
-        Self(RefCell::new(Some(Box::new(initial))))
-    }
-
-    fn take(&self) -> Option<R> {
-        self.0.borrow_mut().take().map(|start| start())
-    }
-}
-
-impl<R> Clone for Starting<R> {
-    /// Cloning hands the closure on rather than duplicating it: only one of
-    /// the copies can start the window, and it is whichever `create` reads.
-    fn clone(&self) -> Self {
-        Self(RefCell::new(self.0.borrow_mut().take()))
-    }
-}
-
-impl<R> PartialEq for Starting<R> {
-    fn eq(&self, _other: &Self) -> bool {
-        true
-    }
-}
-
 #[derive(Clone, PartialEq)]
 struct Opening<R> {
     window: Window,
-    initial: Starting<R>,
+    initial: R,
 }
 
-/// The window's root: the application, the chrome, and the route tree.
-struct Root<R: RouteChain<WinUi> + Clone + PartialEq + 'static> {
-    route: R,
-}
+/// The window's root: the chrome, and the route tree.
+struct Root<R>(PhantomData<R>);
 
 impl<R> Component for Root<R>
 where
@@ -179,30 +130,9 @@ where
     type Input = Opening<R>;
     type Message = ();
 
-    fn create(input: &Opening<R>, _cx: &ComponentContext<Self>) -> Self {
-        // Guarded per UI thread, not per window: a second window is a second
-        // root component, and installing twice would re-run every plugin -
-        // opening the store's database again, for one, which fails outright.
-        if !guinea_app::app::is_installed()
-            && let Some(app) = PENDING.with(|pending| pending.borrow_mut().take())
-        {
-            // Genuinely the UI thread: a component is created on the one
-            // thread that draws.
-            let token = UiThreadToken::dangerously_create_token_unchecked();
-            let runtime = app
-                .install(token)
-                .unwrap_or_else(|error| panic!("guinea: installing the application: {error:#}"));
-            install_runtime(runtime);
-        }
-
+    fn create(_input: &Opening<R>, _cx: &ComponentContext<Self>) -> Self {
         STANDING.with(|standing| standing.set(standing.get() + 1));
-
-        Self {
-            route: input
-                .initial
-                .take()
-                .expect("the window's starting route is read once, here"),
-        }
+        Self(PhantomData)
     }
 
     fn view(&self, input: &Opening<R>, cx: &mut ViewContext<Self>) -> View {
@@ -211,24 +141,13 @@ where
             cx.window_visuals(WindowVisuals::new().client_size(width, height));
         }
 
-        View::component::<RouterRoot<R>>(self.route.clone())
+        View::component::<RouterRoot<R>>(input.initial.clone())
     }
 
     fn update(&mut self, _message: (), _cx: &ComponentContext<Self>) {}
 }
 
-impl<R: RouteChain<WinUi> + Clone + PartialEq + 'static> Drop for Root<R> {
-    /// Where teardown finally hangs.
-    ///
-    /// The old adapter had to put it on `App::on_exit`, and said why: the
-    /// reactor exited the process rather than unmounting the tree, so a
-    /// cleanup effect would never run. Both halves of that changed - a closing
-    /// window drops its component tree, and `on_exit` is gone - so cleanup
-    /// belongs here, where the window's own lifetime ends.
-    ///
-    /// The last window's, though. The application is one per UI thread however
-    /// many windows show it, and tearing it down when the second one closes
-    /// would take the first one's actors with it.
+impl<R> Drop for Root<R> {
     fn drop(&mut self) {
         let last = STANDING.with(|standing| {
             let left = standing.get().saturating_sub(1);
@@ -236,8 +155,10 @@ impl<R: RouteChain<WinUi> + Clone + PartialEq + 'static> Drop for Root<R> {
             left == 0
         });
 
-        if last {
-            shutdown_current();
+        if last && let Some(proxy) = PROXY.with(|slot| slot.borrow().clone()) {
+            if let Err(error) = proxy.exit() {
+                tracing::warn!(%error, "asking the application to exit");
+            }
         }
     }
 }

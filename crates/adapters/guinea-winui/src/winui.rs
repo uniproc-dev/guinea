@@ -522,10 +522,6 @@ where
     type Message = R;
 
     fn create(initial: &R, _cx: &ComponentContext<Self>) -> Self {
-        // Genuinely the UI thread: a component is created on the one thread
-        // that draws, and by now `App::run_*` has established its queue.
-        crate::dispatching::install();
-
         let token = guinea_core::actor::UiThreadToken::dangerously_create_token_unchecked();
         let router = Rc::new(Router::new(token));
 
