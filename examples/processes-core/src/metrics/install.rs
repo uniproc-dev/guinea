@@ -14,7 +14,7 @@ impl Feature for MetricsFeature {
     type Exports = (contracts::Metrics,);
 
     fn install(cx: &FeatureInitContext, _params: &()) -> anyhow::Result<Self> {
-        let samples = cx.state::<contracts::Metrics>().driven_by(MetricsActor::new);
+        let (samples, _) = cx.state::<contracts::Metrics>().driven_by(MetricsActor::new);
         samples.emit(Tick);
         Ok(Self { _samples: samples })
     }

@@ -251,17 +251,19 @@ impl<'a, R: Reducer> Claim<'a, R> {
     /// edge in one expression and owns none of the bookkeeping. The actor type
     /// is inferred from what the closure returns; neither the reducer nor this
     /// call has to name it.
-    pub fn driven_by<A, F>(self, build: F) -> Bound<R>
+    ///
+    /// The address comes back for wiring the scope cannot do on the actor's
+    /// behalf, such as a global bus subscription. The scope still owns the
+    /// actor and disposes it.
+    pub fn driven_by<A, F>(self, build: F) -> (Bound<R>, Addr<A>)
     where
         F: FnOnce(Push<R>) -> A,
         A: ManagedActor + Serves + 'static,
     {
         let actor = Addr::new_managed_scoped(build(Push::new(self.scope)), self.token.clone());
         A::serve(&actor, self.scope);
-        // Owned by the scope, so the actor dies with the segment that
-        // installed it and the feature has nothing to keep.
-        self.scope.own(actor);
-        self.bound()
+        self.scope.own(actor.clone());
+        (self.bound(), actor)
     }
 
     /// Leaves it for the feature to drive however it likes.

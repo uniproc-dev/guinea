@@ -52,7 +52,7 @@ pub struct FeatureInitContext {
 ///     type Exports = (contracts::Processes,);
 ///
 ///     fn install(cx: &FeatureInitContext, context: &str) -> anyhow::Result<Self> {
-///         let listing = cx.state::<contracts::Processes>()
+///         let (listing, _) = cx.state::<contracts::Processes>()
 ///             .driven_by(|push| ProcessActor::new(context.to_string(), push, cx.event_bus.clone()));
 ///
 ///         listing.emit(Refresh);
@@ -116,8 +116,9 @@ impl FeatureInitContext {
     /// is the call, and continuing it is optional:
     ///
     /// ```ignore
-    /// let processes = cx.state::<Processes>()
+    /// let (processes, actor) = cx.state::<Processes>()
     ///     .driven_by(|push| ProcessActor::new(context.to_string(), push, cx.event_bus.clone()));
+    /// cx.subscribe_on_global_bus::<ProcessActor, ScanTick>(actor);
     ///
     /// processes.emit(Refresh);
     /// ```

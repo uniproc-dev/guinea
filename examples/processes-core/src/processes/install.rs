@@ -25,7 +25,7 @@ impl Feature for ProcessesFeature {
     type Exports = (contracts::Processes,);
 
     fn install(cx: &FeatureInitContext, context: &str) -> anyhow::Result<Self> {
-        let listing = cx.state::<contracts::Processes>().driven_by(|push| {
+        let (listing, _) = cx.state::<contracts::Processes>().driven_by(|push| {
             ProcessActor::new(context.to_string(), push, cx.event_bus.clone())
         });
 
