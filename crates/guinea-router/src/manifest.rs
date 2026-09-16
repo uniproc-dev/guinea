@@ -122,7 +122,9 @@ pub fn check(path: impl AsRef<Path>, scheme: &str, trees: &[&[DeepLink]]) {
     };
 
     let rendered = render(scheme, trees);
-    let committed = std::fs::read_to_string(&path).ok();
+    let committed = std::fs::read_to_string(&path)
+        .ok()
+        .map(|text| text.replace("\r\n", "\n"));
 
     if committed.as_deref() == Some(rendered.as_str()) {
         return;
