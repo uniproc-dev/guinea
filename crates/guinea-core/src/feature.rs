@@ -26,7 +26,7 @@ use crate::scope::{Reducer, Scope};
 /// belongs to alive, and the actor is what the page owns.
 pub struct Push<R: Reducer> {
     scope: Weak<Scope>,
-    reducer: std::marker::PhantomData<fn() -> R>,
+    reducer: std::marker::PhantomData<R>,
 }
 
 impl<R: Reducer> Clone for Push<R> {
@@ -35,6 +35,15 @@ impl<R: Reducer> Clone for Push<R> {
             scope: self.scope.clone(),
             reducer: std::marker::PhantomData,
         }
+    }
+}
+
+impl<R: Reducer> std::fmt::Debug for Push<R> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Push")
+            .field("reducer", &std::any::type_name::<R>())
+            .field("scope_alive", &(self.scope.strong_count() > 0))
+            .finish()
     }
 }
 
