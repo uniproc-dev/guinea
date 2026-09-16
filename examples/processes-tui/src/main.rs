@@ -35,6 +35,7 @@ const LAST_ROUTE: &str = "route";
 /// find on the way in - the application starts where it always did.
 fn initial_route() -> Route {
     guinea_plugin_store::amethystate::global_store()
+        .kv()
         .get::<String>(LAST_ROUTE)
         .ok()
         .flatten()
@@ -54,7 +55,10 @@ fn remember(route: &Route) {
         return;
     };
 
-    if let Err(error) = guinea_plugin_store::amethystate::global_store().set(LAST_ROUTE, &saved) {
+    if let Err(error) = guinea_plugin_store::amethystate::global_store()
+        .kv()
+        .set(LAST_ROUTE, &saved)
+    {
         tracing::warn!(%error, "the route could not be remembered");
     }
 }
@@ -222,6 +226,7 @@ mod tests {
         // A saved route outlives the build that wrote it, and one that no
         // longer exists is an ordinary thing to find on the way in.
         guinea_plugin_store::amethystate::global_store()
+            .kv()
             .set(LAST_ROUTE, &r#"{"route":"Removed","fields":{}}"#.to_string())
             .expect("set");
 

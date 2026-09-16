@@ -12,6 +12,8 @@ use crate::events::ProcessKilled;
 
 pub struct StartedAt(pub Instant);
 
+const LAUNCHES: [&str; 2] = ["app", "launches"];
+
 messages! { Sweep }
 
 #[derive(Default)]
@@ -39,8 +41,8 @@ impl AppFeature for Startup {
         let started: Arc<StartedAt> = app.require()?;
 
         let store = app.require::<Store>()?;
-        let launches = store.get::<u64>("app.launches")?.unwrap_or_default() + 1;
-        store.set("app.launches", &launches)?;
+        let launches = store.get::<u64>(LAUNCHES)?.unwrap_or_default() + 1;
+        store.set(LAUNCHES, &launches)?;
         tracing::info!(launches, "started");
 
         let addr = app.spawn(Housekeeping::default());
