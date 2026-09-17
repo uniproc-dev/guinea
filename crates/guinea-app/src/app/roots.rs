@@ -31,6 +31,13 @@ use guinea_core::actor::traits::Message;
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
 pub struct RootId(u64);
 
+impl RootId {
+    /// The number behind the id, for something outside the process to name it.
+    pub fn get(self) -> u64 {
+        self.0
+    }
+}
+
 impl std::fmt::Display for RootId {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "root#{}", self.0)

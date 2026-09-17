@@ -667,6 +667,10 @@ pub fn routes_impl(input: TokenStream1) -> TokenStream1 {
                 #enum_ident::name(self)
             }
 
+            fn describe(&self) -> String {
+                format!("{self:?}")
+            }
+
             fn link(&self) -> Option<String> {
                 #enum_ident::link(self)
             }

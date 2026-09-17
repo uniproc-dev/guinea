@@ -16,6 +16,7 @@
 use std::rc::{Rc, Weak};
 
 use crate::actor::traits::Message;
+use crate::actor::registry::DebugRegistry;
 use crate::actor::{Addr, ManagedActor, UiThreadToken};
 use crate::scope::{Reducer, Scope};
 
@@ -59,6 +60,9 @@ impl<R: Reducer> Push<R> {
     /// happens to work an actor finishes after its page has been left.
     pub fn send(&self, update: R::Update) {
         if let Some(scope) = self.scope.upgrade() {
+            crate::trace::mark(|| crate::trace::Point::Push {
+                reducer: crate::actor::short_type_name::<R>(),
+            });
             scope.push::<R>(update);
         }
     }
@@ -116,7 +120,12 @@ impl Dispatch {
             .and_then(|(scope, section)| scope.answerer::<M>(section));
 
         match found {
-            Some(answer) => answer(action),
+            Some(answer) => {
+                let _action = crate::trace::enter(|| crate::trace::Point::Action {
+                    message: crate::actor::short_type_name::<M>(),
+                });
+                answer(action)
+            }
             // The feature that owns what was read does not answer this - a
             // wiring mistake rather than something a user did, so it says what
             // went unanswered and lets the frame stand.
@@ -227,17 +236,23 @@ pub trait Serves: Sized + 'static {
 pub struct Claim<'a, R: Reducer> {
     scope: &'a Rc<Scope>,
     token: &'a UiThreadToken,
+    debug: &'a Rc<DebugRegistry>,
     reducer: std::marker::PhantomData<fn() -> R>,
 }
 
 impl<'a, R: Reducer> Claim<'a, R> {
     /// For a context that hands features their scope - `FeatureInitContext`
     /// in `guinea-app`, and nothing else.
-    pub fn new(scope: &'a Rc<Scope>, token: &'a UiThreadToken) -> Self {
+    pub fn new(
+        scope: &'a Rc<Scope>,
+        token: &'a UiThreadToken,
+        debug: &'a Rc<DebugRegistry>,
+    ) -> Self {
         scope.note_reducer_owner::<R>();
         Self {
             scope,
             token,
+            debug,
             reducer: std::marker::PhantomData,
         }
     }
@@ -267,10 +282,22 @@ impl<'a, R: Reducer> Claim<'a, R> {
     pub fn driven_by<A, F>(self, build: F) -> (Bound<R>, Addr<A>)
     where
         F: FnOnce(Push<R>) -> A,
-        A: ManagedActor + Serves + 'static,
+        A: ManagedActor + Serves + std::fmt::Debug + 'static,
     {
         let actor = Addr::new_managed_scoped(build(Push::new(self.scope)), self.token.clone());
         A::serve(&actor, self.scope);
+        self.debug.register_owned(
+            &actor,
+            crate::actor::registry::Owner {
+                scope: Some(self.scope.key()),
+                feature: self.scope.current_feature(),
+                drives: Some(crate::actor::short_type_name::<R>()),
+            },
+        );
+        self.scope.own(Unregister {
+            id: actor.id(),
+            registry: self.debug.clone(),
+        });
         self.scope.own(actor.clone());
         (self.bound(), actor)
     }
@@ -290,6 +317,17 @@ impl<'a, R: Reducer> Claim<'a, R> {
             // through itself, not through whatever else the scope holds.
             dispatch: Dispatch::in_section(self.scope, self.scope.current_section()),
         }
+    }
+}
+
+struct Unregister {
+    id: usize,
+    registry: Rc<DebugRegistry>,
+}
+
+impl crate::scope::Teardown for Unregister {
+    fn teardown(self) {
+        self.registry.unregister(self.id);
     }
 }
 

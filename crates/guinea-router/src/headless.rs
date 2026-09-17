@@ -68,8 +68,7 @@ pub trait Layout: Sized + 'static {
 }
 
 pub const fn segment_entry<P: Page>() -> SegmentEntry<Headless> {
-    SegmentEntry::new(
-        std::any::TypeId::of::<P>,
+    SegmentEntry::new::<P>(
         install_page::<P>,
         crate::router::same_params::<P::Params>,
         &const { MountPage::<P>(std::marker::PhantomData) },
@@ -78,8 +77,7 @@ pub const fn segment_entry<P: Page>() -> SegmentEntry<Headless> {
 }
 
 pub const fn layout_entry<L: Layout>() -> SegmentEntry<Headless> {
-    SegmentEntry::new(
-        std::any::TypeId::of::<L>,
+    SegmentEntry::new::<L>(
         install_layout::<L>,
         crate::router::same_params::<L::Params>,
         &const { MountLayout::<L>(std::marker::PhantomData) },
@@ -205,9 +203,9 @@ impl<S: Segment> HeadlessCx<S> {
     ///     type Above = (Shell, ());
     /// }
     /// ```
-    pub fn state<R, I>(&self) -> (R, guinea_core::feature::Dispatch)
+    pub fn state<R, I>(&self) -> (std::rc::Rc<R>, guinea_core::feature::Dispatch)
     where
-        R: Reducer + Clone,
+        R: Reducer,
         S: Reaches<R, I>,
     {
         let binding = self.props.binding::<R>();

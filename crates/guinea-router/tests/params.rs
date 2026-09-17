@@ -26,7 +26,7 @@ struct Context {
 
 /// State nothing derives from the route - so if it comes back, it came back
 /// from the cache rather than from a fresh install.
-#[derive(Default)]
+#[derive(Clone, Default, Debug)]
 struct Scratch(u32);
 
 impl Reducer for Scratch {

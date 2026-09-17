@@ -1,7 +1,7 @@
 use crate::actor::addr::Addr;
 use crate::actor::short_type_name;
 use crate::actor::traits::{Handler, Message};
-use crate::trace::{DispatchMeta, is_scope_enabled};
+use crate::trace::{self, Bus, Point};
 
 use std::any::{Any, TypeId};
 use std::marker::PhantomData;
@@ -53,8 +53,9 @@ pub trait Event: Message + Send + Clone {}
 impl<T: Message + Clone + Send> Event for T {}
 
 pub trait UntypedSubscriber: 'static {
-    fn deliver(&self, msg: Box<dyn Any>, meta: DispatchMeta);
+    fn deliver(&self, msg: Box<dyn Any>, bus: Bus);
     fn seq(&self) -> u64;
+    fn event(&self) -> &'static str;
 }
 
 pub struct Subscriber<A: Handler<M>, M: Event> {
@@ -68,24 +69,18 @@ where
     A: Handler<M> + 'static,
     M: Event,
 {
-    fn deliver(&self, msg: Box<dyn Any>, meta: DispatchMeta) {
+    fn deliver(&self, msg: Box<dyn Any>, _bus: Bus) {
         if let Ok(concrete_msg) = msg.downcast::<M>() {
-            if is_scope_enabled("core.bus.deliver") {
-                tracing::debug!(
-                    parent: &meta.span,
-                    event = short_type_name::<M>(),
-                    actor = short_type_name::<A>(),
-                    op_id = meta.op_id,
-                    correlation_id = meta.correlation_id.as_deref().unwrap_or(""),
-                    "bus.deliver"
-                );
-            }
-            self.addr
-                .send_with_meta(*concrete_msg, meta.child("core.bus.deliver", None, None));
+            self.addr.send(*concrete_msg);
         }
     }
+
     fn seq(&self) -> u64 {
         self.seq
+    }
+
+    fn event(&self) -> &'static str {
+        short_type_name::<M>()
     }
 }
 
@@ -95,13 +90,21 @@ pub struct FnSubscriber<M: Event> {
 }
 
 impl<M: Event> UntypedSubscriber for FnSubscriber<M> {
-    fn deliver(&self, msg: Box<dyn Any>, _: DispatchMeta) {
+    fn deliver(&self, msg: Box<dyn Any>, bus: Bus) {
         if let Ok(concrete_msg) = msg.downcast::<M>() {
+            let _delivered = trace::enter(|| Point::Deliver {
+                event: short_type_name::<M>(),
+                bus,
+            });
             (self.callback)(*concrete_msg);
         }
     }
 
     fn seq(&self) -> u64 {
         self.seq
+    }
+
+    fn event(&self) -> &'static str {
+        short_type_name::<M>()
     }
 }

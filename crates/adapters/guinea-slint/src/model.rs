@@ -85,7 +85,7 @@ mod tests {
     use slint::Model;
     use std::rc::Rc;
 
-    #[derive(Default)]
+    #[derive(Clone, Default, Debug)]
     struct Items(Vec<String>);
 
     impl Reducer for Items {

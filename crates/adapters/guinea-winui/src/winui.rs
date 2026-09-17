@@ -130,8 +130,7 @@ pub trait Layout: Default + Sized + 'static {
 }
 
 pub const fn segment_entry<P: Page>() -> SegmentEntry<WinUi> {
-    SegmentEntry::new(
-        TypeId::of::<P>,
+    SegmentEntry::new::<P>(
         install_page::<P>,
         guinea_router::router::same_params::<P::Params>,
         &const { MountPage::<P>(PhantomData) },
@@ -140,8 +139,7 @@ pub const fn segment_entry<P: Page>() -> SegmentEntry<WinUi> {
 }
 
 pub const fn layout_entry<L: Layout>() -> SegmentEntry<WinUi> {
-    SegmentEntry::new(
-        TypeId::of::<L>,
+    SegmentEntry::new::<L>(
         install_layout::<L>,
         guinea_router::router::same_params::<L::Params>,
         &const { MountLayout::<L>(PhantomData) },
@@ -305,11 +303,13 @@ impl<P: Page> Component for PageNode<P> {
     }
 
     fn view(&self, input: &Self::Input, cx: &mut ViewContext<Self>) -> View {
-        self.page.view(&mut PageCx {
+        let view = self.page.view(&mut PageCx {
             props: input.clone(),
             cx,
             page: PhantomData,
-        })
+        });
+        crate::devtools::record(input, &view);
+        view
     }
 }
 
@@ -349,11 +349,13 @@ impl<L: Layout> Component for LayoutNode<L> {
     }
 
     fn view(&self, input: &Self::Input, cx: &mut ViewContext<Self>) -> View {
-        self.layout.view(&mut LayoutCx {
+        let view = self.layout.view(&mut LayoutCx {
             props: input.clone(),
             cx,
             layout: PhantomData,
-        })
+        });
+        crate::devtools::record(input, &view);
+        view
     }
 }
 
@@ -401,9 +403,9 @@ impl<S: Segment> UpdateCx<'_, S> {
     ///
     /// No subscription: `update` is a moment, not a view, and the segment is
     /// already publishing again because of the message that got here.
-    pub fn state<R, I>(&self) -> (R, guinea_core::feature::Dispatch)
+    pub fn state<R, I>(&self) -> (Rc<R>, guinea_core::feature::Dispatch)
     where
-        R: Reducer + Clone,
+        R: Reducer,
         S: Reaches<R, I>,
     {
         let binding = self.props.binding::<R>();
@@ -421,9 +423,9 @@ impl<S: Segment> UpdateCx<'_, S> {
 fn use_reducer<R, C>(
     props: &SegmentProps<WinUi>,
     cx: &mut ViewContext<C>,
-) -> (R, guinea_core::feature::Dispatch)
+) -> (Rc<R>, guinea_core::feature::Dispatch)
 where
-    R: Reducer + Clone + PartialEq,
+    R: Reducer + PartialEq,
     C: Refreshable,
 {
     let binding = props.binding::<R>();
@@ -508,6 +510,7 @@ fn router_context() -> &'static windows_reactor::Context<Option<RouterHandle>> {
 pub struct RouterRoot<R: RouteChain<WinUi> + Clone + PartialEq + 'static> {
     router: Rc<Router<WinUi>>,
     route: R,
+    _panel: guinea_core::devtools::PanelGuard,
 }
 
 impl<R> Component for RouterRoot<R>
@@ -524,6 +527,9 @@ where
     fn create(initial: &R, _cx: &ComponentContext<Self>) -> Self {
         let token = guinea_core::actor::UiThreadToken::dangerously_create_token_unchecked();
         let router = Rc::new(Router::new(token));
+        if guinea_app::app::roots::labelled(crate::run::MAIN).is_none() {
+            guinea_app::app::roots::set_label(router.root(), crate::run::MAIN);
+        }
 
         // Before the first view, so the tree exists by the time anything asks
         // to render it. A failure here is fatal to the window, and `create`
@@ -533,6 +539,7 @@ where
             .expect("the initial route installs");
 
         Self {
+            _panel: crate::devtools::offer(&router),
             router,
             route: initial.clone(),
         }
@@ -689,9 +696,9 @@ impl<P: Page + Segment> PageCx<'_, P> {
     /// or a segment above listed it in `Exports`. The `_` is [`Reaches`]'s
     /// index, which says which of several impls applied - Rust has no partial
     /// turbofish, so it has to be written.
-    pub fn use_reducer<R, I>(&mut self) -> (R, guinea_core::feature::Dispatch)
+    pub fn use_reducer<R, I>(&mut self) -> (Rc<R>, guinea_core::feature::Dispatch)
     where
-        R: Reducer + Clone + PartialEq,
+        R: Reducer + PartialEq,
         P: Reaches<R, I>,
     {
         use_reducer::<R, _>(&self.props, self.cx)
@@ -762,9 +769,9 @@ impl<L: Layout> LayoutCx<'_, L> {
 
 impl<L: Layout + Segment> LayoutCx<'_, L> {
     /// See [`PageCx::use_reducer`].
-    pub fn use_reducer<R, I>(&mut self) -> (R, guinea_core::feature::Dispatch)
+    pub fn use_reducer<R, I>(&mut self) -> (Rc<R>, guinea_core::feature::Dispatch)
     where
-        R: Reducer + Clone + PartialEq,
+        R: Reducer + PartialEq,
         L: Reaches<R, I>,
     {
         use_reducer::<R, _>(&self.props, self.cx)

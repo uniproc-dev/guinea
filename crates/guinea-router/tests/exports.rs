@@ -17,7 +17,7 @@ use guinea_router::headless::{Headless, HeadlessCx, Layout, Page, layout_entry, 
 use guinea_router::router::{Router, SegmentEntry};
 
 /// Published: pages below are meant to read this.
-#[derive(Default, Clone)]
+#[derive(Default, Clone, Debug)]
 struct Shown(u32);
 
 impl Reducer for Shown {
@@ -30,7 +30,7 @@ impl Reducer for Shown {
 
 /// Claimed by the same feature and deliberately not published - the feature's
 /// own bookkeeping.
-#[derive(Default, Clone)]
+#[derive(Default, Clone, Debug)]
 struct Hidden(u32);
 
 impl Reducer for Hidden {

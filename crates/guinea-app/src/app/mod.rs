@@ -1,3 +1,4 @@
+pub mod actors;
 mod builder;
 mod meta;
 #[cfg(feature = "own-runtime")]
@@ -19,7 +20,7 @@ pub use plugin::{AppFeature, Plugin};
 pub use harness::TestApp;
 
 pub use runtime::{
-    AppRuntime, app_services, install_runtime, is_installed, shutdown_current,
+    AppRuntime, app_services, install_runtime, installed_plugins, is_installed, shutdown_current,
 };
 
 use guinea_core::actor::UiThreadToken;

@@ -1,7 +1,303 @@
-mod policy;
-mod subscriber;
-mod wiring;
+//! What caused what.
+//!
+//! Every observable point - an action from the UI, a message sent to an actor,
+//! its handling, background work and its result, a publication and each of its
+//! deliveries, a reducer update, a navigation - is a [`Record`] with an id and
+//! the id of the point that caused it. Following `parent` from any record
+//! gives its provenance; following it the other way gives everything it set
+//! off.
+//!
+//! The cause is carried implicitly on the thread ([`current`]) and explicitly
+//! wherever work crosses a queue or a thread: an actor's mailbox, a background
+//! task, a hop back onto the UI thread. [`Cause`] is `Copy + Send` for that.
+//!
+//! Records go to the observers on the thread that produced them (devtools),
+//! and to `tracing` as one readable line each under the `guinea` target.
 
-pub use policy::*;
-pub use subscriber::*;
-pub use wiring::*;
+mod point;
+mod sink;
+
+pub use point::{Bus, Point, StoreOp};
+pub use sink::{
+    Observer, init_subscriber, is_observed, is_observed_anywhere, observe, stop_observing,
+};
+
+use std::cell::Cell;
+use std::num::NonZeroU64;
+use std::sync::OnceLock;
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::time::{Duration, Instant, SystemTime};
+
+/// One observed point, named for being the cause of what follows it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub struct Cause(NonZeroU64);
+
+impl Cause {
+    fn next() -> Self {
+        static NEXT: AtomicU64 = AtomicU64::new(1);
+        Cause(NonZeroU64::new(NEXT.fetch_add(1, Ordering::Relaxed)).expect("ids start at 1"))
+    }
+
+    pub fn get(self) -> u64 {
+        self.0.get()
+    }
+}
+
+impl std::fmt::Display for Cause {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "#{}", self.0)
+    }
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct Record {
+    pub id: Cause,
+    pub parent: Option<Cause>,
+    /// Since the process first traced anything.
+    pub at: Duration,
+    pub point: Point,
+}
+
+/// What an observer is told.
+#[derive(Clone, Debug, PartialEq)]
+pub enum Trace {
+    /// A point that stays current until [`Trace::End`]: what happens inside it
+    /// is caused by it.
+    Begin(Record),
+    End { id: Cause, took: Duration },
+    /// A point with no extent: a send, a push, a spawn.
+    Mark(Record),
+}
+
+fn start() -> &'static (Instant, SystemTime) {
+    static START: OnceLock<(Instant, SystemTime)> = OnceLock::new();
+    START.get_or_init(|| (Instant::now(), SystemTime::now()))
+}
+
+fn now() -> Duration {
+    start().0.elapsed()
+}
+
+/// The wall clock at the moment [`Record::at`] counts from.
+pub fn started_at() -> SystemTime {
+    start().1
+}
+
+thread_local! {
+    static CURRENT: Cell<Option<Cause>> = const { Cell::new(None) };
+}
+
+/// What is happening on this thread right now, if anything is.
+pub fn current() -> Option<Cause> {
+    CURRENT.with(Cell::get)
+}
+
+/// Records a point caused by whatever is current, without making it current.
+pub fn mark(point: impl FnOnce() -> Point) -> Cause {
+    mark_under(current(), point)
+}
+
+/// Records a point caused by `parent`, for work that crossed a queue or a
+/// thread and brought its cause along.
+pub fn mark_under(parent: Option<Cause>, point: impl FnOnce() -> Point) -> Cause {
+    let id = Cause::next();
+    if sink::wanted() {
+        sink::emit(Trace::Mark(Record {
+            id,
+            parent,
+            at: now(),
+            point: point(),
+        }));
+    }
+    id
+}
+
+/// Records a point caused by whatever is current, and makes it current until
+/// the guard drops.
+pub fn enter(point: impl FnOnce() -> Point) -> Entered {
+    enter_under(current(), point)
+}
+
+/// [`enter`], with the cause given rather than taken from the thread.
+pub fn enter_under(parent: Option<Cause>, point: impl FnOnce() -> Point) -> Entered {
+    let id = Cause::next();
+    let started = now();
+    if sink::wanted() {
+        sink::emit(Trace::Begin(Record {
+            id,
+            parent,
+            at: started,
+            point: point(),
+        }));
+    }
+    let previous = CURRENT.with(|current| current.replace(Some(id)));
+    Entered {
+        id,
+        previous,
+        started,
+    }
+}
+
+/// Makes `cause` current until the guard drops, without recording anything:
+/// for code that continues a point recorded elsewhere.
+pub fn resume(cause: Option<Cause>) -> Resumed {
+    Resumed {
+        previous: CURRENT.with(|current| current.replace(cause)),
+    }
+}
+
+/// Runs `future` with `cause` current on whichever thread polls it.
+///
+/// A guard held across `.await` would stay on the thread the task started on;
+/// this sets the cause for each poll instead.
+pub fn within<F: Future>(cause: Option<Cause>, future: F) -> Within<F> {
+    Within {
+        cause,
+        future: Box::pin(future),
+    }
+}
+
+pub struct Within<F> {
+    cause: Option<Cause>,
+    future: std::pin::Pin<Box<F>>,
+}
+
+impl<F: Future> Future for Within<F> {
+    type Output = F::Output;
+
+    fn poll(
+        mut self: std::pin::Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+    ) -> std::task::Poll<F::Output> {
+        let _resumed = resume(self.cause);
+        self.future.as_mut().poll(cx)
+    }
+}
+
+#[must_use = "the point stops being current when this is dropped"]
+pub struct Entered {
+    id: Cause,
+    previous: Option<Cause>,
+    started: Duration,
+}
+
+impl Entered {
+    pub fn id(&self) -> Cause {
+        self.id
+    }
+}
+
+impl Drop for Entered {
+    fn drop(&mut self) {
+        CURRENT.with(|current| current.set(self.previous));
+        if sink::wanted() {
+            sink::emit(Trace::End {
+                id: self.id,
+                took: now().saturating_sub(self.started),
+            });
+        }
+    }
+}
+
+#[must_use = "the cause stops being current when this is dropped"]
+pub struct Resumed {
+    previous: Option<Cause>,
+}
+
+impl Drop for Resumed {
+    fn drop(&mut self) {
+        CURRENT.with(|current| current.set(self.previous));
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::cell::RefCell;
+    use std::rc::Rc;
+
+    fn collect() -> Rc<RefCell<Vec<Trace>>> {
+        let seen = Rc::new(RefCell::new(Vec::new()));
+        let sink = seen.clone();
+        observe(move |trace| sink.borrow_mut().push(trace.clone()));
+        seen
+    }
+
+    fn parent_of(seen: &[Trace], id: Cause) -> Option<Cause> {
+        seen.iter().find_map(|trace| match trace {
+            Trace::Begin(record) | Trace::Mark(record) if record.id == id => Some(record.parent),
+            _ => None,
+        })?
+    }
+
+    #[test]
+    fn what_happens_inside_a_point_is_caused_by_it() {
+        let seen = collect();
+
+        let action = enter(|| Point::Action { message: "Kill" });
+        let send = mark(|| Point::Send {
+            actor: "ProcessActor",
+            message: "Kill",
+        });
+        let handled = enter_under(Some(send), || Point::Handle {
+            actor: "ProcessActor",
+            message: "Kill",
+        });
+        let publish = mark(|| Point::Publish {
+            event: "ProcessKilled",
+            bus: Bus::Global,
+            subscribers: 2,
+        });
+        let handle_id = handled.id();
+        let action_id = action.id();
+        drop(handled);
+        drop(action);
+        stop_observing();
+
+        let seen = seen.borrow();
+        assert_eq!(parent_of(&seen, send), Some(action_id));
+        assert_eq!(parent_of(&seen, handle_id), Some(send));
+        assert_eq!(parent_of(&seen, publish), Some(handle_id));
+        assert_eq!(parent_of(&seen, action_id), None);
+        assert!(matches!(seen.last(), Some(Trace::End { id, .. }) if *id == action_id));
+        assert_eq!(current(), None, "everything entered has been left");
+    }
+
+    #[test]
+    fn a_resumed_cause_is_the_parent_of_what_follows_and_goes_away_after() {
+        let seen = collect();
+        let spawn = mark(|| Point::Spawn {
+            actor: "Poller",
+            output: "Tick",
+        });
+        {
+            let _resumed = resume(Some(spawn));
+            mark(|| Point::Push { reducer: "Metrics" });
+        }
+        let after = mark(|| Point::Push { reducer: "Metrics" });
+        stop_observing();
+
+        let seen = seen.borrow();
+        let pushes: Vec<Option<Cause>> = seen
+            .iter()
+            .filter_map(|trace| match trace {
+                Trace::Mark(record) if matches!(record.point, Point::Push { .. }) => {
+                    Some(record.parent)
+                }
+                _ => None,
+            })
+            .collect();
+        assert_eq!(pushes, [Some(spawn), None]);
+        assert_eq!(parent_of(&seen, after), None);
+    }
+
+    #[test]
+    fn nothing_is_built_while_nobody_listens() {
+        let built = Cell::new(false);
+        mark(|| {
+            built.set(true);
+            Point::Note("unused".into())
+        });
+        assert!(!built.get());
+    }
+}

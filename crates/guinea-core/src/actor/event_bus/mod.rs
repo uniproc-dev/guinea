@@ -5,14 +5,12 @@ use crate::actor::event_bus::subscribe::{
 use crate::actor::invoke_on_ui;
 use crate::actor::short_type_name;
 use crate::actor::traits::Handler;
-use crate::trace::{DispatchMeta, current_meta, is_scope_enabled};
+use crate::trace::{self, Bus, Point};
 use std::any::TypeId;
 use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
 use std::rc::Rc;
 use std::sync::Arc;
-
-use tracing::debug;
 
 pub mod builder;
 pub mod rpc;
@@ -30,6 +28,7 @@ pub struct EventBus {
     subscribers: RefCell<HashMap<TypeId, Vec<Box<dyn UntypedSubscriber>>>>,
     counts: RefCell<HashMap<TypeId, usize>>,
     next_id: Cell<u64>,
+    kind: Bus,
 }
 
 impl Default for EventBus {
@@ -38,13 +37,49 @@ impl Default for EventBus {
     }
 }
 
+impl std::fmt::Debug for EventBus {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let subscribers: usize = self
+            .subscribers
+            .try_borrow()
+            .map_or(0, |subscribers| subscribers.values().map(Vec::len).sum());
+        f.debug_struct("EventBus")
+            .field("kind", &self.kind)
+            .field("subscribers", &subscribers)
+            .finish()
+    }
+}
+
 impl EventBus {
+    /// A window's own bus.
     pub fn new() -> Self {
+        Self::of_kind(Bus::Window)
+    }
+
+    fn of_kind(kind: Bus) -> Self {
         Self {
             subscribers: RefCell::new(HashMap::new()),
             counts: RefCell::new(HashMap::new()),
             next_id: Cell::new(0),
+            kind,
         }
+    }
+
+    pub fn kind(&self) -> Bus {
+        self.kind
+    }
+
+    /// The event types something is subscribed to, with how many subscribers
+    /// each has.
+    pub fn subscriptions(&self) -> Vec<(&'static str, usize)> {
+        let subscribers = self.subscribers.borrow();
+        let mut listed: Vec<(&'static str, usize)> = subscribers
+            .values()
+            .filter(|list| !list.is_empty())
+            .map(|list| (list[0].event(), list.len()))
+            .collect();
+        listed.sort_unstable();
+        listed
     }
 
     fn next_id(&self) -> u64 {
@@ -59,15 +94,6 @@ impl EventBus {
         M: Event,
     {
         let seq = self.next_id();
-
-        if is_scope_enabled("core.bus.subscribe") {
-            debug!(
-                event = short_type_name::<M>(),
-                actor = short_type_name::<A>(),
-                "bus.subscribe"
-            );
-        }
-
         self.insert::<M>(Box::new(Subscriber {
             seq,
             addr,
@@ -80,11 +106,6 @@ impl EventBus {
         callback: impl Fn(M) + 'static,
     ) -> BusSubscription {
         let seq = self.next_id();
-
-        if is_scope_enabled("core.bus.subscribe") {
-            debug!(event = short_type_name::<M>(), "bus.subscribe_fn");
-        }
-
         self.insert::<M>(Box::new(FnSubscriber {
             seq,
             callback: Arc::new(callback),
@@ -121,37 +142,16 @@ impl EventBus {
     }
 
     pub fn publish<M: Event>(&self, msg: M) {
-        let meta =
-            current_meta().unwrap_or_else(|| DispatchMeta::capture_or_root("core.bus.publish"));
-
-        if !self.has_subscribers::<M>() {
-            debug!(
-                parent: &meta.span,
-                event = short_type_name::<M>(),
-                op_id = meta.op_id,
-                correlation_id = meta.correlation_id.as_deref().unwrap_or(""),
-                "no subscribers"
-            );
-            return;
-        }
-
-        if is_scope_enabled("core.bus.publish") {
-            debug!(
-                parent: &meta.span,
-                event = short_type_name::<M>(),
-                op_id = meta.op_id,
-                correlation_id = meta.correlation_id.as_deref().unwrap_or(""),
-                "bus.publish"
-            );
-        }
+        let _published = trace::enter(|| Point::Publish {
+            event: short_type_name::<M>(),
+            bus: self.kind,
+            subscribers: self.count_subscribers::<M>(),
+        });
 
         let type_id = TypeId::of::<M>();
         if let Some(subs) = self.subscribers.borrow().get(&type_id) {
             for sub in subs {
-                sub.deliver(
-                    Box::new(msg.clone()),
-                    meta.child("core.bus.publish", None, None),
-                );
+                sub.deliver(Box::new(msg.clone()), self.kind);
             }
         }
     }
@@ -179,9 +179,14 @@ pub struct GlobalEventBus;
 impl GlobalEventBus {
     pub(crate) fn instance() -> Rc<EventBus> {
         thread_local! {
-            static BUS: Rc<EventBus> = Rc::new(EventBus::new());
+            static BUS: Rc<EventBus> = Rc::new(EventBus::of_kind(Bus::Global));
         }
         BUS.with(|bus| bus.clone())
+    }
+
+    /// The global bus, for reading what is subscribed to it.
+    pub fn bus() -> Rc<EventBus> {
+        Self::instance()
     }
 
     /// Publishes the event on the UI thread's global event bus.
@@ -189,7 +194,9 @@ impl GlobalEventBus {
     /// The global event bus lives on the UI thread, so this call is redirected
     /// there via the UI dispatcher. It is safe to call from any thread.
     pub fn publish<M: Event>(msg: M) {
+        let cause = trace::current();
         invoke_on_ui(move || {
+            let _resumed = trace::resume(cause);
             Self::instance().publish(msg);
         });
     }

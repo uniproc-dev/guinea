@@ -82,6 +82,7 @@ impl AppLifecycle {
         token: &UiThreadToken,
         ctx: &mut AppFeatureDeinitContext<'_>,
     ) -> Vec<(&'static str, usize)> {
+        crate::app::actors::forget_all();
         let mut inner = self.inner.borrow_mut();
         for cleanup in inner.cleanups.drain(..).rev() {
             if let Err(e) = cleanup(ctx) {
@@ -133,7 +134,6 @@ impl LifecycleTracker for AppLifecycle {
 mod tests {
     use super::*;
     use crate::feature::AppFeatureDeinitContext;
-    use crate::timers::Reactor;
     use guinea_core::SharedState;
     use guinea_core::actor::UiThreadToken;
     use guinea_core::actor::event_bus::GlobalEventBus;
@@ -161,14 +161,9 @@ mod tests {
     #[guinea_macros::handler]
     fn probe_ping(_this: &mut Probe, _ctx: guinea_core::actor::Context<Probe, Ping>) {}
 
-    fn deinit<'a>(
-        token: &UiThreadToken,
-        reactor: &'a Reactor,
-        shared: &'a SharedState,
-    ) -> AppFeatureDeinitContext<'a> {
+    fn deinit<'a>(token: &UiThreadToken, shared: &'a SharedState) -> AppFeatureDeinitContext<'a> {
         AppFeatureDeinitContext {
             token: token.clone(),
-            reactor,
             shared,
         }
     }
@@ -176,7 +171,6 @@ mod tests {
     #[test]
     fn an_actor_owned_by_the_lifecycle_is_not_reported_as_leaked() {
         let token = UiThreadToken::dangerously_create_token_unchecked();
-        let reactor = Reactor::new();
         let shared = SharedState::new();
         let lifecycle = AppLifecycle::new();
 
@@ -185,14 +179,13 @@ mod tests {
             let _addr = crate::feature::ContextActorExt::spawn(&mut app, Probe);
         }
 
-        let mut ctx = deinit(&token, &reactor, &shared);
+        let mut ctx = deinit(&token, &shared);
         assert!(lifecycle.shutdown(&token, &mut ctx).is_empty());
     }
 
     #[test]
     fn an_address_kept_past_shutdown_is_reported_once() {
         let token = UiThreadToken::dangerously_create_token_unchecked();
-        let reactor = Reactor::new();
         let shared = SharedState::new();
         let lifecycle = AppLifecycle::new();
 
@@ -201,7 +194,7 @@ mod tests {
             crate::feature::ContextActorExt::spawn(&mut app, Probe)
         };
 
-        let mut ctx = deinit(&token, &reactor, &shared);
+        let mut ctx = deinit(&token, &shared);
         let leaked = lifecycle.shutdown(&token, &mut ctx);
 
         assert_eq!(leaked.len(), 1, "one actor, reported once");
@@ -219,13 +212,8 @@ mod tests {
         assert_eq!(counter.load(Ordering::SeqCst), 0);
 
         let token = UiThreadToken::dangerously_create_token_unchecked();
-        let reactor = Reactor::new();
         let shared = SharedState::new();
-        let mut ctx = AppFeatureDeinitContext {
-            token: token.clone(),
-            reactor: &reactor,
-            shared: &shared,
-        };
+        let mut ctx = deinit(&token, &shared);
 
         lifecycle.shutdown(&token, &mut ctx);
 
@@ -241,13 +229,8 @@ mod tests {
         assert_eq!(GlobalEventBus::count_subscribers::<Ping>(), 2);
 
         let token = UiThreadToken::dangerously_create_token_unchecked();
-        let reactor = Reactor::new();
         let shared = SharedState::new();
-        let mut ctx = AppFeatureDeinitContext {
-            token: token.clone(),
-            reactor: &reactor,
-            shared: &shared,
-        };
+        let mut ctx = deinit(&token, &shared);
 
         lifecycle.clone().shutdown(&token, &mut ctx);
 

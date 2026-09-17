@@ -17,6 +17,7 @@ pub mod event_bus;
 
 mod macros;
 pub mod registry;
+pub mod shape;
 
 pub type UiTask = Box<dyn FnOnce() + Send>;
 
@@ -57,6 +58,30 @@ where
             panic!(
                 "UiDispatcher not initialized! Call guinea_core::actor::set_ui_dispatcher at startup."
             );
+        }
+    }
+}
+
+/// Like [`invoke_on_ui`], but hands `f` back when there is no UI thread to
+/// run it on yet.
+pub fn try_invoke_on_ui<F>(f: F) -> Result<(), F>
+where
+    F: FnOnce() + Send + 'static,
+{
+    #[cfg(feature = "test-utils")]
+    {
+        crate::actor::event_bus::EventBus::queue_test_task(Box::new(f));
+        Ok(())
+    }
+
+    #[cfg(not(feature = "test-utils"))]
+    {
+        match UI_DISPATCHER.read().unwrap().as_ref() {
+            Some(dispatcher) => {
+                dispatcher.dispatch(Box::new(f));
+                Ok(())
+            }
+            None => Err(f),
         }
     }
 }

@@ -1,12 +1,15 @@
 use std::fmt::Debug;
+use std::panic::Location;
 use std::rc::Rc;
 use std::sync::Arc;
 
-use crate::timers::Reactor;
+use crate::timers::{self, Period, Timer};
 use anyhow::Context as _;
 use guinea_core::SharedState;
-use guinea_core::actor::registry::DebugRegistry;
+use guinea_core::actor::registry::{DebugRegistry, Owner};
+use guinea_core::actor::shape::name;
 use guinea_core::actor::{Addr, Handler, ManagedActor, UiThreadToken};
+use guinea_core::trace::Bus;
 use guinea_core::actor::event_bus::{EventBus, GlobalEventBus};
 use guinea_core::actor::event_bus::subscribe::Event;
 use guinea_core::feature::{Claim, Exported};
@@ -15,7 +18,6 @@ use guinea_core::scope::{DropGuard, Reducer, Scope, Teardown};
 
 pub struct AppFeatureDeinitContext<'a> {
     pub token: UiThreadToken,
-    pub reactor: &'a Reactor,
     pub shared: &'a SharedState,
 }
 
@@ -86,7 +88,7 @@ impl FeatureInitContext {
 
         // Its own corner of the scope, so that two instances of one feature
         // answering the same action type do not become one.
-        self.scope.open_section();
+        self.scope.open_section(name::<F>());
         let installed = F::install(self, params);
         self.scope.close_section();
 
@@ -126,7 +128,7 @@ impl FeatureInitContext {
     /// Ending it at [`plain`](Claim::plain) is not a half-written feature - it
     /// is state the UI owns, and `emit` on it does not compile.
     pub fn state<R: Reducer>(&self) -> Claim<'_, R> {
-        Claim::new(&self.scope, &self.token)
+        Claim::new(&self.scope, &self.token, &self.debug_registry)
     }
 
     /// Says this segment answers `M`, and how.
@@ -245,11 +247,13 @@ impl FeatureInitContext {
     }
 
     pub fn subscribe<M: Event>(&self, callback: impl Fn(M) + 'static) {
+        self.scope.note_listener(name::<M>(), None, Bus::Window);
         self.scope
             .own_subscription(self.event_bus.subscribe_fn(callback));
     }
 
     pub fn subscribe_global<M: Event>(&self, callback: impl Fn(M) + 'static) {
+        self.scope.note_listener(name::<M>(), None, Bus::Global);
         self.scope.own(GlobalEventBus::subscribe_fn(callback));
     }
 
@@ -258,13 +262,22 @@ impl FeatureInitContext {
         A: Handler<M> + 'static,
         M: Event,
     {
+        self.scope
+            .note_listener(name::<M>(), Some(name::<A>()), Bus::Global);
         self.scope.own(GlobalEventBus::subscribe::<A, M>(addr));
     }
 
     pub fn spawn_actor<A: ManagedActor + Debug + 'static>(&self, actor: A) -> Addr<A> {
         let addr = Addr::new_managed_scoped(actor, self.token.clone());
         let id = addr.id();
-        self.debug_registry.register(&addr);
+        self.debug_registry.register_owned(
+            &addr,
+            Owner {
+                scope: Some(self.scope.key()),
+                feature: self.scope.current_feature(),
+                drives: None,
+            },
+        );
         // Unregister from the window-wide debug snapshot registry before the
         // scope-owned Addr is disposed, otherwise the registry's cloned Addr
         // keeps the actor alive after navigation.
@@ -274,6 +287,47 @@ impl FeatureInitContext {
         });
         self.scope.own(addr.clone());
         addr
+    }
+
+    /// Sends `message()` to `addr` every `period`, for as long as this scope
+    /// lives.
+    #[track_caller]
+    pub fn every<A, M>(
+        &self,
+        period: impl Into<Period>,
+        addr: &Addr<A>,
+        message: impl Fn() -> M + 'static,
+    ) -> Timer
+    where
+        A: Handler<M>,
+        M: guinea_core::actor::Message + Send + 'static,
+    {
+        let addr = addr.clone();
+        self.start_timer(Location::caller(), period.into(), move || addr.send(message()))
+    }
+
+    /// Runs `run` every `period`, for as long as this scope lives.
+    #[track_caller]
+    pub fn repeat(&self, period: impl Into<Period>, run: impl FnMut() + 'static) -> Timer {
+        self.start_timer(Location::caller(), period.into(), run)
+    }
+
+    fn start_timer(
+        &self,
+        place: &'static Location<'static>,
+        period: Period,
+        run: impl FnMut() + 'static,
+    ) -> Timer {
+        let (ticking, timer) = timers::start(
+            place,
+            self.scope.current_feature(),
+            Some(self.scope.key()),
+            period,
+            run,
+        );
+        self.scope.own(ticking);
+
+        timer
     }
 }
 

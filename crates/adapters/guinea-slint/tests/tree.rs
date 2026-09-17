@@ -42,7 +42,7 @@ slint::slint! {
 
 /// A reducer with nothing but a string in it - enough to watch a binding
 /// reach a global.
-#[derive(Default)]
+#[derive(Clone, Default, Debug)]
 struct Title(String);
 
 impl Reducer for Title {

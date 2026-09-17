@@ -73,6 +73,9 @@ impl<Req: RpcCall> RpcRequest<Req> {
 /// exclusive for a given `Req` (implementing both would conflict on the
 /// same `Handler<RpcRequest<Req>>` impl).
 pub trait RpcHandler<Req: RpcCall>: 'static {
+    /// Where the handler was written; `#[handler]` fills it in.
+    const DECLARED: Option<crate::actor::shape::Declared> = None;
+
     fn handle_rpc(&mut self, ctx: Context<Self, Req>) -> Req::Response
     where
         Self: Sized;
@@ -83,6 +86,8 @@ where
     A: RpcHandler<Req> + 'static,
     Req: RpcCall,
 {
+    const DECLARED: Option<crate::actor::shape::Declared> = <A as RpcHandler<Req>>::DECLARED;
+
     fn handle(&mut self, ctx: Context<Self, RpcRequest<Req>>) {
         let addr = ctx.addr();
         let correlation_id = ctx.msg.correlation_id;

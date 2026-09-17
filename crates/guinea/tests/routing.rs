@@ -766,7 +766,7 @@ mod routing {
             static PROBE_DROPPED: RefCell<bool> = RefCell::new(false);
         }
 
-        #[derive(Default)]
+        #[derive(Clone, Default, Debug)]
         struct Probe {
             value: u32,
         }
@@ -871,7 +871,7 @@ mod a_reducer_is_plain_rust {
     /// declaration is here, and the central type of the feature - the one
     /// every other file names - is written rather than derived from a
     /// function's name by changing its case.
-    #[derive(Default)]
+    #[derive(Clone, Default, Debug)]
     struct Widget {
         value: i32,
     }

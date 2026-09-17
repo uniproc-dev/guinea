@@ -58,7 +58,7 @@ impl<T> From<Rc<RefCell<T>>> for StateHandle<T> {
 /// about state; a reducer cannot know who asked, only what changed.
 ///
 /// ```ignore
-/// #[derive(Default)]
+/// #[derive(Clone, Debug, Default)]
 /// pub struct Processes { pub items: Vec<String> }
 ///
 /// pub enum Refreshed { Items(Vec<String>) }
@@ -77,7 +77,10 @@ impl<T> From<Rc<RefCell<T>>> for StateHandle<T> {
 /// put the domain's plumbing into the one declaration that is supposed to be
 /// free of it. What relates an action to an actor is
 /// [`Action`](crate::feature::Action), declared where actions already live.
-pub trait Reducer: Default + 'static {
+///
+/// `Clone` because a reader is handed the state as it is now, shared, and a
+/// change made while a reader still holds it goes to a copy.
+pub trait Reducer: Clone + Default + std::fmt::Debug + 'static {
     /// What changes it. `Clone` because an observer is handed the update
     /// itself, and `reduce` consumes it - the copy is made only when
     /// something is actually observing.
@@ -86,16 +89,61 @@ pub trait Reducer: Default + 'static {
     fn reduce(&mut self, update: Self::Update);
 }
 
+/// Where a reducer's state lives: the current value, shared with whoever read
+/// it last.
+pub type Slot<R> = RefCell<Rc<R>>;
+
 struct Cell {
     state: Rc<dyn Any>,
     listeners: RefCell<Vec<(u64, Rc<dyn Fn()>)>>,
     observers: RefCell<Vec<(u64, Rc<dyn Fn(&dyn Any)>)>>,
 }
 
+/// What a cell holds, for printing it without knowing the type.
+#[derive(Clone, Copy)]
+struct Kind {
+    name: &'static str,
+    describe: fn(&dyn Any) -> String,
+}
+
+impl Kind {
+    fn of<R: Reducer>() -> Self {
+        Self {
+            name: std::any::type_name::<R>(),
+            describe: |state| match state.downcast_ref::<Slot<R>>() {
+                Some(cell) => match cell.try_borrow() {
+                    Ok(state) => format!("{:#?}", **state),
+                    Err(_) => "<being changed>".to_string(),
+                },
+                None => "<unknown>".to_string(),
+            },
+        }
+    }
+}
+
+/// A subscription a feature made, as devtools see it.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Listener {
+    pub event: &'static str,
+    /// The actor that listens, or `None` for a feature's own callback.
+    pub actor: Option<&'static str>,
+    pub bus: crate::trace::Bus,
+    pub feature: Option<&'static str>,
+}
+
+/// One reducer as devtools see it.
+#[derive(Clone, Debug, PartialEq)]
+pub struct DescribedState {
+    pub type_name: &'static str,
+    pub state: String,
+    /// The feature that claimed it; `None` for the segment's own.
+    pub feature: Option<&'static str>,
+}
+
 impl Cell {
     fn empty<R: Reducer>() -> Self {
         Cell {
-            state: Rc::new(RefCell::new(R::default())),
+            state: Rc::new(Slot::new(Rc::new(R::default()))),
             listeners: RefCell::new(Vec::new()),
             observers: RefCell::new(Vec::new()),
         }
@@ -105,6 +153,9 @@ impl Cell {
 #[derive(Default)]
 pub struct Scope {
     cells: RefCell<HashMap<TypeId, Cell>>,
+    /// Kept apart from `cells`: a cell restored from the state cache arrives
+    /// erased, and learns its type again at the next typed access.
+    kinds: RefCell<HashMap<TypeId, Kind>>,
     teardowns: RefCell<Vec<Box<dyn FnOnce()>>>,
     /// Features (identified by their `install` function's own type - see
     /// `FeatureInitContext::install`/`inherit` in the `guinea` crate) that
@@ -128,6 +179,10 @@ pub struct Scope {
     /// answer `Refresh`, and a flat map would let whichever installed last
     /// answer for both. Section 0 is the segment's own, outside any feature.
     sections: RefCell<Vec<HashMap<TypeId, Rc<dyn Any>>>>,
+    /// Which feature each section belongs to.
+    section_names: RefCell<Vec<Option<&'static str>>>,
+    /// What this scope's features subscribed to.
+    listeners: RefCell<Vec<Listener>>,
     /// Which section claimed each reducer - what turns "the state I was
     /// reading" into "the instance that owns it".
     owners: RefCell<HashMap<TypeId, usize>>,
@@ -187,8 +242,9 @@ impl Scope {
             .or_insert_with(|| self.current_section());
     }
 
-    /// Opens a section for a feature about to install. Returns its index.
-    pub fn open_section(&self) -> usize {
+    /// Opens a section for the feature `name` about to install. Returns its
+    /// index.
+    pub fn open_section(&self, name: &'static str) -> usize {
         let mut sections = self.sections.borrow_mut();
         if sections.is_empty() {
             // Section 0: whatever the segment claims outside any feature.
@@ -196,8 +252,51 @@ impl Scope {
         }
         sections.push(HashMap::new());
         let index = sections.len() - 1;
+        let mut names = self.section_names.borrow_mut();
+        names.resize(index + 1, None);
+        names[index] = Some(name);
         self.installing.borrow_mut().push(index);
         index
+    }
+
+    /// The feature a section belongs to; `None` for the segment's own.
+    pub fn section_name(&self, section: usize) -> Option<&'static str> {
+        self.section_names.borrow().get(section).copied().flatten()
+    }
+
+    /// Every feature installed here, in the order they were.
+    pub fn feature_names(&self) -> Vec<&'static str> {
+        self.section_names.borrow().iter().flatten().copied().collect()
+    }
+
+    /// The feature being installed right now, if any.
+    pub fn current_feature(&self) -> Option<&'static str> {
+        self.section_name(self.current_section())
+    }
+
+    /// Notes that whatever is installing listens to `event` on `bus` - through
+    /// `actor` when an actor does the listening.
+    pub fn note_listener(
+        &self,
+        event: &'static str,
+        actor: Option<&'static str>,
+        bus: crate::trace::Bus,
+    ) {
+        self.listeners.borrow_mut().push(Listener {
+            event,
+            actor,
+            bus,
+            feature: self.current_feature(),
+        });
+    }
+
+    pub fn listeners(&self) -> Vec<Listener> {
+        self.listeners.borrow().clone()
+    }
+
+    /// Identifies this scope for as long as it lives.
+    pub fn key(self: &Rc<Self>) -> usize {
+        Rc::as_ptr(self) as usize
     }
 
     pub fn close_section(&self) {
@@ -239,22 +338,53 @@ impl Scope {
         self.exports.borrow().contains(&TypeId::of::<R>())
     }
 
-    pub fn state<R: Reducer>(&self) -> Rc<RefCell<R>> {
+    fn note_kind<R: Reducer>(&self) {
+        self.kinds
+            .borrow_mut()
+            .entry(TypeId::of::<R>())
+            .or_insert_with(Kind::of::<R>);
+    }
+
+    /// Every reducer this scope holds whose type it has seen, printed.
+    pub fn describe_states(&self) -> Vec<DescribedState> {
+        let cells = self.cells.borrow();
+        let kinds = self.kinds.borrow();
+        let owners = self.owners.borrow();
+        let mut described: Vec<DescribedState> = cells
+            .iter()
+            .filter_map(|(type_id, cell)| {
+                let kind = kinds.get(type_id)?;
+                Some(DescribedState {
+                    type_name: kind.name,
+                    state: (kind.describe)(&*cell.state),
+                    feature: owners
+                        .get(type_id)
+                        .and_then(|section| self.section_name(*section)),
+                })
+            })
+            .collect();
+        described.sort_by_key(|state| state.type_name);
+        described
+    }
+
+    pub fn state<R: Reducer>(&self) -> Rc<Slot<R>> {
+        self.note_kind::<R>();
         let mut cells = self.cells.borrow_mut();
         let cell = cells.entry(TypeId::of::<R>()).or_insert_with(Cell::empty::<R>);
         cell.state
             .clone()
-            .downcast::<RefCell<R>>()
+            .downcast::<Slot<R>>()
             .expect("Scope cell type mismatch for this TypeId - unreachable, keyed by R")
     }
 
-    pub fn peek<R: Reducer>(&self) -> Option<Rc<RefCell<R>>> {
+    pub fn peek<R: Reducer>(&self) -> Option<Rc<Slot<R>>> {
+        self.note_kind::<R>();
         let cells = self.cells.borrow();
         let cell = cells.get(&TypeId::of::<R>())?;
         Some(
             cell.state
                 .clone()
-                .downcast::<RefCell<R>>()
+                .downcast::<Slot<R>>()
                 .expect("Scope cell type mismatch for this TypeId - unreachable, keyed by R"),
         )
     }
@@ -263,10 +393,11 @@ impl Scope {
     /// anything else touches `R` in this scope - overwrites any existing cell,
     /// dropping its listeners.
     pub fn seed<R: Reducer>(&self, state: R) {
+        self.note_kind::<R>();
         self.cells.borrow_mut().insert(
             TypeId::of::<R>(),
             Cell {
-                state: Rc::new(RefCell::new(state)),
+                state: Rc::new(Slot::new(Rc::new(state))),
                 listeners: RefCell::new(Vec::new()),
                 observers: RefCell::new(Vec::new()),
             },
@@ -314,7 +445,7 @@ impl Scope {
         let state = self.state::<R>();
         {
             let mut state = state.borrow_mut();
-            state.reduce(update);
+            Rc::make_mut(&mut state).reduce(update);
         }
 
         crate::notify::mark(self, TypeId::of::<R>(), carried);
@@ -532,6 +663,35 @@ mod tests {
                 CounterMsg::Set(v) => self.value = v,
             }
         }
+    }
+
+    #[test]
+    fn a_described_state_names_the_feature_that_claimed_it() {
+        #[derive(Clone, Default, Debug)]
+        struct Loose;
+
+        impl Reducer for Loose {
+            type Update = ();
+
+            fn reduce(&mut self, _: ()) {}
+        }
+
+        let scope = Scope::new();
+        scope.open_section("app::CounterFeature");
+        scope.note_reducer_owner::<Counter>();
+        scope.state::<Counter>();
+        scope.close_section();
+        scope.state::<Loose>();
+
+        let described = scope.describe_states();
+        let feature = |name: &str| {
+            described
+                .iter()
+                .find(|state| state.type_name.ends_with(name))
+                .map(|state| state.feature)
+        };
+        assert_eq!(feature("Counter"), Some(Some("app::CounterFeature")));
+        assert_eq!(feature("Loose"), Some(None));
     }
 
     #[test]

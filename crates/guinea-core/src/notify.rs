@@ -209,7 +209,7 @@ mod tests {
 
     use crate::scope::{Reducer, Scope};
 
-    #[derive(Default)]
+    #[derive(Clone, Default, Debug)]
     struct Count(u32);
 
     impl Reducer for Count {
@@ -221,7 +221,7 @@ mod tests {
     }
 
     /// A second cell, for watching one piece of state follow another.
-    #[derive(Default)]
+    #[derive(Clone, Default, Debug)]
     struct Mirror(u32);
 
     impl Reducer for Mirror {

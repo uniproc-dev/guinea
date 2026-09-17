@@ -188,11 +188,9 @@ fn subscriptions_taken_during_install_are_dropped_on_shutdown() {
 
     assert_eq!(GlobalEventBus::count_subscribers::<Tick>(), 1);
 
-    let reactor = crate::timers::Reactor::new();
     let shared = guinea_core::SharedState::new();
     let mut ctx = AppFeatureDeinitContext {
         token: token.clone(),
-        reactor: &reactor,
         shared: &shared,
     };
     lifecycle.shutdown(&token, &mut ctx);
@@ -302,4 +300,77 @@ fn meta_declared_after_a_plugin_is_still_there_for_it() {
         .expect("install");
 
     assert_eq!(taken(), vec!["read the identifier"]);
+}
+
+mod owners {
+    use guinea_core::actor::Context;
+    use guinea_core::messages;
+    use guinea_macros::{actor, handler};
+
+    use super::super::actors::{app_actors, forget_all};
+    use super::{AppFeature, FeatureBuilder, Plugin, PluginBuilder, builder};
+    use crate::feature::ContextActorExt;
+
+    messages! { Sweep }
+
+    #[derive(Debug, Default)]
+    pub struct Sweeper;
+
+    actor! {
+        Sweeper {
+            handlers { Sweep }
+        }
+    }
+
+    #[handler]
+    fn sweep(_this: &mut Sweeper, _ctx: Context<Sweeper, Sweep>) {}
+
+    #[derive(Debug, Default)]
+    pub struct Loose;
+
+    actor! {
+        Loose {
+            handlers { Sweep }
+        }
+    }
+
+    #[handler]
+    fn loose(_this: &mut Loose, _ctx: Context<Loose, Sweep>) {}
+
+    struct Housekeeping;
+
+    impl AppFeature for Housekeeping {
+        fn install(self, app: &mut FeatureBuilder) -> anyhow::Result<()> {
+            app.plugin(Tools)?;
+            app.spawn(Sweeper);
+            Ok(())
+        }
+    }
+
+    struct Tools;
+
+    impl Plugin for Tools {
+        const ID: &'static str = "test.tools";
+
+        fn build(self, app: &mut PluginBuilder) -> anyhow::Result<()> {
+            app.spawn(Loose);
+            Ok(())
+        }
+    }
+
+    #[test]
+    fn an_application_actor_names_the_feature_that_spawned_it() {
+        let mut app = builder();
+        app.feature(Housekeeping).unwrap();
+
+        let owner = |name: &str| {
+            app_actors()
+                .into_iter()
+                .find(|actor| actor.type_name.ends_with(name))
+                .map(|actor| actor.owner.feature)
+        };
+        assert_eq!(owner("Sweeper"), Some(Some(std::any::type_name::<Housekeeping>())));
+        assert_eq!(owner("Loose"), Some(None), "a plugin is not a feature");
+        forget_all();
+    }
 }

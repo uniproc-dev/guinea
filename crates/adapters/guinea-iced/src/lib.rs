@@ -267,14 +267,14 @@ impl<'a, Message: Send + 'static> Observing<'a, Message> {
 /// wants both.
 ///
 /// A snapshot rather than a borrow: a reducer is shared, lives in the scope
-/// and changes from under the view, so copying it is the only way to read it
-/// coherently. The node's own state is the opposite case - it is borrowed, see
-/// [`Nodes`].
-pub type Feature<R> = (R, Dispatch);
+/// and changes from under the view, so the view holds the state as it was
+/// when read, and a change goes to a copy. The node's own state is the
+/// opposite case - it is borrowed, see [`Nodes`].
+pub type Feature<R> = (Rc<R>, Dispatch);
 
 fn feature_of<R>(props: &SegmentProps<Iced>) -> Feature<R>
 where
-    R: Reducer + Clone,
+    R: Reducer,
 {
     let binding = props.binding::<R>();
     (binding.get(), binding.dispatch())
@@ -446,8 +446,7 @@ impl<L: Layout> Mount<Iced> for MountLayout<L> {
 }
 
 pub const fn segment_entry<P: Page>() -> SegmentEntry<Iced> {
-    SegmentEntry::new(
-        TypeId::of::<P>,
+    SegmentEntry::new::<P>(
         install_page::<P>,
         same_params::<P::Params>,
         &const { MountPage::<P>(PhantomData) },
@@ -456,8 +455,7 @@ pub const fn segment_entry<P: Page>() -> SegmentEntry<Iced> {
 }
 
 pub const fn layout_entry<L: Layout>() -> SegmentEntry<Iced> {
-    SegmentEntry::new(
-        TypeId::of::<L>,
+    SegmentEntry::new::<L>(
         install_layout::<L>,
         same_params::<L::Params>,
         &const { MountLayout::<L>(PhantomData) },

@@ -1,6 +1,6 @@
 use proc_macro::TokenStream;
 use proc_macro_crate::{FoundCrate, crate_name};
-use quote::quote;
+use quote::{quote, quote_spanned};
 use syn::{
     Error, FnArg, GenericArgument, ItemFn, PatType, PathArguments, ReturnType, Result, Type,
     spanned::Spanned,
@@ -54,6 +54,19 @@ fn expand_handler(item: ItemFn) -> Result<TokenStream> {
     let trait_generics = item.sig.generics.clone();
     let (impl_generics, _, where_clause) = trait_generics.split_for_impl();
 
+    let place = quote_spanned! {fn_name.span()=>
+        #gc::actor::shape::Declared {
+            file: ::core::file!(),
+            line: ::core::line!(),
+            column: ::core::column!(),
+            crate_dir: ::core::env!("CARGO_MANIFEST_DIR"),
+        }
+    };
+    let declared = quote! {
+        const DECLARED: ::core::option::Option<#gc::actor::shape::Declared> =
+            ::core::option::Option::Some(#place);
+    };
+
     let trait_impl = match (is_async, ret_ty) {
         // Fire-and-forget sync handler - unchanged from before the RPC
         // heuristic existed.
@@ -69,6 +82,8 @@ fn expand_handler(item: ItemFn) -> Result<TokenStream> {
             }
             quote! {
                 impl #impl_generics #gc::actor::Handler<#msg_ty> for #actor_ty #where_clause {
+                    #declared
+
                     fn handle(&mut self, ctx: #gc::actor::Context<Self, #msg_ty>) {
                         #fn_name(self, ctx);
                     }
@@ -92,6 +107,8 @@ fn expand_handler(item: ItemFn) -> Result<TokenStream> {
             }
             quote! {
                 impl #impl_generics #gc::actor::event_bus::rpc::RpcHandler<#msg_ty> for #actor_ty #where_clause {
+                    #declared
+
                     fn handle_rpc(&mut self, ctx: #gc::actor::Context<Self, #msg_ty>) -> #ret_ty {
                         #fn_name(self, ctx)
                     }
@@ -113,6 +130,8 @@ fn expand_handler(item: ItemFn) -> Result<TokenStream> {
             }
             quote! {
                 impl #impl_generics #gc::actor::Handler<#msg_ty> for #actor_ty #where_clause {
+                    #declared
+
                     fn handle(&mut self, ctx: #gc::actor::Context<Self, #msg_ty>) {
                         let actx = ctx.async_ctx();
                         let msg = ctx.msg;
@@ -147,6 +166,8 @@ fn expand_handler(item: ItemFn) -> Result<TokenStream> {
             }
             quote! {
                 impl #impl_generics #gc::actor::Handler<#gc::actor::event_bus::RpcRequest<#msg_ty>> for #actor_ty #where_clause {
+                    #declared
+
                     fn handle(&mut self, ctx: #gc::actor::Context<Self, #gc::actor::event_bus::RpcRequest<#msg_ty>>) {
                         let actx = ctx.async_ctx();
                         let correlation_id = ctx.msg.correlation_id;

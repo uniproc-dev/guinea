@@ -4,7 +4,7 @@ use crate::actor::traits::{Handler, Message};
 use crate::actor::{Context, UiThreadToken};
 use crate::actor::{ManagedActor, short_type_name};
 use crate::lifecycle_tracker::LifecycleTracker;
-use crate::trace::{DispatchMeta, current_meta, is_message_enabled, is_scope_enabled};
+use crate::trace::{self, Cause, Point};
 use std::any::Any;
 use std::cell::{Cell, RefCell};
 use std::collections::{HashMap, VecDeque};
@@ -87,12 +87,9 @@ impl<A: 'static> Addr<A> {
     where
         F: FnOnce(&mut A, &Context<A>) + Send + 'static,
     {
-        let meta =
-            current_meta().unwrap_or_else(|| DispatchMeta::capture_or_root("core.actor.apply"));
-
         self.queue.borrow_mut().push_back(Box::new(FnEnvelope {
             func: Some(f),
-            meta,
+            cause: trace::current(),
             phantom: PhantomData,
         }));
 
@@ -151,31 +148,24 @@ impl<A: 'static> Addr<A> {
         M: Message,
         A: Handler<M>,
     {
-        let meta =
-            current_meta().unwrap_or_else(|| DispatchMeta::capture_or_root("core.actor.send"));
-        self.send_with_meta(msg, meta);
+        self.send_under(msg, trace::current());
     }
 
-    pub(crate) fn send_with_meta<M>(&self, msg: M, meta: DispatchMeta)
+    /// Queues `msg` as caused by `parent`: for a message whose cause crossed a
+    /// thread or a background task to get here.
+    pub(crate) fn send_under<M>(&self, msg: M, parent: Option<Cause>)
     where
         M: Message,
         A: Handler<M>,
     {
-        let message_name = short_type_name::<M>();
-        if is_scope_enabled("core.actor.send") && is_message_enabled(message_name) {
-            tracing::debug!(
-                parent: &meta.span,
-                actor = short_type_name::<A>(),
-                message = message_name,
-                op_id = meta.op_id,
-                correlation_id = meta.correlation_id.as_deref().unwrap_or(""),
-                "actor.send"
-            );
-        }
+        let cause = trace::mark_under(parent, || Point::Send {
+            actor: short_type_name::<A>(),
+            message: short_type_name::<M>(),
+        });
 
         self.queue.borrow_mut().push_back(Box::new(MessageEnvelope {
             message: Some(msg),
-            meta,
+            cause,
         }));
 
         self.process_queue();
@@ -196,7 +186,10 @@ impl<A: 'static> Addr<A> {
     where
         A: std::fmt::Debug,
     {
-        format!("{:?}", self.state.borrow())
+        match self.state.try_borrow() {
+            Ok(state) => format!("{:#?}", *state),
+            Err(_) => "<handling a message>".to_string(),
+        }
     }
 
     pub fn dispose(&self) {

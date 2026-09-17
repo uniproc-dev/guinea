@@ -48,6 +48,16 @@ pub fn app_services() -> SharedState {
     })
 }
 
+/// The plugins the installed application was built with, by id.
+pub fn installed_plugins() -> Vec<&'static str> {
+    RUNTIME.with(|slot| {
+        slot.borrow()
+            .as_ref()
+            .map(|runtime| runtime.builder.plugin_ids())
+            .unwrap_or_default()
+    })
+}
+
 /// Runs cleanups and reports actors that outlived them. Called from the
 /// reactor's exit callback, on the UI thread.
 pub fn shutdown_current() {
@@ -65,7 +75,6 @@ pub(crate) fn teardown(
     let lifecycle = builder.lifecycle().clone();
     let mut ctx = AppFeatureDeinitContext {
         token: token.clone(),
-        reactor: crate::feature::FeatureContext::reactor(&**builder),
         shared: crate::feature::FeatureContext::shared(&**builder),
     };
 

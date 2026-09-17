@@ -44,6 +44,7 @@ pub trait Ui: Sized + 'static {
 
 pub struct SegmentEntry<U: Ui> {
     pub type_id: fn() -> TypeId,
+    pub type_name: fn() -> &'static str,
     /// What this segment captured, erased. The generated glue narrows it back
     /// to the segment's own params type; nothing hand-written sees `Any`.
     pub install: fn(&FeatureInitContext, &dyn Any) -> anyhow::Result<()>,
@@ -238,15 +239,15 @@ pub fn same_params<T: PartialEq + 'static>(left: &dyn Any, right: &dyn Any) -> b
 impl<U: Ui> SegmentEntry<U> {
     /// Built by the backend, which is where "page" and "layout" are defined -
     /// the router only needs something it can install and mount.
-    pub const fn new(
-        type_id: fn() -> TypeId,
+    pub const fn new<S: 'static>(
         install: fn(&FeatureInitContext, &dyn Any) -> anyhow::Result<()>,
         same_params: fn(&dyn Any, &dyn Any) -> bool,
         mount: &'static dyn Mount<U>,
         cache_state: bool,
     ) -> Self {
         Self {
-            type_id,
+            type_id: TypeId::of::<S>,
+            type_name: std::any::type_name::<S>,
             install,
             same_params,
             mount,
@@ -274,6 +275,12 @@ pub trait RouteChain<U: Ui> {
     /// What to call this route in a log or a navigation hook - present even
     /// for a route nothing outside the application can name.
     fn name(&self) -> &'static str;
+
+    /// The route with what it carries, for devtools. `routes!` prints it
+    /// with `Debug` where every field allows that.
+    fn describe(&self) -> String {
+        self.name().to_string()
+    }
 
     /// The address this route answers to, when it agreed to have one.
     fn link(&self) -> Option<String> {
@@ -705,6 +712,7 @@ struct Parked<U: Ui> {
     params: Vec<Box<dyn Any>>,
     shared_len: usize,
     route: Box<dyn Any>,
+    described: String,
     /// What the caller wanted done once this either happened or did not.
     settled: Box<dyn FnOnce(bool)>,
 }
@@ -737,6 +745,9 @@ pub struct Router<U: Ui> {
     route_hooks: RefCell<Vec<(usize, Rc<dyn Fn(Option<&str>, &str)>)>>,
     next_hook_id: std::cell::Cell<usize>,
     last_route: RefCell<Option<String>>,
+    /// The mounted route as [`RouteChain::describe`] put it, for devtools.
+    described: RefCell<Option<String>>,
+    listed: std::cell::Cell<bool>,
 }
 
 impl<U: Ui> Router<U> {
@@ -768,6 +779,8 @@ impl<U: Ui> Router<U> {
             route_hooks: RefCell::new(Vec::new()),
             next_hook_id: std::cell::Cell::new(0),
             last_route: RefCell::new(None),
+            described: RefCell::new(None),
+            listed: std::cell::Cell::new(false),
         }
     }
 
@@ -812,6 +825,14 @@ impl<U: Ui> Router<U> {
     pub fn host(&self) -> &FeatureHost {
         &self.host
     }
+
+    pub(crate) fn described(&self) -> Option<String> {
+        self.described.borrow().clone()
+    }
+
+    pub(crate) fn history_len(&self) -> (usize, usize) {
+        (self.back.borrow().len(), self.forward.borrow().len())
+    }
     
     /// Installs a chain directly, outside any route tree - one segment, as a
     /// rule. The backend builds the chain, since only it knows how a segment
@@ -847,6 +868,15 @@ impl<U: Ui> Router<U> {
     where
         R: RouteChain<U> + 'static,
     {
+        if !self.listed.replace(true) {
+            crate::devtools::register(self);
+        }
+        let _navigating = guinea_core::trace::enter(|| guinea_core::trace::Point::Navigate {
+            root: guinea_app::app::roots::label(self.root())
+                .unwrap_or_else(|| self.root().to_string()),
+            to: route.name().to_string(),
+        });
+
         let generation = self.generation.get() + 1;
         self.generation.set(generation);
 
@@ -874,6 +904,7 @@ impl<U: Ui> Router<U> {
 
         match verdict {
             Verdict::Allow => {
+                *self.described.borrow_mut() = Some(route.describe());
                 *self.prev_route.borrow_mut() = Some(Box::new(route));
                 let leaf = self.install_from(chain, shared_len, params)?;
                 settled(true);
@@ -892,6 +923,7 @@ impl<U: Ui> Router<U> {
                     chain,
                     params,
                     shared_len,
+                    described: route.describe(),
                     route: Box::new(route),
                     settled: Box::new(settled),
                 });
@@ -915,6 +947,7 @@ impl<U: Ui> Router<U> {
                         return;
                     }
 
+                    *router.described.borrow_mut() = Some(parked.described);
                     *router.prev_route.borrow_mut() = Some(parked.route);
                     match router.install_from(parked.chain, parked.shared_len, parked.params) {
                         Ok(_) => (parked.settled)(true),

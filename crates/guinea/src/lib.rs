@@ -20,7 +20,7 @@
 //! With no backend at all what is left is the router, the application runtime
 //! and the macros - which is what a port to another toolkit starts from.
 
-pub use guinea_router::{enter, headless, link, manifest, restore, router};
+pub use guinea_router::{devtools, enter, headless, link, manifest, restore, router};
 
 #[cfg(feature = "winui")]
 pub use guinea_winui as winui;
@@ -195,8 +195,7 @@ pub mod backend {
 }
 
 
-pub use guinea_app::{app, app_meta, feature, lifecycle_tracker};
-pub use guinea_app::timers as reactor;
+pub use guinea_app::{app, app_meta, feature, lifecycle_tracker, timers};
 
 pub use guinea_codegen as codegen;
 pub use guinea_core as core;

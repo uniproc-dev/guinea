@@ -125,8 +125,7 @@ pub trait Layout: Sized + 'static {
 }
 
 pub const fn segment_entry<P: Page>() -> SegmentEntry<Slint> {
-    SegmentEntry::new(
-        std::any::TypeId::of::<P>,
+    SegmentEntry::new::<P>(
         install_page::<P>,
         guinea_router::router::same_params::<P::Params>,
         &NothingToRender,
@@ -135,8 +134,7 @@ pub const fn segment_entry<P: Page>() -> SegmentEntry<Slint> {
 }
 
 pub const fn layout_entry<L: Layout>() -> SegmentEntry<Slint> {
-    SegmentEntry::new(
-        std::any::TypeId::of::<L>,
+    SegmentEntry::new::<L>(
         install_layout::<L>,
         guinea_router::router::same_params::<L::Params>,
         &NothingToRender,
@@ -302,9 +300,9 @@ impl<P: Segment> PageCx<P> {
     }
 
     /// A snapshot of the reducer's state.
-    pub fn read<R, I>(&self) -> R
+    pub fn read<R, I>(&self) -> Rc<R>
     where
-        R: Reducer + Clone,
+        R: Reducer,
         P: Reaches<R, I>,
     {
         self.binding::<R, I>().get()
@@ -404,9 +402,9 @@ impl<L: Segment> LayoutCx<L> {
         self.at.binding::<R>()
     }
 
-    pub fn read<R, I>(&self) -> R
+    pub fn read<R, I>(&self) -> Rc<R>
     where
-        R: Reducer + Clone,
+        R: Reducer,
         L: Reaches<R, I>,
     {
         self.binding::<R, I>().get()

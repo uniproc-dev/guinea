@@ -3,7 +3,7 @@ use crate::actor::event_bus::{EventBus, GlobalEventBus};
 use crate::actor::event_bus::subscribe::Event;
 use crate::actor::traits::{Handler, Message};
 use crate::actor::{AllowedSignal, ManagedActor, invoke_on_ui, short_type_name};
-use crate::trace::{DispatchMeta, current_meta, install_current_meta};
+use crate::trace::{self, Point};
 use std::marker::PhantomData;
 use tokio::sync::oneshot;
 
@@ -65,15 +65,10 @@ impl<A: 'static, M> Context<A, M> {
         Fut: Future<Output = Out> + 'static + Send,
     {
         let id = self.addr.id;
-        let meta = current_meta().unwrap_or_else(|| DispatchMeta::capture_or_root("core.actor.bg"));
-        let span = tracing::debug_span!(
-            parent: &meta.span,
-            "actor.bg",
-            actor = short_type_name::<A>(),
-            result = short_type_name::<Out>(),
-            op_id = meta.op_id,
-            correlation_id = meta.correlation_id.as_deref().unwrap_or(""),
-        );
+        let spawned = trace::mark(|| Point::Spawn {
+            actor: short_type_name::<A>(),
+            output: short_type_name::<Out>(),
+        });
 
         #[cfg(feature = "test-utils")]
         use crate::actor::event_bus::ACTIVE_TASKS;
@@ -82,20 +77,13 @@ impl<A: 'static, M> Context<A, M> {
         ACTIVE_TASKS.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
 
         tokio::spawn(async move {
-            let _meta_guard = install_current_meta(meta.clone());
-            let result = {
-                let _enter = span.enter();
-                fut.await
-            };
+            let result = trace::within(Some(spawned), fut).await;
 
             let return_task = move || {
                 REGISTRY.with(|reg| {
                     if let Some(boxed_addr) = reg.borrow().get(&id) {
                         if let Some(addr) = boxed_addr.downcast_ref::<Addr<A>>() {
-                            addr.send_with_meta(
-                                result,
-                                meta.child("core.actor.bg.result", None, None),
-                            );
+                            addr.send_under(result, Some(spawned));
                         }
                     }
 
@@ -112,14 +100,10 @@ impl<A: 'static, M> Context<A, M> {
     where
         Fut: Future<Output = ()> + 'static + Send,
     {
-        let meta = current_meta().unwrap_or_else(|| DispatchMeta::capture_or_root("core.actor.bg"));
-        let span = tracing::debug_span!(
-            parent: &meta.span,
-            "actor.bg.detached",
-            actor = short_type_name::<A>(),
-            op_id = meta.op_id,
-            correlation_id = meta.correlation_id.as_deref().unwrap_or(""),
-        );
+        let spawned = trace::mark(|| Point::Spawn {
+            actor: short_type_name::<A>(),
+            output: "()",
+        });
 
         #[cfg(feature = "test-utils")]
         use crate::actor::event_bus::ACTIVE_TASKS;
@@ -128,11 +112,7 @@ impl<A: 'static, M> Context<A, M> {
         ACTIVE_TASKS.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
 
         tokio::spawn(async move {
-            let _meta_guard = install_current_meta(meta.clone());
-            {
-                let _enter = span.enter();
-                fut.await;
-            }
+            trace::within(Some(spawned), fut).await;
 
             #[cfg(feature = "test-utils")]
             ACTIVE_TASKS.fetch_sub(1, std::sync::atomic::Ordering::SeqCst);
@@ -190,8 +170,10 @@ impl<A: 'static> AsyncContext<A> {
     {
         let (tx, rx) = oneshot::channel();
         let id = self.actor_id;
+        let cause = trace::current();
 
         invoke_on_ui(move || {
+            let _resumed = trace::resume(cause);
             REGISTRY.with(|reg| {
                 let reg_borrow = reg.borrow();
                 if let Some(boxed_addr) = reg_borrow.get(&id) {
@@ -215,8 +197,7 @@ impl<A: 'static> AsyncContext<A> {
         A: Handler<M>,
     {
         let id = self.actor_id;
-        let meta = current_meta()
-            .unwrap_or_else(|| DispatchMeta::capture_or_root("core.actor.async.send"));
+        let cause = trace::current();
 
         invoke_on_ui(move || {
             REGISTRY.with(|reg| {
@@ -225,7 +206,7 @@ impl<A: 'static> AsyncContext<A> {
                     .get(&id)
                     .and_then(|a| a.downcast_ref::<Addr<A>>())
                 {
-                    addr.send_with_meta(msg, meta);
+                    addr.send_under(msg, cause);
                 }
             });
         });
@@ -284,6 +265,51 @@ mod tests {
         addr.send(First);
 
         assert_eq!(&*log.borrow(), &["first", "second"]);
+    }
+
+    #[test]
+    fn a_chain_of_sends_is_traced_back_to_the_action_that_started_it() {
+        use crate::trace::{Cause, Record, Trace};
+
+        let seen = Rc::new(RefCell::new(Vec::<Record>::new()));
+        let sink = seen.clone();
+        trace::observe(move |trace| {
+            if let Trace::Begin(record) | Trace::Mark(record) = trace {
+                sink.borrow_mut().push(record.clone());
+            }
+        });
+
+        let addr = Addr::new_scoped(
+            Chain {
+                log: Rc::new(RefCell::new(Vec::new())),
+            },
+            UiThreadToken::dangerously_create_token_unchecked(),
+        );
+        {
+            let _action = trace::enter(|| Point::Action { message: "First" });
+            addr.send(First);
+        }
+        trace::stop_observing();
+
+        let seen = seen.borrow();
+        let find = |wanted: &dyn Fn(&Point) -> bool| -> &Record {
+            seen.iter().find(|record| wanted(&record.point)).expect("recorded")
+        };
+        let parent = |record: &Record| -> Option<Cause> { record.parent };
+
+        let action = find(&|p| matches!(p, Point::Action { .. }));
+        let send_first = find(&|p| matches!(p, Point::Send { message, .. } if message.ends_with("First")));
+        let handle_first =
+            find(&|p| matches!(p, Point::Handle { message, .. } if message.ends_with("First")));
+        let send_second =
+            find(&|p| matches!(p, Point::Send { message, .. } if message.ends_with("Second")));
+        let handle_second =
+            find(&|p| matches!(p, Point::Handle { message, .. } if message.ends_with("Second")));
+
+        assert_eq!(parent(send_first), Some(action.id));
+        assert_eq!(parent(handle_first), Some(send_first.id));
+        assert_eq!(parent(send_second), Some(handle_first.id));
+        assert_eq!(parent(handle_second), Some(send_second.id));
     }
 
     #[test]

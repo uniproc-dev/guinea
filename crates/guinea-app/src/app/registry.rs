@@ -33,6 +33,12 @@ pub(crate) enum Admission {
 }
 
 impl Registry {
+    pub(crate) fn plugin_ids(&self) -> Vec<&'static str> {
+        let mut ids: Vec<&'static str> = self.plugins.keys().copied().collect();
+        ids.sort_unstable();
+        ids
+    }
+
     pub(crate) fn current(&self) -> &'static str {
         self.stack.last().map(|unit| unit.label()).unwrap_or("app root")
     }
@@ -69,6 +75,14 @@ impl Registry {
             return Admission::AlreadyInstalled;
         }
         Admission::Proceed
+    }
+
+    /// The feature being installed, unless a plugin it pulled in is.
+    pub(crate) fn installing_feature(&self) -> Option<&'static str> {
+        match self.stack.last() {
+            Some(Unit::Feature(name)) => Some(*name),
+            _ => None,
+        }
     }
 
     pub(crate) fn enter(&mut self, unit: Unit) {

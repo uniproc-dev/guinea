@@ -1,6 +1,7 @@
 pub mod actor;
 pub mod binding;
 pub mod feature;
+pub mod devtools;
 pub mod guard;
 pub mod lifecycle_tracker;
 pub mod load;

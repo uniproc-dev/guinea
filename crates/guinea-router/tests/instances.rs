@@ -25,15 +25,21 @@ messages! { Refresh }
 
 /// Which list. A marker, not a string - the same answer Riverpod reached, and
 /// the one place every DI surveyed grew a stringly-typed escape hatch.
-#[derive(Default)]
+#[derive(Default, Debug)]
 pub struct Recent;
-#[derive(Default)]
+#[derive(Default, Debug)]
 pub struct Archived;
 
 /// One reducer type per instance, for free: the marker is part of the type.
 pub struct List<Which> {
     rows: Vec<String>,
     which: PhantomData<fn() -> Which>,
+}
+
+impl<Which> std::fmt::Debug for List<Which> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("List").field("rows", &self.rows).finish()
+    }
 }
 
 impl<Which> Default for List<Which> {

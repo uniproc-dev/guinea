@@ -20,7 +20,7 @@ thread_local! {
     static TORN_DOWN: Cell<bool> = const { Cell::new(false) };
 }
 
-#[derive(Default)]
+#[derive(Clone, Default, Debug)]
 struct Marker(u32);
 
 impl Reducer for Marker {

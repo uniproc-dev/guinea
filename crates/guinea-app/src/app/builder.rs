@@ -11,7 +11,6 @@ use guinea_core::actor::{Addr, Handler, UiThreadToken};
 
 use crate::feature::{AppFeatureDeinitContext, FeatureContext};
 use crate::lifecycle_tracker::AppLifecycle;
-use crate::timers::Reactor;
 
 use super::plugin::{AppFeature, ErasedFeature, ErasedPlugin, Plugin};
 use super::registry::{Admission, Registry, Unit};
@@ -19,7 +18,6 @@ use super::registry::{Admission, Registry, Unit};
 /// What a plugin may do during installation.
 pub struct PluginBuilder {
     token: UiThreadToken,
-    reactor: Reactor,
     shared: SharedState,
     lifecycle: AppLifecycle,
     registry: Rc<RefCell<Registry>>,
@@ -34,7 +32,6 @@ impl PluginBuilder {
     pub(crate) fn new(token: UiThreadToken, lifecycle: AppLifecycle) -> Self {
         Self {
             token,
-            reactor: Reactor::new(),
             shared: SharedState::new(),
             lifecycle,
             registry: Rc::new(RefCell::new(Registry::default())),
@@ -43,6 +40,10 @@ impl PluginBuilder {
 
     pub(crate) fn lifecycle(&self) -> &AppLifecycle {
         &self.lifecycle
+    }
+
+    pub(crate) fn plugin_ids(&self) -> Vec<&'static str> {
+        self.registry.borrow().plugin_ids()
     }
 
     pub fn plugin<P: Plugin>(&mut self, plugin: P) -> anyhow::Result<&mut Self> {
@@ -190,11 +191,11 @@ impl FeatureContext for PluginBuilder {
         &self.lifecycle
     }
 
-    fn reactor(&self) -> &Reactor {
-        &self.reactor
-    }
-
     fn shared(&self) -> &SharedState {
         &self.shared
+    }
+
+    fn installing(&self) -> Option<&'static str> {
+        self.registry.borrow().installing_feature()
     }
 }

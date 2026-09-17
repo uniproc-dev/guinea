@@ -107,8 +107,7 @@ pub trait Layout: Sized + 'static {
 }
 
 pub const fn segment_entry<P: Page>() -> SegmentEntry<Egui> {
-    SegmentEntry::new(
-        std::any::TypeId::of::<P>,
+    SegmentEntry::new::<P>(
         install_page::<P>,
         guinea_router::router::same_params::<P::Params>,
         &const { MountPage::<P>(std::marker::PhantomData) },
@@ -117,8 +116,7 @@ pub const fn segment_entry<P: Page>() -> SegmentEntry<Egui> {
 }
 
 pub const fn layout_entry<L: Layout>() -> SegmentEntry<Egui> {
-    SegmentEntry::new(
-        std::any::TypeId::of::<L>,
+    SegmentEntry::new::<L>(
         install_layout::<L>,
         guinea_router::router::same_params::<L::Params>,
         &const { MountLayout::<L>(std::marker::PhantomData) },
@@ -205,9 +203,12 @@ impl<P: Segment> PageCx<'_, P> {
     /// or a segment above listed it in `Exports`. The `_` is [`Reaches`]'s
     /// index, which says which of several impls applied - Rust has no partial
     /// turbofish, so it has to be written.
-    pub fn state<R, I>(&self) -> (R, guinea_core::feature::Dispatch)
+    ///
+    /// The state comes shared, not copied: reading it every frame costs a
+    /// count, and a change made mid-frame goes to a copy.
+    pub fn state<R, I>(&self) -> (std::rc::Rc<R>, guinea_core::feature::Dispatch)
     where
-        R: Reducer + Clone,
+        R: Reducer,
         P: Reaches<R, I>,
     {
         let binding = self.props.binding::<R>();
@@ -238,9 +239,9 @@ pub struct LayoutCx<'a, L> {
 
 impl<L: Segment> LayoutCx<'_, L> {
     /// See [`PageCx::state`].
-    pub fn state<R, I>(&self) -> (R, guinea_core::feature::Dispatch)
+    pub fn state<R, I>(&self) -> (std::rc::Rc<R>, guinea_core::feature::Dispatch)
     where
-        R: Reducer + Clone,
+        R: Reducer,
         L: Reaches<R, I>,
     {
         let binding = self.props.binding::<R>();

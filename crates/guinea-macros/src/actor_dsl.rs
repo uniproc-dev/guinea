@@ -1,6 +1,6 @@
 use proc_macro::TokenStream as TokenStream1;
 use proc_macro2::{Delimiter, Ident, Span, TokenStream, TokenTree};
-use quote::{format_ident, quote};
+use quote::{format_ident, quote, quote_spanned};
 use winnow::error::{ContextError, ErrMode};
 use winnow::prelude::*;
 use winnow::token::any;
@@ -462,6 +462,56 @@ fn expand(manifest: Manifest) -> syn::Result<TokenStream> {
         }
     });
 
+    let channel_of = |channel: &Channel| match channel {
+        Channel::Send => quote!(#gc::actor::shape::Channel::Send),
+        Channel::Bg => quote!(#gc::actor::shape::Channel::Bg),
+        Channel::Emit => quote!(#gc::actor::shape::Channel::Emit),
+        Channel::Ask => quote!(#gc::actor::shape::Channel::Ask),
+    };
+    let shape_handles = handlers.iter().map(|decl| {
+        let msg = &decl.msg;
+        let edges = match &decl.edges {
+            None => quote!(::core::option::Option::None),
+            Some(edges) => {
+                let edges = edges.iter().map(|edge| {
+                    let channel = channel_of(&edge.channel);
+                    let target = &edge.target;
+                    let looping = edge.is_loop;
+                    quote! {
+                        #gc::actor::shape::Edge {
+                            channel: #channel,
+                            target: #gc::actor::shape::name::<#target>,
+                            looping: #looping,
+                        }
+                    }
+                });
+                quote!(::core::option::Option::Some(&[#(#edges),*]))
+            }
+        };
+        quote! {
+            #gc::actor::shape::Handles {
+                message: #gc::actor::shape::name::<#msg>,
+                edges: #edges,
+                declared: <#self_ty as #gc::actor::Handler<#msg>>::DECLARED,
+            }
+        }
+    });
+    let shape_publishes = publishes
+        .iter()
+        .map(|msg| quote!(#gc::actor::shape::name::<#msg>));
+    let shape_subscribes = subscribes
+        .iter()
+        .map(|msg| quote!(#gc::actor::shape::name::<#msg>));
+
+    let declared = quote_spanned! {ident.span()=>
+        #gc::actor::shape::Declared {
+            file: ::core::file!(),
+            line: ::core::line!(),
+            column: ::core::column!(),
+            crate_dir: ::core::env!("CARGO_MANIFEST_DIR"),
+        }
+    };
+
     let bus_ty = if subscribes.is_empty() {
         quote!(())
     } else {
@@ -521,6 +571,12 @@ fn expand(manifest: Manifest) -> syn::Result<TokenStream> {
             type Handlers = #handlers_marker;
             type Signals = #signals_marker;
             type Flow = #flow_ty;
+            const SHAPE: #gc::actor::shape::Shape = #gc::actor::shape::Shape {
+                handles: &[#(#shape_handles),*],
+                publishes: &[#(#shape_publishes),*],
+                subscribes: &[#(#shape_subscribes),*],
+                declared: ::core::option::Option::Some(#declared),
+            };
         }
 
         const _: () = {

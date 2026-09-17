@@ -6,6 +6,7 @@
 //! this backend never labelled its root; a window is a component root now, and
 //! [`run`] is an ordinary `run` like the other four backends have.
 
+mod devtools;
 mod dispatching;
 mod run;
 mod winui;

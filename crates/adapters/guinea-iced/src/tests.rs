@@ -18,7 +18,7 @@ use crate::{
 
 /// A list the domain owns and replaces wholesale - the shape the coherence
 /// rule exists for.
-#[derive(Default)]
+#[derive(Clone, Default, Debug)]
 struct Domain(Vec<u32>);
 
 #[derive(Clone)]

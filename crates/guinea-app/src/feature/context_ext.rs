@@ -1,4 +1,6 @@
-use crate::timers::{LoopHandle, Reactor};
+use std::panic::Location;
+
+use crate::timers::{self, Period, Timer};
 use guinea_core::SharedState;
 use guinea_core::actor::{Addr, Handler, ManagedActor, Message, UiThreadToken};
 use guinea_core::lifecycle_tracker::LifecycleTracker;
@@ -7,26 +9,30 @@ pub trait FeatureContext {
     type Tracker: LifecycleTracker;
     fn token(&self) -> UiThreadToken;
     fn tracker(&self) -> &Self::Tracker;
-    fn reactor(&self) -> &Reactor;
     fn shared(&self) -> &SharedState;
-}
 
+    /// The feature being installed, which owns what is spawned now.
+    fn installing(&self) -> Option<&'static str> {
+        None
+    }
+}
 
 pub struct ActorBuilder<'a, Ctx: FeatureContext, A: ManagedActor> {
     ctx: &'a mut Ctx,
     actor: A,
 }
 
-impl<'a, Ctx: FeatureContext, A: ManagedActor> ActorBuilder<'a, Ctx, A> {
+impl<'a, Ctx: FeatureContext, A: ManagedActor + std::fmt::Debug> ActorBuilder<'a, Ctx, A> {
     pub fn build(self) -> Addr<A> {
         let addr = Addr::new_managed(self.actor, self.ctx.token(), self.ctx.tracker());
         self.ctx.tracker().own_actor(&addr);
+        crate::app::actors::register(&addr, self.ctx.installing());
         addr
     }
 }
 
 pub trait ContextActorExt: FeatureContext + Sized {
-    fn spawn<A: ManagedActor>(&mut self, actor: A) -> Addr<A> {
+    fn spawn<A: ManagedActor + std::fmt::Debug>(&mut self, actor: A) -> Addr<A> {
         self.actor_builder(actor).build()
     }
 
@@ -37,36 +43,43 @@ pub trait ContextActorExt: FeatureContext + Sized {
 
 impl<Ctx: FeatureContext> ContextActorExt for Ctx {}
 
-pub trait ContextReactorExt: FeatureContext {
-    fn spawn_periodic_send<A, M>(
+/// Timers that live as long as the application.
+pub trait ContextTimersExt: FeatureContext {
+    /// Sends `message()` to `addr` every `period`.
+    ///
+    /// Known by where it is called from, and by the feature being installed.
+    #[track_caller]
+    fn every<A, M>(
         &mut self,
+        period: impl Into<Period>,
         addr: &Addr<A>,
-        interval: impl Fn() -> u64 + 'static,
-        active: impl Fn() -> bool + 'static,
-        msg_factory: impl Fn() -> M + Send + 'static,
-    ) where
+        message: impl Fn() -> M + 'static,
+    ) -> Timer
+    where
         A: Handler<M>,
         M: Message + Send + 'static,
     {
         let addr = addr.clone();
-        let handle: LoopHandle = self.reactor().add_loop(interval, active, move || {
-            addr.send(msg_factory());
-        });
-        self.tracker().track_loop(handle);
+        start(self, Location::caller(), period.into(), move || addr.send(message()))
     }
 
-    fn spawn_heartbeat<A, M>(
-        &mut self,
-        addr: &Addr<A>,
-        interval: impl Fn() -> u64 + 'static,
-        msg_factory: impl Fn() -> M + Send + 'static,
-    ) where
-        A: Handler<M>,
-        M: Message + Send + 'static,
-    {
-        self.spawn_periodic_send(addr, interval, || true, msg_factory);
+    /// Runs `run` every `period`.
+    #[track_caller]
+    fn repeat(&mut self, period: impl Into<Period>, run: impl FnMut() + 'static) -> Timer {
+        start(self, Location::caller(), period.into(), run)
     }
 }
 
-impl<Ctx: FeatureContext> ContextReactorExt for Ctx {}
+fn start<Ctx: FeatureContext + ?Sized>(
+    ctx: &Ctx,
+    place: &'static Location<'static>,
+    period: Period,
+    run: impl FnMut() + 'static,
+) -> Timer {
+    let (ticking, timer) = timers::start(place, ctx.installing(), None, period, run);
+    ctx.tracker().track_loop(ticking);
 
+    timer
+}
+
+impl<Ctx: FeatureContext> ContextTimersExt for Ctx {}

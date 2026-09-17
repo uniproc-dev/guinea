@@ -6,11 +6,11 @@
 //! synchronous first call followed by pushes. [`ReducerBinding`] is the
 //! primitive all three are built on.
 
-use std::cell::{Ref, RefCell};
+use std::cell::Ref;
 use std::rc::{Rc, Weak};
 
 use crate::feature::Dispatch;
-use crate::scope::{DropGuard, Reducer, Scope, Subscription};
+use crate::scope::{DropGuard, Reducer, Scope, Slot, Subscription};
 
 /// A handle to one reducer's state and actions inside one scope.
 ///
@@ -22,7 +22,7 @@ use crate::scope::{DropGuard, Reducer, Scope, Subscription};
 /// wiring it by hand.
 pub struct ReducerBinding<R: Reducer> {
     owner: Weak<Scope>,
-    state: Rc<RefCell<R>>,
+    state: Rc<Slot<R>>,
     dispatch: Dispatch,
 }
 
@@ -45,17 +45,14 @@ impl<R: Reducer> ReducerBinding<R> {
         }
     }
 
-    /// Borrows the state in place - no clone, for backends that read every
-    /// frame.
+    /// Borrows the state in place, for as long as nothing changes it.
     pub fn peek(&self) -> Ref<'_, R> {
-        self.state.borrow()
+        Ref::map(self.state.borrow(), |state| &**state)
     }
 
-    /// A snapshot, for backends that memoise on equality.
-    pub fn get(&self) -> R
-    where
-        R: Clone,
-    {
+    /// The state as it is now, shared rather than copied. A change made while
+    /// it is held goes to a copy, so what was read stays as it was.
+    pub fn get(&self) -> Rc<R> {
         self.state.borrow().clone()
     }
 
@@ -84,7 +81,10 @@ impl<R: Reducer> ReducerBinding<R> {
         };
 
         let state = self.state.clone();
-        scope.subscribe::<R>(move || f(&state.borrow()))
+        scope.subscribe::<R>(move || {
+            let now = state.borrow().clone();
+            f(&now)
+        })
     }
 
     /// Like [`Self::on_change`], but the subscription lives as long as the
@@ -100,7 +100,7 @@ impl<R: Reducer> ReducerBinding<R> {
 
     /// Calls `f` immediately with the current state, then after every change.
     pub fn bind(&self, f: impl Fn(&R) + 'static) -> Subscription {
-        f(&self.state.borrow());
+        f(&self.get());
         self.on_change(f)
     }
 }
@@ -110,7 +110,7 @@ mod tests {
     use super::*;
     use std::cell::Cell;
 
-    #[derive(Default)]
+    #[derive(Clone, Default, Debug)]
     struct Counter(u32);
 
     impl Reducer for Counter {
@@ -187,5 +187,25 @@ mod tests {
         let _subscription = binding.bind(move |counter| recorder.set(Some(counter.0)));
 
         assert_eq!(seen.get(), Some(7));
+    }
+
+    #[test]
+    fn a_read_is_shared_and_a_change_while_it_is_held_goes_to_a_copy() {
+        let scope = Rc::new(Scope::new());
+        let binding = scope.binding::<Counter>();
+        binding.push(1);
+
+        let first = binding.get();
+        let again = binding.get();
+        assert!(Rc::ptr_eq(&first, &again), "reading twice copies nothing");
+
+        binding.push(2);
+        assert_eq!(first.0, 1, "what was read stays as it was");
+        assert_eq!(binding.get().0, 3);
+
+        drop((first, again));
+        let before = Rc::as_ptr(&binding.get());
+        binding.push(4);
+        assert_eq!(Rc::as_ptr(&binding.get()), before, "nobody held it, so no copy");
     }
 }
