@@ -10,6 +10,8 @@ use routes::Route;
 use guinea::app::GuineaApp;
 use guinea::winui::{Window, run};
 use processes_core::startup;
+use tracing_subscriber::layer::SubscriberExt;
+use tracing_subscriber::util::SubscriberInitExt;
 
 fn initial_route() -> Route {
     Route::Processes {
@@ -22,13 +24,17 @@ fn main() -> anyhow::Result<()> {
     // console to watch, and its stdout is block buffered - a line written now
     // would show up only when it exits.
     let log = std::fs::File::create("processes-app.log")?;
-    tracing_subscriber::fmt()
-        .with_writer(log)
-        .with_ansi(false)
-        .with_env_filter(
+    tracing_subscriber::registry()
+        .with(
             tracing_subscriber::EnvFilter::try_from_default_env()
                 .unwrap_or_else(|_| "info,guinea=debug,processes_core=debug".into()),
         )
+        .with(
+            tracing_subscriber::fmt::layer()
+                .with_writer(log)
+                .with_ansi(false),
+        )
+        .with(guinea_core::devtools::layer())
         .init();
 
     let app = GuineaApp::new()
@@ -40,6 +46,7 @@ fn main() -> anyhow::Result<()> {
                 .backend(guinea_plugin_store::amethystate::store::builder::Backend::Json),
         )
         .plugin(guinea_plugin_l10n::L10nPlugin::<processes_core::l10n::L10n>::new("en"))
+        .plugin(guinea_plugin_devtools::DevToolsPlugin::new())
         .feature(startup::Startup);
 
     run(

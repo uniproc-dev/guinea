@@ -57,7 +57,7 @@ impl Layout for TabsLayout {
                 // The context this layout was reached with, not one invented
                 // here: `routes!` derived it from the pages below.
                 let (tabs, _) = cx.state::<Tabs, _>();
-                let context = tabs.context;
+                let context = tabs.context.clone();
                 cx.navigate::<Route>().to(match tab {
                     Tab::Processes => Route::Processes { context },
                     Tab::Services => Route::Services { context },

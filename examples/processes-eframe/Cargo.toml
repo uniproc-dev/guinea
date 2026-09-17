@@ -16,6 +16,7 @@ processes-core = { path = "../processes-core" }
 guinea-plugin-store = { git = "https://github.com/uniproc-dev/guinea-plugins", tag = "v0.6.2" }
 guinea-plugin-l10n = { git = "https://github.com/uniproc-dev/guinea-plugins", tag = "v0.6.2" }
 guinea-plugin-window-state = { git = "https://github.com/uniproc-dev/guinea-plugins", tag = "v0.6.2" }
+guinea-plugin-devtools = { git = "https://github.com/uniproc-dev/guinea-plugins", tag = "v0.6.2" }
 # For `RingSeries` only, which is plain data.
 guinea-widgets = { git = "https://github.com/uniproc-dev/guinea-plugins", tag = "v0.6.2", default-features = false }
 eframe = "0.36"

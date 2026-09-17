@@ -33,8 +33,8 @@ impl Page for Services {
 
         let rows = services
             .items
-            .into_iter()
-            .map(|item| text(item).into())
+            .iter()
+            .map(|item| text(item.clone()).into())
             .collect::<Vec<Element<Self::Message>>>();
 
         scrollable(column(rows).spacing(4).padding(8))

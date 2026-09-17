@@ -7,6 +7,7 @@ use guinea_macros::{actor, handler};
 
 use super::contracts::{Metrics, Sampled};
 
+#[derive(Debug)]
 pub struct MetricsActor {
     push: Push<Metrics>,
     tick: u64,

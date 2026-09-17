@@ -1,8 +1,8 @@
 use std::sync::Arc;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 use guinea::app::{AppFeature, FeatureBuilder};
-use guinea::feature::{ContextActorExt, ContextReactorExt};
+use guinea::feature::{ContextActorExt, ContextTimersExt};
 use guinea_core::actor::Context;
 use guinea_core::messages;
 use guinea_macros::{actor, handler};
@@ -16,7 +16,7 @@ const LAUNCHES: [&str; 2] = ["app", "launches"];
 
 messages! { Sweep }
 
-#[derive(Default)]
+#[derive(Default, Debug)]
 pub struct Housekeeping {
     sweeps: u64,
 }
@@ -46,7 +46,8 @@ impl AppFeature for Startup {
         tracing::info!(launches, "started");
 
         let addr = app.spawn(Housekeeping::default());
-        app.spawn_heartbeat(&addr, || 5_000, || Sweep);
+        app.every(Duration::from_secs(5), &addr, || Sweep)
+            .named("housekeeping");
 
         app.subscribe_global::<ProcessKilled>(|event| {
             tracing::info!(process = %event.name, "process killed");

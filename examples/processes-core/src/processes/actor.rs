@@ -17,6 +17,7 @@ use crate::events::ProcessKilled;
 
 use super::contracts::{Kill, Listed, Processes, Refresh};
 
+#[derive(Debug)]
 pub struct ProcessActor {
     push: Push<Processes>,
     items: Vec<String>,

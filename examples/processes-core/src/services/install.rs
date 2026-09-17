@@ -14,9 +14,9 @@
 
 use std::cell::RefCell;
 use std::rc::Rc;
+use std::time::Duration;
 
 use guinea::feature::{Feature, FeatureInitContext};
-use guinea::reactor::Reactor;
 use guinea_core::feature::Push;
 use guinea_macros::installs;
 
@@ -67,14 +67,10 @@ impl Feature for ServicesFeature {
         cx.answers::<Refresh>(move |_| answering.borrow_mut().scan());
 
         // And the domain runs on its own schedule, which is the part an actor
-        // is usually reached for. The handle lives in the scope, so the loop
-        // stops when the page does.
+        // is usually reached for. The timer belongs to the scope, so it stops
+        // when the page does.
         let ticking = catalogue.clone();
-        cx.scope.own(Reactor::new().add_loop(
-            || 5_000,
-            || true,
-            move || ticking.borrow_mut().scan(),
-        ));
+        cx.repeat(Duration::from_secs(5), move || ticking.borrow_mut().scan());
 
         services.emit(Refresh);
         Ok(Self {
