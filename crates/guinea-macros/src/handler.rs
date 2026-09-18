@@ -10,14 +10,25 @@ pub fn generate_standalone_handler(item: ItemFn) -> TokenStream {
     expand_handler(item).unwrap_or_else(|err| err.to_compile_error().into())
 }
 
+/// Where `guinea-core` is, from wherever this is being expanded: the crate
+/// itself, a direct dependency, or the facade's `core`.
 pub(crate) fn guinea_core_crate_path() -> proc_macro2::TokenStream {
     match crate_name("guinea-core") {
-        Ok(FoundCrate::Itself) => quote!(crate),
+        Ok(FoundCrate::Itself) => return quote!(crate),
         Ok(FoundCrate::Name(name)) => {
             let ident = syn::Ident::new(&name, proc_macro2::Span::call_site());
-            quote!(::#ident)
+            return quote!(::#ident);
         }
-        Err(_) => quote!(::guinea_core),
+        Err(_) => {}
+    }
+
+    match crate_name("guinea") {
+        Ok(FoundCrate::Itself) => quote!(crate::core),
+        Ok(FoundCrate::Name(name)) => {
+            let ident = syn::Ident::new(&name, proc_macro2::Span::call_site());
+            quote!(::#ident::core)
+        }
+        Err(_) => quote!(::guinea::core),
     }
 }
 
@@ -135,7 +146,7 @@ fn expand_handler(item: ItemFn) -> Result<TokenStream> {
                     fn handle(&mut self, ctx: #gc::actor::Context<Self, #msg_ty>) {
                         let actx = ctx.async_ctx();
                         let msg = ctx.msg;
-                        tokio::spawn(async move {
+                        #gc::__private::tokio::spawn(async move {
                             #fn_name(actx, msg).await;
                         });
                     }

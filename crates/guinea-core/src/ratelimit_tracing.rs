@@ -14,10 +14,10 @@ macro_rules! ratelimit {
                     let gap = if last == 0 { 0 } else { now - last };
 
                     if last > 0 && gap > $timeout {
-                        tracing::error!(gap_s = gap, timeout_s = $timeout, "Silence timeout exceeded");
+                        $crate::__private::tracing::error!(gap_s = gap, timeout_s = $timeout, "Silence timeout exceeded");
                     }
 
-                    tracing::$tracing_macro!(timeout_s = $timeout, gap_s = gap, $($arg)+);
+                    $crate::__private::tracing::$tracing_macro!(timeout_s = $timeout, gap_s = gap, $($arg)+);
                 }
             }
         }

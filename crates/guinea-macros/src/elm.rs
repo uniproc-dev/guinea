@@ -91,11 +91,12 @@ pub fn node_impl(item: TokenStream1, kind: Kind, package: &str, facade: &str) ->
         // installs and then left `install` out has forgotten to install it,
         // and the missing trait item says so.
         if !has_install {
+            let gc = crate::handler::guinea_core_crate_path();
             item.items.push(parse_quote! {
                 fn install(
                     _ctx: &#adapter::FeatureInitContext,
                     _params: &Self::Params,
-                ) -> ::anyhow::Result<()> {
+                ) -> #gc::__private::anyhow::Result<()> {
                     ::std::result::Result::Ok(())
                 }
             });

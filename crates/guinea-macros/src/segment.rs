@@ -63,11 +63,12 @@ pub fn segment_impl(item: TokenStream1) -> TokenStream1 {
     // and then left `install` out has forgotten to install it, and the missing
     // trait item says so more clearly than anything written here could.
     if !declares_install {
+        let gc = crate::handler::guinea_core_crate_path();
         item.items.push(parse_quote! {
             fn install(
                 _ctx: &#context::FeatureInitContext,
                 _params: &Self::Params,
-            ) -> ::anyhow::Result<()> {
+            ) -> #gc::__private::anyhow::Result<()> {
                 ::std::result::Result::Ok(())
             }
         });

@@ -8,6 +8,7 @@ guinea-core.workspace = true
 guinea-app.workspace = true
 guinea-router.workspace = true
 guinea-codegen.workspace = true
+guinea-macros.workspace = true
 guinea-meta = { git = "https://github.com/uniproc-dev/guinea-meta", tag = "v0.1.0" }
 
 # Nothing else: this crate is re-exports. Anything it appears to need is a
@@ -50,7 +51,6 @@ anyhow.workspace = true
 guinea-router.workspace = true
 tempfile = "3.27.0"
 uuid.workspace = true
-guinea-macros.workspace = true
 inventory.workspace = true
 guinea-core = { workspace = true, features = ["test-utils"] }
 

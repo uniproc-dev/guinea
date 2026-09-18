@@ -23,3 +23,12 @@ pub use actor::{
     invoke_on_ui, set_ui_dispatcher,
 };
 pub use actor::event_bus::subscribe::BusSubscription;
+
+/// What macro output names, so that an application does not have to depend
+/// on it too. Not part of the API.
+#[doc(hidden)]
+pub mod __private {
+    pub use anyhow;
+    pub use tokio;
+    pub use tracing;
+}

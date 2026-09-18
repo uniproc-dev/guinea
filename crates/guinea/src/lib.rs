@@ -1,10 +1,13 @@
 //! guinea, assembled: the agnostic halves plus whichever backends this build
 //! renders with.
 //!
-//! An application depends on this crate and nothing else. A backend arrives as
-//! a feature, and while exactly one is enabled it also arrives as [`Backend`]
-//! and [`backend`] - which `routes!` targets by default, so a single-backend
-//! application names its toolkit nowhere.
+//! An application depends on this crate and nothing else: the macros are here,
+//! and what they expand to finds its way through here too. What almost every
+//! file needs is one import, `use guinea::prelude::*;`.
+//!
+//! A backend arrives as a feature, and while exactly one is enabled it also
+//! arrives as [`Backend`] and [`backend`] - which `routes!` targets by default,
+//! so a single-backend application names its toolkit nowhere.
 //!
 //! Enable two and that shorthand goes away on purpose: there is no sensible
 //! answer to "the backend" any more, and every route tree has to say which one
@@ -201,3 +204,29 @@ pub use guinea_codegen as codegen;
 pub use guinea_core as core;
 pub use guinea_core::uri;
 pub use guinea_meta as meta;
+
+pub use guinea_core::{messages, ratelimit, rpc_bind};
+pub use guinea_macros::{actor, handler, installs, routes, segment};
+
+/// The error type `install` returns, so that writing a feature does not need
+/// a dependency of its own.
+#[doc(no_inline)]
+pub use guinea_core::__private::anyhow;
+
+/// What a feature, an actor and an application are written with, whatever
+/// they draw with: `use guinea::prelude::*;`.
+///
+/// A backend's own types - `Page`, `PageCx`, `Layout` - are not here; they
+/// come from `guinea::backend`, or from the backend's module by name when
+/// there are several.
+pub mod prelude {
+    pub use guinea_app::app::{AppFeature, FeatureBuilder, GuineaApp, Plugin, PluginBuilder};
+    pub use guinea_app::feature::{ContextActorExt, ContextTimersExt, Feature, FeatureInitContext};
+    pub use guinea_app::timers::{Period, Timer};
+    pub use guinea_core::actor::event_bus::GlobalEventBus;
+    pub use guinea_core::actor::{Addr, AsyncContext, Context, Handler, Message};
+    pub use guinea_core::feature::{Bound, Dispatch, Push};
+    pub use guinea_core::__private::anyhow;
+    pub use guinea_core::{Load, Reducer, messages};
+    pub use guinea_macros::{actor, handler, installs, routes};
+}
