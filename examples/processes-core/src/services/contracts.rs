@@ -1,5 +1,4 @@
-use guinea_core::messages;
-use guinea_core::scope::Reducer;
+use guinea::prelude::{Reducer, messages};
 
 // The one action this feature answers. Who answers it is not written down
 // anywhere - see `install`.

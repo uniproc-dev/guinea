@@ -1,6 +1,4 @@
-use guinea::feature::{Feature, FeatureInitContext};
-use guinea_core::feature::Bound;
-use guinea_macros::installs;
+use guinea::prelude::*;
 
 use super::actor::{MetricsActor, Tick};
 use super::contracts;

@@ -8,10 +8,8 @@
 
 use std::rc::Rc;
 
-use guinea_core::actor::Context;
-use guinea_core::actor::event_bus::EventBus;
-use guinea_core::feature::Push;
-use guinea_macros::{actor, handler};
+use guinea::core::actor::event_bus::EventBus;
+use guinea::prelude::*;
 
 use crate::events::ProcessKilled;
 

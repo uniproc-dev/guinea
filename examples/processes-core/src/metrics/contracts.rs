@@ -1,4 +1,4 @@
-use guinea_core::scope::Reducer;
+use guinea::prelude::Reducer;
 use guinea_widgets::chart::RingSeries;
 
 #[derive(Default, Clone, PartialEq, Debug)]

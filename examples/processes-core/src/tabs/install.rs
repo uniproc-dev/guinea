@@ -1,9 +1,7 @@
 //! A feature with no actor and nothing to ask one - the chrome hears about
 //! the world through the bus and keeps a count.
 
-use guinea::feature::{Feature, FeatureInitContext};
-use guinea_macros::installs;
-use guinea_core::feature::Bound;
+use guinea::prelude::*;
 
 use crate::events::ProcessKilled;
 

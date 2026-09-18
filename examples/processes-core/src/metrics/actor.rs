@@ -1,9 +1,6 @@
 use std::time::{Duration, Instant};
 
-use guinea_core::actor::Context;
-use guinea_core::feature::Push;
-use guinea_core::messages;
-use guinea_macros::{actor, handler};
+use guinea::prelude::*;
 
 use super::contracts::{Metrics, Sampled};
 

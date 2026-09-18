@@ -1,11 +1,7 @@
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use guinea::app::{AppFeature, FeatureBuilder};
-use guinea::feature::{ContextActorExt, ContextTimersExt};
-use guinea_core::actor::Context;
-use guinea_core::messages;
-use guinea_macros::{actor, handler};
+use guinea::prelude::*;
 use guinea_plugin_store::Store;
 
 use crate::events::ProcessKilled;

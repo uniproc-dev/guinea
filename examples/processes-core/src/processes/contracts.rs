@@ -6,8 +6,7 @@
 //! was `ProcessesReducer`, produced by upper-camel-casing the name of a
 //! function. What is left is a struct, an enum, and an impl.
 
-use guinea_core::messages;
-use guinea_core::scope::Reducer;
+use guinea::prelude::{Reducer, messages};
 
 // What the actor answers to: kill the process with this pid, and list them
 // again. Which actor that is, is settled where the two are already listed

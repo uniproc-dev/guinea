@@ -802,6 +802,7 @@ dependencies = [
  "guinea-app",
  "guinea-codegen",
  "guinea-core",
+ "guinea-macros",
  "guinea-meta",
  "guinea-ratatui",
  "guinea-router",
@@ -1643,15 +1644,11 @@ dependencies = [
 name = "processes-core"
 version = "0.1.0"
 dependencies = [
- "anyhow",
  "guinea",
- "guinea-core",
- "guinea-macros",
  "guinea-plugin-l10n",
  "guinea-plugin-l10n-build",
  "guinea-plugin-store",
  "guinea-widgets",
- "inventory",
  "tokio",
  "tracing",
 ]

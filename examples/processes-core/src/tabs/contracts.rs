@@ -1,4 +1,4 @@
-use guinea_core::scope::Reducer;
+use guinea::prelude::Reducer;
 
 #[derive(Default, Clone, PartialEq, Debug)]
 pub struct Tabs {

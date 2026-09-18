@@ -1,4 +1,4 @@
-use guinea_core::actor::traits::Message;
+use guinea::prelude::Message;
 
 
 #[derive(Clone)]

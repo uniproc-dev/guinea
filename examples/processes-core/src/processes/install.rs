@@ -5,9 +5,7 @@
 //! unwired. `context` is what the route captured, handed over typed - the
 //! feature never sees an address, so there is no segment index to get wrong.
 
-use guinea::feature::{Feature, FeatureInitContext};
-use guinea_macros::installs;
-use guinea_core::feature::Bound;
+use guinea::prelude::*;
 
 use super::actor::ProcessActor;
 use super::contracts::{self, Refresh};

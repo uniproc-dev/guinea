@@ -16,9 +16,7 @@ use std::cell::RefCell;
 use std::rc::Rc;
 use std::time::Duration;
 
-use guinea::feature::{Feature, FeatureInitContext};
-use guinea_core::feature::Push;
-use guinea_macros::installs;
+use guinea::prelude::*;
 
 use super::contracts::{self, Listed, Refresh};
 
