@@ -128,6 +128,21 @@ pub fn routes(input: TokenStream) -> TokenStream {
     routes_dsl::routes_impl(input)
 }
 
+/// Puts a type on the global bus: `impl Event for T {}`.
+#[proc_macro_derive(Event)]
+pub fn event(item: TokenStream) -> TokenStream {
+    let input = parse_macro_input!(item as syn::DeriveInput);
+    let gc = handler::guinea_core_crate_path();
+
+    let name = &input.ident;
+    let (impl_generics, ty_generics, where_clause) = input.generics.split_for_impl();
+
+    quote::quote! {
+        impl #impl_generics #gc::actor::event_bus::Event for #name #ty_generics #where_clause {}
+    }
+    .into()
+}
+
 #[proc_macro_attribute]
 pub fn handler(_attr: TokenStream, item: TokenStream) -> TokenStream {
     let input = parse_macro_input!(item as ItemFn);

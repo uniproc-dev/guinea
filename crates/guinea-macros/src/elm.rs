@@ -76,6 +76,17 @@ pub fn node_impl(item: TokenStream1, kind: Kind, package: &str, facade: &str) ->
     let has_update = declared_fn("update");
     let has_install = declared_fn("install");
 
+    let gc = crate::handler::guinea_core_crate_path();
+    item.items.push(parse_quote! {
+        const DECLARED: ::core::option::Option<#gc::actor::shape::Declared> =
+            ::core::option::Option::Some(#gc::actor::shape::Declared {
+                file: ::core::file!(),
+                line: ::core::line!(),
+                column: ::core::column!(),
+                crate_dir: ::core::env!("CARGO_MANIFEST_DIR"),
+            });
+    });
+
     if kind == Kind::Page && !has_params {
         item.items.push(parse_quote!(
             type Params = ();
@@ -91,7 +102,6 @@ pub fn node_impl(item: TokenStream1, kind: Kind, package: &str, facade: &str) ->
         // installs and then left `install` out has forgotten to install it,
         // and the missing trait item says so.
         if !has_install {
-            let gc = crate::handler::guinea_core_crate_path();
             item.items.push(parse_quote! {
                 fn install(
                     _ctx: &#adapter::FeatureInitContext,

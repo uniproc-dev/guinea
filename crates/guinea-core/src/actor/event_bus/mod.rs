@@ -1,6 +1,6 @@
 use crate::actor::addr::Addr;
 use crate::actor::event_bus::subscribe::{
-    BusSubscription, Event, FnSubscriber, Subscriber, SubscriptionId, UntypedSubscriber,
+    BusSubscription, FnSubscriber, Subscriber, SubscriptionId, UntypedSubscriber,
 };
 use crate::actor::invoke_on_ui;
 use crate::actor::short_type_name;
@@ -16,6 +16,7 @@ pub mod builder;
 pub mod rpc;
 pub mod subscribe;
 pub use rpc::{AsyncBus, RpcCall, RpcRequest, RpcResponse};
+pub use subscribe::Event;
 
 #[cfg(feature = "test-utils")]
 pub static TEST_TASK_QUEUE: std::sync::LazyLock<std::sync::Mutex<Vec<Box<dyn FnOnce() + Send>>>> =
@@ -23,6 +24,33 @@ pub static TEST_TASK_QUEUE: std::sync::LazyLock<std::sync::Mutex<Vec<Box<dyn FnO
 
 #[cfg(feature = "test-utils")]
 pub static ACTIVE_TASKS: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+
+/// One background task, counted in [`ACTIVE_TASKS`] until this is dropped -
+/// whether the task answered or was cancelled.
+#[cfg(feature = "test-utils")]
+pub struct Counted;
+
+#[cfg(feature = "test-utils")]
+impl Counted {
+    pub fn new() -> Self {
+        ACTIVE_TASKS.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        Self
+    }
+}
+
+#[cfg(feature = "test-utils")]
+impl Default for Counted {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+#[cfg(feature = "test-utils")]
+impl Drop for Counted {
+    fn drop(&mut self) {
+        ACTIVE_TASKS.fetch_sub(1, std::sync::atomic::Ordering::SeqCst);
+    }
+}
 
 pub struct EventBus {
     subscribers: RefCell<HashMap<TypeId, Vec<Box<dyn UntypedSubscriber>>>>,
@@ -228,7 +256,13 @@ mod tests {
     use super::*;
     use std::cell::Cell as StdCell;
 
-    crate::messages! { Ping, Pong }
+    #[derive(Clone)]
+    struct Ping;
+    impl Event for Ping {}
+
+    #[derive(Clone)]
+    struct Pong;
+    impl Event for Pong {}
 
     #[test]
     fn dropping_the_handle_ends_the_subscription() {

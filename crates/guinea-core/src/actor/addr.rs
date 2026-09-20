@@ -1,6 +1,7 @@
+use crate::actor::cancel::Cancel;
 use crate::actor::envelope::{Envelope, FnEnvelope, MessageEnvelope};
 use crate::actor::event_bus::builder::EventSubscription;
-use crate::actor::traits::{Handler, Message};
+use crate::actor::traits::Handler;
 use crate::actor::{Context, UiThreadToken};
 use crate::actor::{ManagedActor, short_type_name};
 use crate::lifecycle_tracker::LifecycleTracker;
@@ -25,6 +26,7 @@ pub struct Addr<A: 'static> {
     queue: Rc<RefCell<VecDeque<Box<dyn Envelope<A>>>>>,
     is_processing: Rc<Cell<bool>>,
     counter: Rc<&'static str>,
+    cancel: Cancel,
 }
 
 impl<A: 'static> Clone for Addr<A> {
@@ -36,6 +38,7 @@ impl<A: 'static> Clone for Addr<A> {
             queue: self.queue.clone(),
             is_processing: self.is_processing.clone(),
             counter: self.counter.clone(),
+            cancel: self.cancel.clone(),
         }
     }
 }
@@ -72,6 +75,7 @@ impl<A: 'static> Addr<A> {
             queue: Rc::new(RefCell::new(VecDeque::new())),
             is_processing: Rc::new(Cell::new(false)),
             counter: Rc::new(short_type_name::<A>()),
+            cancel: Cancel::new(),
         };
 
         let addr_clone = addr.clone();
@@ -98,7 +102,7 @@ impl<A: 'static> Addr<A> {
 
     pub fn handler<M>(&self, msg: M) -> impl Fn() + 'static
     where
-        M: Message + Clone,
+        M: Clone + 'static,
         A: Handler<M>,
     {
         let addr = self.clone();
@@ -108,7 +112,7 @@ impl<A: 'static> Addr<A> {
     pub fn handler_with<M, T, F>(&self, f: F) -> impl Fn(T) + 'static
     where
         F: Fn(T) -> M + 'static,
-        M: Message,
+        M: 'static,
         A: Handler<M>,
     {
         let addr = self.clone();
@@ -118,7 +122,7 @@ impl<A: 'static> Addr<A> {
     pub fn handler_with2<M, T1, T2, F>(&self, f: F) -> impl Fn(T1, T2) + 'static
     where
         F: Fn(T1, T2) -> M + 'static,
-        M: Message,
+        M: 'static,
         A: Handler<M>,
     {
         let addr = self.clone();
@@ -127,7 +131,7 @@ impl<A: 'static> Addr<A> {
 
     pub fn send<M>(&self, msg: M)
     where
-        M: Message,
+        M: 'static,
         A: Handler<M>,
     {
         self.do_send(msg);
@@ -136,7 +140,7 @@ impl<A: 'static> Addr<A> {
     #[cfg(feature = "test-utils")]
     pub fn send_test<M>(&self, msg: M) -> crate::test_kit::Interaction<()>
     where
-        M: Message,
+        M: 'static,
         A: Handler<M>,
     {
         self.do_send(msg);
@@ -145,7 +149,7 @@ impl<A: 'static> Addr<A> {
 
     fn do_send<M>(&self, msg: M)
     where
-        M: Message,
+        M: 'static,
         A: Handler<M>,
     {
         self.send_under(msg, trace::current());
@@ -155,7 +159,7 @@ impl<A: 'static> Addr<A> {
     /// thread or a background task to get here.
     pub(crate) fn send_under<M>(&self, msg: M, parent: Option<Cause>)
     where
-        M: Message,
+        M: 'static,
         A: Handler<M>,
     {
         let cause = trace::mark_under(parent, || Point::Send {
@@ -182,6 +186,12 @@ impl<A: 'static> Addr<A> {
         self.id
     }
 
+    /// The token every task this actor spawned is guarded by; cancelled by
+    /// [`Addr::dispose`], and so by the teardown that owns the actor.
+    pub fn cancellation(&self) -> Cancel {
+        self.cancel.clone()
+    }
+
     pub fn debug_snapshot(&self) -> String
     where
         A: std::fmt::Debug,
@@ -192,7 +202,12 @@ impl<A: 'static> Addr<A> {
         }
     }
 
+    /// Takes the actor out of the registry and ends its background work: what
+    /// it spawned is dropped where it last awaited, instead of running on with
+    /// nowhere to answer.
     pub fn dispose(&self) {
+        self.cancel.cancel();
+
         REGISTRY.with(|reg| {
             reg.borrow_mut().remove(&self.id);
         });

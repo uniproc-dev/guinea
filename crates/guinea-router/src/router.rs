@@ -58,6 +58,10 @@ pub struct SegmentEntry<U: Ui> {
     /// Built by the backend: the agnostic half only calls it.
     pub mount: &'static dyn Mount<U>,
     pub cache_state: bool,
+    /// Where `routes!` listed this segment.
+    pub declared: Option<guinea_core::actor::shape::Declared>,
+    /// Where the segment itself was written, when `#[segment]` wrote it down.
+    pub written: Option<guinea_core::actor::shape::Declared>,
 }
 
 /// How a segment turns into a view.
@@ -252,7 +256,22 @@ impl<U: Ui> SegmentEntry<U> {
             same_params,
             mount,
             cache_state,
+            declared: None,
+            written: None,
         }
+    }
+
+    /// The same entry, knowing where `routes!` listed it.
+    pub const fn at(self, declared: guinea_core::actor::shape::Declared) -> Self {
+        Self {
+            declared: Some(declared),
+            ..self
+        }
+    }
+
+    /// The same entry, knowing where the segment itself was written.
+    pub const fn written(self, written: Option<guinea_core::actor::shape::Declared>) -> Self {
+        Self { written, ..self }
     }
 }
 

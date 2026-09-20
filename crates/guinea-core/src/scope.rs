@@ -8,6 +8,7 @@ use tokio::task::JoinHandle;
 
 use crate::actor::Addr;
 use crate::actor::event_bus::subscribe::BusSubscription;
+use crate::actor::shape::Declared;
 
 static NEXT_SUBSCRIBER_ID: AtomicU64 = AtomicU64::new(0);
 
@@ -138,6 +139,16 @@ pub struct DescribedState {
     pub state: String,
     /// The feature that claimed it; `None` for the segment's own.
     pub feature: Option<&'static str>,
+    /// Where it was claimed: the `cx.state::<R>()` that did it.
+    pub declared: Option<Declared>,
+}
+
+/// A feature installed in a scope, as devtools see it.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Installed {
+    pub name: &'static str,
+    /// Where `impl Feature` was written, when `#[installs]` wrote it.
+    pub declared: Option<Declared>,
 }
 
 impl Cell {
@@ -181,6 +192,10 @@ pub struct Scope {
     sections: RefCell<Vec<HashMap<TypeId, Rc<dyn Any>>>>,
     /// Which feature each section belongs to.
     section_names: RefCell<Vec<Option<&'static str>>>,
+    /// Where each section's feature was written.
+    section_declarations: RefCell<Vec<Option<Declared>>>,
+    /// Where each reducer was claimed.
+    declarations: RefCell<HashMap<TypeId, Declared>>,
     /// What this scope's features subscribed to.
     listeners: RefCell<Vec<Listener>>,
     /// Which section claimed each reducer - what turns "the state I was
@@ -242,9 +257,22 @@ impl Scope {
             .or_insert_with(|| self.current_section());
     }
 
+    /// Notes where reducer `R` was claimed, the first claim winning.
+    pub fn note_reducer_declared<R: 'static>(&self, declared: Declared) {
+        self.declarations.borrow_mut().entry(TypeId::of::<R>()).or_insert(declared);
+    }
+
+    /// The manifest directory of the feature installing now, for a claim that
+    /// only knows the file the compiler gave it.
+    pub fn current_crate_dir(&self) -> Option<&'static str> {
+        let section = self.current_section();
+        let declarations = self.section_declarations.borrow();
+        declarations.get(section).copied().flatten().map(|declared| declared.crate_dir)
+    }
+
     /// Opens a section for the feature `name` about to install. Returns its
     /// index.
-    pub fn open_section(&self, name: &'static str) -> usize {
+    pub fn open_section(&self, name: &'static str, declared: Option<Declared>) -> usize {
         let mut sections = self.sections.borrow_mut();
         if sections.is_empty() {
             // Section 0: whatever the segment claims outside any feature.
@@ -255,6 +283,11 @@ impl Scope {
         let mut names = self.section_names.borrow_mut();
         names.resize(index + 1, None);
         names[index] = Some(name);
+
+        let mut declarations = self.section_declarations.borrow_mut();
+        declarations.resize(index + 1, None);
+        declarations[index] = declared;
+
         self.installing.borrow_mut().push(index);
         index
     }
@@ -265,8 +298,20 @@ impl Scope {
     }
 
     /// Every feature installed here, in the order they were.
-    pub fn feature_names(&self) -> Vec<&'static str> {
-        self.section_names.borrow().iter().flatten().copied().collect()
+    pub fn features(&self) -> Vec<Installed> {
+        let declarations = self.section_declarations.borrow();
+
+        self.section_names
+            .borrow()
+            .iter()
+            .enumerate()
+            .filter_map(|(section, name)| {
+                Some(Installed {
+                    name: (*name)?,
+                    declared: declarations.get(section).copied().flatten(),
+                })
+            })
+            .collect()
     }
 
     /// The feature being installed right now, if any.
@@ -360,6 +405,7 @@ impl Scope {
                     feature: owners
                         .get(type_id)
                         .and_then(|section| self.section_name(*section)),
+                    declared: self.declarations.borrow().get(type_id).copied(),
                 })
             })
             .collect();
@@ -410,7 +456,7 @@ impl Scope {
     /// the answerer out of every signature the UI touches. `actor!` calls this
     /// for each handler it lists; a domain that runs on tasks, or a channel,
     /// or a plain closure over a `RefCell`, calls it itself.
-    pub fn answers<M: crate::actor::traits::Message>(&self, answer: impl Fn(M) + 'static) {
+    pub fn answers<M: 'static>(&self, answer: impl Fn(M) + 'static) {
         let answer: Rc<dyn Fn(M)> = Rc::new(answer);
         let section = self.current_section();
 
@@ -422,7 +468,7 @@ impl Scope {
     }
 
     /// What answers `M` in one section of this scope, if anything does.
-    pub fn answerer<M: crate::actor::traits::Message>(
+    pub fn answerer<M: 'static>(
         &self,
         section: usize,
     ) -> Option<Rc<dyn Fn(M)>> {
@@ -677,7 +723,7 @@ mod tests {
         }
 
         let scope = Scope::new();
-        scope.open_section("app::CounterFeature");
+        scope.open_section("app::CounterFeature", None);
         scope.note_reducer_owner::<Counter>();
         scope.state::<Counter>();
         scope.close_section();

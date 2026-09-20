@@ -15,7 +15,7 @@
 
 use std::sync::Arc;
 
-use guinea_core::actor::traits::Message;
+use guinea_core::actor::event_bus::Event;
 
 use super::roots::RootId;
 
@@ -82,7 +82,7 @@ pub struct WindowChanged {
     pub geometry: Geometry,
 }
 
-impl Message for WindowChanged {}
+impl Event for WindowChanged {}
 
 /// Commands to the windows an application's roots live in.
 ///

@@ -4,6 +4,7 @@ use guinea_widgets::chart::RingSeries;
 
 use processes_core::metrics::contracts::Metrics as Sampling;
 
+#[derive(Default)]
 pub struct Metrics;
 
 impl Page for Metrics {
@@ -18,7 +19,7 @@ impl Page for Metrics {
         ctx.install(&())
     }
 
-    fn render(cx: &mut PageCx<'_, Self>) {
+    fn render(&mut self, cx: &mut PageCx<'_, Self>) {
         let (state, _) = cx.state::<Sampling, _>();
         let cpu = values(&state.cpu);
         let memory = values(&state.memory);

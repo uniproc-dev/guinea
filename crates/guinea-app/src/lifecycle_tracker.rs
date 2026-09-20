@@ -147,7 +147,9 @@ mod tests {
         }
     }
 
-    guinea_core::messages! { Ping }
+    #[derive(Clone)]
+    struct Ping;
+    impl guinea_core::actor::event_bus::Event for Ping {}
 
     #[derive(Debug)]
     struct Probe;

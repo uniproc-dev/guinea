@@ -1,9 +1,6 @@
-use guinea::prelude::Message;
+use guinea::prelude::Event;
 
-
-#[derive(Clone)]
+#[derive(Clone, Event)]
 pub struct ProcessKilled {
     pub name: String,
 }
-
-impl Message for ProcessKilled {}

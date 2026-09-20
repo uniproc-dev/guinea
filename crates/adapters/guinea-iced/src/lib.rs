@@ -107,6 +107,10 @@ pub trait Page: Default + Sized + 'static {
     /// not mounted - the reducers the router owns, and the node itself.
     const CACHE_STATE_IN_MEMORY: bool = false;
 
+    /// Where `impl Page` was written. `#[segment]` fills it in; an impl
+    /// without it loses only the source link.
+    const DECLARED: Option<guinea_core::actor::shape::Declared> = None;
+
     /// What this page captured from the route, named by `routes!`.
     ///
     /// `PartialEq` because the router's one question about a capture is
@@ -168,6 +172,9 @@ pub trait Page: Default + Sized + 'static {
 
 /// A branch: an Elm node that also decides where its child goes.
 pub trait Layout: Default + Sized + 'static {
+    /// Where `impl Layout` was written; see [`Page::DECLARED`].
+    const DECLARED: Option<guinea_core::actor::shape::Declared> = None;
+
     /// What every page under this layout carries, derived by `routes!` as the
     /// intersection of their parameters. A layout declares nothing; it is
     /// handed what all of its children were reached with, which is how a tab
@@ -424,6 +431,7 @@ impl<P: Page> Mount<Iced> for MountPage<P> {
             page: PhantomData,
             borrow: PhantomData,
         };
+        let _drawing = guinea_core::devtools::Rendering::of(std::any::type_name::<P>());
         page.view(&cx)
             .map(move |message| Envelope::new(cursor, deliver_page::<P>, Box::new(message)))
     }
@@ -441,6 +449,7 @@ impl<L: Layout> Mount<Iced> for MountLayout<L> {
             nodes,
             layout: PhantomData,
         };
+        let _drawing = guinea_core::devtools::Rendering::of(std::any::type_name::<L>());
         layout.view(&cx)
     }
 }
@@ -452,6 +461,7 @@ pub const fn segment_entry<P: Page>() -> SegmentEntry<Iced> {
         &const { MountPage::<P>(PhantomData) },
         P::CACHE_STATE_IN_MEMORY,
     )
+    .written(P::DECLARED)
 }
 
 pub const fn layout_entry<L: Layout>() -> SegmentEntry<Iced> {
@@ -461,6 +471,7 @@ pub const fn layout_entry<L: Layout>() -> SegmentEntry<Iced> {
         &const { MountLayout::<L>(PhantomData) },
         false,
     )
+    .written(L::DECLARED)
 }
 
 /// Builds the node and parks it for the shell, and registers the guard that

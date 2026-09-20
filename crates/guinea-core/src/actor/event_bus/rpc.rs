@@ -1,6 +1,7 @@
 use crate::actor::Context;
 use crate::actor::event_bus::GlobalEventBus;
-use crate::actor::traits::{Handler, Message};
+use crate::actor::event_bus::Event;
+use crate::actor::traits::Handler;
 use once_cell::sync::Lazy;
 use parking_lot::RwLock;
 use std::any::{Any, TypeId};
@@ -36,7 +37,7 @@ pub struct RpcRequest<T> {
     pub chain: Vec<TypeId>,
 }
 
-impl<T: Message + Clone + Send> Message for RpcRequest<T> {}
+impl<T: RpcCall> Event for RpcRequest<T> {}
 
 #[derive(Clone)]
 pub struct RpcResponse<T> {
@@ -44,10 +45,10 @@ pub struct RpcResponse<T> {
     pub payload: T,
 }
 
-impl<T: Message + Clone + Send> Message for RpcResponse<T> {}
+impl<T: Clone + Send + 'static> Event for RpcResponse<T> {}
 
-pub trait RpcCall: Message + Clone + Send {
-    type Response: Message + Clone + Send;
+pub trait RpcCall: Clone + Send + 'static {
+    type Response: Clone + Send + 'static;
 }
 
 impl<Req: RpcCall> RpcRequest<Req> {
@@ -164,7 +165,7 @@ impl AsyncBus {
 
     pub fn reply<Res>(correlation_id: Uuid, payload: Res)
     where
-        Res: Message + Clone + Send,
+        Res: Clone + Send + 'static,
     {
         let envelope = RpcResponse {
             correlation_id,
@@ -197,7 +198,7 @@ impl AsyncBus {
     /// more precisely than `Future<Output = Req::Response>` already does.
     pub fn spawn_reply<Res, Fut>(correlation_id: Uuid, chain: Vec<TypeId>, fut: Fut)
     where
-        Res: Message + Clone + Send,
+        Res: Clone + Send + 'static,
         Fut: Future<Output = Res> + Send + 'static,
     {
         tokio::spawn(RPC_CHAIN.scope(chain, async move {
@@ -642,9 +643,6 @@ mod tests {
 macro_rules! rpc_bind {
     ($( $req:ident => $res:ident );* $(;)?) => {
         $(
-            impl $crate::actor::traits::Message for $req {}
-            impl $crate::actor::traits::Message for $res {}
-
             impl $crate::actor::event_bus::rpc::RpcCall for $req {
                 type Response = $res;
             }

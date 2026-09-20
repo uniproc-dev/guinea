@@ -171,10 +171,11 @@ fn a_feature_may_pull_plugins_and_read_what_they_provide() {
 #[test]
 fn subscriptions_taken_during_install_are_dropped_on_shutdown() {
     use crate::feature::AppFeatureDeinitContext;
-    use guinea_core::actor::event_bus::GlobalEventBus;
-    use guinea_core::messages;
+    use guinea_core::actor::event_bus::{Event, GlobalEventBus};
 
-    messages! { Tick }
+    #[derive(Clone)]
+    struct Tick;
+    impl Event for Tick {}
 
     let token = UiThreadToken::dangerously_create_token_unchecked();
     let lifecycle = AppLifecycle::new();
@@ -246,7 +247,7 @@ fn a_feature_installs_without_a_router_and_reaches_the_services() {
 #[derive(Clone)]
 struct Ping;
 
-impl guinea_core::actor::Message for Ping {}
+impl guinea_core::actor::event_bus::Event for Ping {}
 
 struct NeedsMeta;
 
@@ -304,14 +305,13 @@ fn meta_declared_after_a_plugin_is_still_there_for_it() {
 
 mod owners {
     use guinea_core::actor::Context;
-    use guinea_core::messages;
     use guinea_macros::{actor, handler};
 
     use super::super::actors::{app_actors, forget_all};
     use super::{AppFeature, FeatureBuilder, Plugin, PluginBuilder, builder};
     use crate::feature::ContextActorExt;
 
-    messages! { Sweep }
+    pub struct Sweep;
 
     #[derive(Debug, Default)]
     pub struct Sweeper;

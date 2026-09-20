@@ -69,7 +69,7 @@ mod tests {
     use super::*;
     use crate::actor::{Addr, Context, Handler, UiThreadToken};
 
-    crate::messages! { Refresh }
+    struct Refresh;
 
     #[derive(Clone, Debug, PartialEq)]
     enum Ui {

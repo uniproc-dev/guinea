@@ -21,8 +21,7 @@
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Mutex, OnceLock};
 
-use guinea_core::actor::event_bus::GlobalEventBus;
-use guinea_core::actor::traits::Message;
+use guinea_core::actor::event_bus::{Event, GlobalEventBus};
 
 /// Names one root for as long as it is open.
 ///
@@ -52,8 +51,8 @@ pub struct RootOpened(pub RootId);
 #[derive(Clone, Copy, Debug)]
 pub struct RootClosed(pub RootId);
 
-impl Message for RootOpened {}
-impl Message for RootClosed {}
+impl Event for RootOpened {}
+impl Event for RootClosed {}
 
 fn open_roots() -> &'static Mutex<Vec<Open>> {
     static OPEN: OnceLock<Mutex<Vec<Open>>> = OnceLock::new();

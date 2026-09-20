@@ -7,7 +7,7 @@ use crate::timers::{self, Period, Timer};
 use anyhow::Context as _;
 use guinea_core::SharedState;
 use guinea_core::actor::registry::{DebugRegistry, Owner};
-use guinea_core::actor::shape::name;
+use guinea_core::actor::shape::{Declared, name};
 use guinea_core::actor::{Addr, Handler, ManagedActor, UiThreadToken};
 use guinea_core::trace::Bus;
 use guinea_core::actor::event_bus::{EventBus, GlobalEventBus};
@@ -73,6 +73,10 @@ pub trait Feature: Sized + 'static {
     /// nothing, `(A,)` for one, `(A, B)` for two.
     type Exports: Exported;
 
+    /// Where `impl Feature` was written. `#[installs]` fills it in; a feature
+    /// written by hand leaves it unknown and loses only the source link.
+    const DECLARED: Option<Declared> = None;
+
     fn install(cx: &FeatureInitContext, params: &Self::Params) -> anyhow::Result<Self>;
 }
 
@@ -88,7 +92,7 @@ impl FeatureInitContext {
 
         // Its own corner of the scope, so that two instances of one feature
         // answering the same action type do not become one.
-        self.scope.open_section(name::<F>());
+        self.scope.open_section(name::<F>(), F::DECLARED);
         let installed = F::install(self, params);
         self.scope.close_section();
 
@@ -127,7 +131,16 @@ impl FeatureInitContext {
     ///
     /// Ending it at [`plain`](Claim::plain) is not a half-written feature - it
     /// is state the UI owns, and `emit` on it does not compile.
+    #[track_caller]
     pub fn state<R: Reducer>(&self) -> Claim<'_, R> {
+        let at = Location::caller();
+        self.scope.note_reducer_declared::<R>(Declared {
+            file: at.file(),
+            line: at.line(),
+            column: at.column(),
+            crate_dir: self.scope.current_crate_dir().unwrap_or_default(),
+        });
+
         Claim::new(&self.scope, &self.token, &self.debug_registry)
     }
 
@@ -140,7 +153,7 @@ impl FeatureInitContext {
     ///
     /// `actor!` calls this for every handler it lists, so a feature with an
     /// actor never writes it by hand.
-    pub fn answers<M: guinea_core::actor::traits::Message>(
+    pub fn answers<M: 'static>(
         &self,
         answer: impl Fn(M) + 'static,
     ) {
@@ -300,7 +313,7 @@ impl FeatureInitContext {
     ) -> Timer
     where
         A: Handler<M>,
-        M: guinea_core::actor::Message + Send + 'static,
+        M: Send + 'static,
     {
         let addr = addr.clone();
         self.start_timer(Location::caller(), period.into(), move || addr.send(message()))

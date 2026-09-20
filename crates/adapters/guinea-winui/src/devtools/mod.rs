@@ -32,12 +32,18 @@ fn key(scope: &Rc<Scope>) -> usize {
     Rc::as_ptr(scope) as usize
 }
 
-/// Notes that the segment `props` points at produced `view`.
+/// Notes that the segment `props` points at produced `view`, while devtools
+/// watch; otherwise does nothing, not even count.
 pub(crate) fn record(props: &SegmentProps<WinUi>, view: &View) {
+    if !guinea_core::devtools::is_observed() {
+        return;
+    }
+
     let Some(scope) = props.scopes.get(props.cursor) else {
         return;
     };
-    let text = guinea_core::devtools::is_observed().then(|| format!("{view:?}"));
+    let text = format!("{view:?}");
+
     RECORDS.with(|records| {
         let mut records = records.borrow_mut();
         records.retain(|_, record| record.scope.strong_count() > 0);
@@ -47,9 +53,7 @@ pub(crate) fn record(props: &SegmentProps<WinUi>, view: &View) {
             view: None,
         });
         record.renders += 1;
-        if text.is_some() {
-            record.view = text;
-        }
+        record.view = Some(text);
     });
 }
 

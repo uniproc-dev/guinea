@@ -145,8 +145,9 @@ fn expand_handler(item: ItemFn) -> Result<TokenStream> {
 
                     fn handle(&mut self, ctx: #gc::actor::Context<Self, #msg_ty>) {
                         let actx = ctx.async_ctx();
+                        let bare = ctx.detach();
                         let msg = ctx.msg;
-                        #gc::__private::tokio::spawn(async move {
+                        bare.spawn_bg_detached(async move {
                             #fn_name(actx, msg).await;
                         });
                     }

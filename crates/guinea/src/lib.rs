@@ -205,8 +205,9 @@ pub use guinea_core as core;
 pub use guinea_core::uri;
 pub use guinea_meta as meta;
 
-pub use guinea_core::{messages, ratelimit, rpc_bind};
-pub use guinea_macros::{actor, handler, installs, routes, segment};
+pub use guinea_core::actor::event_bus::Event;
+pub use guinea_core::{ratelimit, rpc_bind};
+pub use guinea_macros::{Event, actor, handler, installs, routes, segment};
 
 /// The error type `install` returns, so that writing a feature does not need
 /// a dependency of its own.
@@ -223,10 +224,10 @@ pub mod prelude {
     pub use guinea_app::app::{AppFeature, FeatureBuilder, GuineaApp, Plugin, PluginBuilder};
     pub use guinea_app::feature::{ContextActorExt, ContextTimersExt, Feature, FeatureInitContext};
     pub use guinea_app::timers::{Period, Timer};
-    pub use guinea_core::actor::event_bus::GlobalEventBus;
-    pub use guinea_core::actor::{Addr, AsyncContext, Context, Handler, Message};
+    pub use guinea_core::actor::event_bus::{Event, GlobalEventBus};
+    pub use guinea_core::actor::{Addr, AsyncContext, Context, Handler};
     pub use guinea_core::feature::{Bound, Dispatch, Push};
     pub use guinea_core::__private::anyhow;
-    pub use guinea_core::{Load, Reducer, messages};
-    pub use guinea_macros::{actor, handler, installs, routes};
+    pub use guinea_core::{Load, Reducer};
+    pub use guinea_macros::{Event, actor, handler, installs, routes};
 }

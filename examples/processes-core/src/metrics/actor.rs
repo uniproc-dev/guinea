@@ -21,7 +21,8 @@ impl MetricsActor {
     }
 }
 
-messages! { Tick }
+#[derive(Debug, Clone)]
+pub struct Tick;
 
 actor! {
     MetricsActor {

@@ -6,16 +6,17 @@
 //! was `ProcessesReducer`, produced by upper-camel-casing the name of a
 //! function. What is left is a struct, an enum, and an impl.
 
-use guinea::prelude::{Reducer, messages};
+use guinea::prelude::Reducer;
 
 // What the actor answers to: kill the process with this pid, and list them
 // again. Which actor that is, is settled where the two are already listed
 // together - in `actor!` - and not here: this file knows state, and an actor
 // named in it would be exactly the leak the layering exists to prevent.
-messages! {
-    Kill(u32),
-    Refresh,
-}
+#[derive(Debug, Clone)]
+pub struct Kill(pub u32);
+
+#[derive(Debug, Clone)]
+pub struct Refresh;
 
 /// The state, which is the reducer.
 #[derive(Default, Clone, PartialEq, Debug)]

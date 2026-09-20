@@ -1,5 +1,5 @@
 use crate::actor::addr::Addr;
-use crate::actor::traits::{Handler, Message};
+use crate::actor::traits::Handler;
 use crate::actor::{Context, short_type_name};
 use crate::trace::{self, Cause, Point};
 use std::marker::PhantomData;
@@ -8,13 +8,13 @@ pub trait Envelope<A> {
     fn handle(&mut self, actor: &mut A, addr: &Addr<A>);
 }
 
-pub struct MessageEnvelope<M: Message> {
+pub struct MessageEnvelope<M: 'static> {
     pub(super) message: Option<M>,
     /// The send that queued this message.
     pub(super) cause: Cause,
 }
 
-impl<A, M: Message> Envelope<A> for MessageEnvelope<M>
+impl<A, M: 'static> Envelope<A> for MessageEnvelope<M>
 where
     A: Handler<M>,
 {

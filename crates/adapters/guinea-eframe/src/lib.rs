@@ -18,7 +18,12 @@ mod run;
 
 pub use run::{MAIN, run};
 
+use std::any::{Any, TypeId};
+use std::cell::RefCell;
+use std::collections::HashMap;
+
 use guinea_app::feature::{FeatureInitContext, Reaches, Segment};
+use guinea_core::binding::ReducerBinding;
 use guinea_core::scope::Reducer;
 use guinea_router::router::{
     Mount, NavigateHandle, RouteChain, SegmentEntry, SegmentProps, Ui, single_entry_chain,
@@ -51,11 +56,26 @@ impl Node {
     }
 }
 
-/// A leaf of the route tree.
-pub trait Page: Sized + 'static {
+/// A leaf of the route tree, and its own state.
+///
+/// The struct that implements this **is** the page's state, as in the WinUI
+/// and iced backends. What differs is that immediate mode has no later: the
+/// frame that sees the click is the frame that answers it, so there is no
+/// message and no `update` - [`Page::render`] takes `&mut self` and writes
+/// what it decided where it decided it.
+///
+/// What belongs here is what only this page has an opinion about: which row
+/// is picked, which tab is open, what is typed in a filter. What crosses the
+/// segment - what a domain owns, what another page reads - is a reducer, and
+/// reaches this page through [`PageCx::state`].
+pub trait Page: Default + Sized + 'static {
     /// When `true`, the router keeps this page's reducer states in memory
     /// while the page is not mounted.
     const CACHE_STATE_IN_MEMORY: bool = false;
+
+    /// Where `impl Page` was written. `#[segment]` fills it in; an impl
+    /// without it loses only the source link.
+    const DECLARED: Option<guinea_core::actor::shape::Declared> = None;
 
     /// What this page captured from the route, named by `routes!`. `()` for a
     /// page that captures nothing.
@@ -78,13 +98,26 @@ pub trait Page: Sized + 'static {
 
     fn install(ctx: &FeatureInitContext, params: &Self::Params) -> anyhow::Result<Self::Installs>;
 
-    /// Draws the page. Runs again for every frame, so this is the drawing
-    /// itself and not a description of it.
-    fn render(cx: &mut PageCx<'_, Self>);
+    /// The state it starts with, when `Default` is not it.
+    ///
+    /// A constructor, not an effect: it runs once per mount, beside
+    /// [`install`](Self::install), and anything that has to reach a feature
+    /// belongs there instead.
+    fn init(_ctx: &FeatureInitContext, _params: &Self::Params) -> Self {
+        Self::default()
+    }
+
+    /// Draws the page, and changes it. Runs again for every frame, so this is
+    /// the drawing itself and not a description of it.
+    fn render(&mut self, cx: &mut PageCx<'_, Self>);
 }
 
-/// A branch: draws its own chrome and decides where its child goes.
-pub trait Layout: Sized + 'static {
+/// A branch: draws its own chrome and decides where its child goes. Its own
+/// state, the same way a [`Page`] is.
+pub trait Layout: Default + Sized + 'static {
+    /// Where `impl Layout` was written; see [`Page::DECLARED`].
+    const DECLARED: Option<guinea_core::actor::shape::Declared> = None;
+
     /// What every page under this layout carries, derived by `routes!` as the
     /// intersection of their parameters. A layout declares nothing; it is
     /// handed what all of its children were reached with.
@@ -103,7 +136,12 @@ pub trait Layout: Sized + 'static {
 
     fn install(ctx: &FeatureInitContext, params: &Self::Params) -> anyhow::Result<Self::Installs>;
 
-    fn render(cx: &mut LayoutCx<'_, Self>);
+    /// See [`Page::init`].
+    fn init(_ctx: &FeatureInitContext, _params: &Self::Params) -> Self {
+        Self::default()
+    }
+
+    fn render(&mut self, cx: &mut LayoutCx<'_, Self>);
 }
 
 pub const fn segment_entry<P: Page>() -> SegmentEntry<Egui> {
@@ -113,6 +151,7 @@ pub const fn segment_entry<P: Page>() -> SegmentEntry<Egui> {
         &const { MountPage::<P>(std::marker::PhantomData) },
         P::CACHE_STATE_IN_MEMORY,
     )
+    .written(P::DECLARED)
 }
 
 pub const fn layout_entry<L: Layout>() -> SegmentEntry<Egui> {
@@ -122,13 +161,16 @@ pub const fn layout_entry<L: Layout>() -> SegmentEntry<Egui> {
         &const { MountLayout::<L>(std::marker::PhantomData) },
         false,
     )
+    .written(L::DECLARED)
 }
 
 fn install_page<P: Page>(
     ctx: &FeatureInitContext,
     params: &dyn std::any::Any,
 ) -> anyhow::Result<()> {
-    own(ctx, P::install(ctx, guinea_router::router::narrow::<P::Params, P>(params)?)?);
+    let params = guinea_router::router::narrow::<P::Params, P>(params)?;
+    own(ctx, P::install(ctx, params)?);
+    keep(ctx, P::init(ctx, params));
     Ok(())
 }
 
@@ -142,8 +184,67 @@ fn install_layout<L: Layout>(
     ctx: &FeatureInitContext,
     params: &dyn std::any::Any,
 ) -> anyhow::Result<()> {
-    own(ctx, L::install(ctx, guinea_router::router::narrow::<L::Params, L>(params)?)?);
+    let params = guinea_router::router::narrow::<L::Params, L>(params)?;
+    own(ctx, L::install(ctx, params)?);
+    keep(ctx, L::init(ctx, params));
     Ok(())
+}
+
+thread_local! {
+    /// Every mounted segment's own state, by the scope it is mounted in and
+    /// what it is.
+    ///
+    /// A segment's state has to outlive the frame and die with the mount,
+    /// and egui gives it nowhere to live: a [`Node`] is drawn once and
+    /// dropped. So the scope holds it - through this, because a scope keeps
+    /// reducers and teardowns, not nodes.
+    static MOUNTED: RefCell<HashMap<(usize, TypeId), Option<Box<dyn Any>>>> =
+        RefCell::new(HashMap::new());
+}
+
+/// Holds `node` for as long as the segment being installed is mounted.
+fn keep<S: 'static>(ctx: &FeatureInitContext, node: S) {
+    let at = (ctx.scope.key(), TypeId::of::<S>());
+
+    MOUNTED.with(|mounted| mounted.borrow_mut().insert(at, Some(Box::new(node))));
+    ctx.scope.own(Forget(at));
+}
+
+/// Drops a segment's state when its scope goes.
+struct Forget((usize, TypeId));
+
+impl guinea_core::scope::Teardown for Forget {
+    fn teardown(self) {
+        MOUNTED.with(|mounted| mounted.borrow_mut().remove(&self.0));
+    }
+}
+
+/// Draws with the segment's own state.
+///
+/// Taken out for the frame and put back after it, rather than borrowed
+/// across it: a segment draws its child inside its own drawing, and a page
+/// that navigates while drawing ends its own mount - after which there is
+/// nowhere to put anything back, and the state goes with it.
+///
+/// A segment mounted with no `install` behind it - which a test does, and
+/// nothing else - draws from a default that lasts the frame.
+fn with_mounted<S: Default + 'static, R>(scope: usize, draw: impl FnOnce(&mut S) -> R) -> R {
+    let at = (scope, TypeId::of::<S>());
+
+    let taken = MOUNTED.with(|mounted| mounted.borrow_mut().get_mut(&at).and_then(Option::take));
+    let mut node = taken
+        .and_then(|node| node.downcast::<S>().ok())
+        .map_or_else(S::default, |node| *node);
+
+    let drawn = draw(&mut node);
+
+    MOUNTED.with(|mounted| {
+        if let Some(slot) = mounted.borrow_mut().get_mut(&at) {
+            *slot = Some(Box::new(node));
+        }
+    });
+
+    drawn
 }
 
 /// A zero-sized marker per segment type: what a `const` entry points at to get
@@ -153,11 +254,16 @@ pub struct MountLayout<L>(pub std::marker::PhantomData<L>);
 
 impl<P: Page> Mount<Egui> for MountPage<P> {
     fn view<'a>(&self, props: SegmentProps<Egui>, _nodes: &'a ()) -> Node {
+        let at = props.scopes[props.cursor].key();
+
         Node::new(move |ui| {
-            P::render(&mut PageCx {
-                ui,
-                props,
-                page: std::marker::PhantomData,
+            let _drawing = guinea_core::devtools::Rendering::of(std::any::type_name::<P>());
+            with_mounted::<P, _>(at, |page| {
+                page.render(&mut PageCx {
+                    ui,
+                    props,
+                    page: std::marker::PhantomData,
+                })
             })
         })
     }
@@ -165,11 +271,16 @@ impl<P: Page> Mount<Egui> for MountPage<P> {
 
 impl<L: Layout> Mount<Egui> for MountLayout<L> {
     fn view<'a>(&self, props: SegmentProps<Egui>, _nodes: &'a ()) -> Node {
+        let at = props.scopes[props.cursor].key();
+
         Node::new(move |ui| {
-            L::render(&mut LayoutCx {
-                ui,
-                props,
-                layout: std::marker::PhantomData,
+            let _drawing = guinea_core::devtools::Rendering::of(std::any::type_name::<L>());
+            with_mounted::<L, _>(at, |layout| {
+                layout.render(&mut LayoutCx {
+                    ui,
+                    props,
+                    layout: std::marker::PhantomData,
+                })
             })
         })
     }
@@ -214,6 +325,23 @@ impl<P: Segment> PageCx<'_, P> {
         let binding = self.props.binding::<R>();
         (binding.get(), binding.dispatch())
     }
+
+    /// The reducer's binding: its state, and a push straight into it.
+    ///
+    /// For state the UI owns outright - what is picked in a tree, which tab
+    /// is open - claimed with `cx.state::<R>().plain()`. There is no domain
+    /// to ask, so there is no actor to ask it through: a click is the whole
+    /// story.
+    ///
+    /// State a feature drives is not this: pushing into it goes behind the
+    /// back of whatever answers for it. Use [`PageCx::state`] and emit.
+    pub fn binding<R, I>(&self) -> ReducerBinding<R>
+    where
+        R: Reducer,
+        P: Reaches<R, I>,
+    {
+        self.props.binding::<R>()
+    }
 }
 
 impl<P> PageCx<'_, P> {
@@ -246,6 +374,15 @@ impl<L: Segment> LayoutCx<'_, L> {
     {
         let binding = self.props.binding::<R>();
         (binding.get(), binding.dispatch())
+    }
+
+    /// See [`PageCx::binding`].
+    pub fn binding<R, I>(&self) -> ReducerBinding<R>
+    where
+        R: Reducer,
+        L: Reaches<R, I>,
+    {
+        self.props.binding::<R>()
     }
 }
 

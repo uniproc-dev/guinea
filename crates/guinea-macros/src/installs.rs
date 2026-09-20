@@ -30,12 +30,24 @@ use syn::{FnArg, ImplItem, ItemImpl, Type, parse_quote};
 pub fn installs_impl(item: TokenStream1) -> TokenStream1 {
     let mut item = syn::parse_macro_input!(item as ItemImpl);
 
+    let gc = crate::handler::guinea_core_crate_path();
+    let declared: ImplItem = parse_quote! {
+        const DECLARED: ::core::option::Option<#gc::actor::shape::Declared> =
+            ::core::option::Option::Some(#gc::actor::shape::Declared {
+                file: ::core::file!(),
+                line: ::core::line!(),
+                column: ::core::column!(),
+                crate_dir: ::core::env!("CARGO_MANIFEST_DIR"),
+            });
+    };
+
     let declares_params = item
         .items
         .iter()
         .any(|entry| matches!(entry, ImplItem::Type(ty) if ty.ident == "Params"));
 
     if declares_params {
+        item.items.push(declared);
         return quote!(#item).into();
     }
 
@@ -55,6 +67,7 @@ pub fn installs_impl(item: TokenStream1) -> TokenStream1 {
     item.items.push(parse_quote! {
         type Params = #params;
     });
+    item.items.push(declared);
 
     quote!(#item).into()
 }

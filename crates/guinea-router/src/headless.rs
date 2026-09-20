@@ -24,6 +24,9 @@ impl Ui for Headless {
 pub trait Page: Sized + 'static {
     const CACHE_STATE_IN_MEMORY: bool = false;
 
+    /// Where `impl Page` was written; see the backends' own `Page`.
+    const DECLARED: Option<guinea_core::actor::shape::Declared> = None;
+
     /// What this page captured from the route, named by `routes!`. `()` for a
     /// page that captures nothing.
     ///
@@ -54,6 +57,9 @@ pub trait Page: Sized + 'static {
 }
 
 pub trait Layout: Sized + 'static {
+    /// Where `impl Layout` was written; see [`Page::DECLARED`].
+    const DECLARED: Option<guinea_core::actor::shape::Declared> = None;
+
     /// What every page under this layout carries, derived by `routes!` as the
     /// intersection of their parameters. A layout declares nothing; it is
     /// handed what all of its children were reached with.
@@ -74,6 +80,7 @@ pub const fn segment_entry<P: Page>() -> SegmentEntry<Headless> {
         &const { MountPage::<P>(std::marker::PhantomData) },
         P::CACHE_STATE_IN_MEMORY,
     )
+    .written(P::DECLARED)
 }
 
 pub const fn layout_entry<L: Layout>() -> SegmentEntry<Headless> {
@@ -83,6 +90,7 @@ pub const fn layout_entry<L: Layout>() -> SegmentEntry<Headless> {
         &const { MountLayout::<L>(std::marker::PhantomData) },
         false,
     )
+    .written(L::DECLARED)
 }
 
 fn install_page<P: Page>(
@@ -220,6 +228,7 @@ pub struct MountLayout<L>(pub std::marker::PhantomData<L>);
 
 impl<P: Page> Mount<Headless> for MountPage<P> {
     fn view<'a>(&self, props: SegmentProps<Headless>, _nodes: &'a ()) {
+        let _drawing = guinea_core::devtools::Rendering::of(std::any::type_name::<P>());
         P::view(&mut HeadlessCx {
             props,
             segment: std::marker::PhantomData,
@@ -229,6 +238,7 @@ impl<P: Page> Mount<Headless> for MountPage<P> {
 
 impl<L: Layout> Mount<Headless> for MountLayout<L> {
     fn view<'a>(&self, props: SegmentProps<Headless>, _nodes: &'a ()) {
+        let _drawing = guinea_core::devtools::Rendering::of(std::any::type_name::<L>());
         L::view(&mut HeadlessCx {
             props,
             segment: std::marker::PhantomData,

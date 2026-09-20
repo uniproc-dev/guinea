@@ -10,6 +10,7 @@ use crate::pages::processes::Processes;
 use crate::pages::services::Services;
 use crate::routes::Route;
 
+#[derive(Default)]
 pub struct TabsLayout;
 
 impl Layout for TabsLayout {
@@ -21,7 +22,7 @@ impl Layout for TabsLayout {
         ctx.install(params.context.as_str())
     }
 
-    fn render(cx: &mut LayoutCx<'_, Self>) {
+    fn render(&mut self, cx: &mut LayoutCx<'_, Self>) {
         let (state, _) = cx.state::<Tabs, _>();
         let strings = L10n::current();
         let nav = cx.navigate::<Route>();

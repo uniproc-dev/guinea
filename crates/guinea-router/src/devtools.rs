@@ -7,7 +7,8 @@ use std::rc::{Rc, Weak};
 use guinea_app::app::roots::{self, RootId};
 use guinea_core::actor::registry::ActorSnapshot;
 use guinea_core::devtools::Panel;
-use guinea_core::scope::{DescribedState, Listener};
+use guinea_core::actor::shape::Declared;
+use guinea_core::scope::{DescribedState, Installed, Listener};
 
 use crate::router::{Router, Ui};
 
@@ -34,7 +35,11 @@ pub struct SegmentView {
     pub name: &'static str,
     /// Matches `Owner::scope` on the actors this segment owns.
     pub scope: usize,
-    pub features: Vec<&'static str>,
+    /// Where `routes!` listed this page or layout.
+    pub declared: Option<Declared>,
+    /// Where the page or layout itself was written.
+    pub written: Option<Declared>,
+    pub features: Vec<Installed>,
     pub states: Vec<DescribedState>,
     pub listeners: Vec<Listener>,
 }
@@ -79,7 +84,9 @@ impl<U: Ui> Inspected for Router<U> {
                 .map(|(entry, scope)| SegmentView {
                     name: short((entry.type_name)()),
                     scope: scope.key(),
-                    features: scope.feature_names(),
+                    declared: entry.declared,
+                    written: entry.written,
+                    features: scope.features(),
                     states: scope.describe_states(),
                     listeners: scope.listeners(),
                 })

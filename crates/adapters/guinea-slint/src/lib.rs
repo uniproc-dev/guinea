@@ -71,6 +71,10 @@ pub trait Page: Sized + 'static {
     /// while the page is not mounted.
     const CACHE_STATE_IN_MEMORY: bool = false;
 
+    /// Where `impl Page` was written. `#[segment]` fills it in; an impl
+    /// without it loses only the source link.
+    const DECLARED: Option<guinea_core::actor::shape::Declared> = None;
+
     /// What this page captured from the route, named by `routes!`. `()` for a
     /// page that captures nothing.
     ///
@@ -103,6 +107,9 @@ pub trait Page: Sized + 'static {
 
 /// A branch: the component the pages below it sit inside.
 pub trait Layout: Sized + 'static {
+    /// Where `impl Layout` was written; see [`Page::DECLARED`].
+    const DECLARED: Option<guinea_core::actor::shape::Declared> = None;
+
     /// What every page under this layout carries, derived by `routes!` as the
     /// intersection of their parameters. A layout declares nothing; it is
     /// handed what all of its children were reached with.
@@ -131,6 +138,7 @@ pub const fn segment_entry<P: Page>() -> SegmentEntry<Slint> {
         &NothingToRender,
         P::CACHE_STATE_IN_MEMORY,
     )
+    .written(P::DECLARED)
 }
 
 pub const fn layout_entry<L: Layout>() -> SegmentEntry<Slint> {
@@ -140,6 +148,7 @@ pub const fn layout_entry<L: Layout>() -> SegmentEntry<Slint> {
         &NothingToRender,
         false,
     )
+    .written(L::DECLARED)
 }
 
 /// Wiring happens when a segment is installed, not when it is mounted.

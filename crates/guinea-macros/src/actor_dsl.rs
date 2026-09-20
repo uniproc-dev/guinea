@@ -393,7 +393,6 @@ fn expand(manifest: Manifest) -> syn::Result<TokenStream> {
 
     let (impl_generics, _, where_clause) = generics.split_for_impl();
 
-    let handlers_marker = format_ident!("__Handlers_{}", ident);
     let signals_marker = format_ident!("__Signals_{}", ident);
     let bus_marker = format_ident!("__Bus_{}", ident);
 
@@ -542,18 +541,11 @@ fn expand(manifest: Manifest) -> syn::Result<TokenStream> {
     Ok(quote! {
         #[doc(hidden)]
         #[allow(non_camel_case_types)]
-        pub struct #handlers_marker;
-
-        #[doc(hidden)]
-        #[allow(non_camel_case_types)]
         pub struct #signals_marker;
 
         #bus_impl
 
         #flow_decl
-
-        impl #impl_generics #gc::actor::traits::DirectHandler<#self_ty>
-            for #handlers_marker #where_clause {}
 
         #(#signal_impls)*
 
@@ -568,7 +560,6 @@ fn expand(manifest: Manifest) -> syn::Result<TokenStream> {
 
         impl #impl_generics #gc::actor::traits::ManagedActor for #self_ty #where_clause {
             type Bus = #bus_ty;
-            type Handlers = #handlers_marker;
             type Signals = #signals_marker;
             type Flow = #flow_ty;
             const SHAPE: #gc::actor::shape::Shape = #gc::actor::shape::Shape {
@@ -584,7 +575,7 @@ fn expand(manifest: Manifest) -> syn::Result<TokenStream> {
                 fn assert_handler<A, M>()
                 where
                     A: #gc::actor::traits::Handler<M>,
-                    M: #gc::actor::traits::Message,
+                    M: 'static,
                 {
                 }
                 #(#handler_asserts)*

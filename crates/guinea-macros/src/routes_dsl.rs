@@ -21,6 +21,21 @@ fn guinea_crate_path() -> proc_macro2::TokenStream {
 /// An application usually reaches them through the facade, but a backend crate
 /// depends on `guinea-router` directly and has no facade at all - and the
 /// generated `RouteChain` impl has to name the same types either way.
+/// Where a segment was listed, as the line `ty` was written on: `file!` and
+/// friends expand wherever their tokens are spanned.
+fn declared_at(ty: &syn::Type) -> TokenStream {
+    let gc = crate::handler::guinea_core_crate_path();
+
+    quote_spanned! {syn::spanned::Spanned::span(ty)=>
+        #gc::actor::shape::Declared {
+            file: ::core::file!(),
+            line: ::core::line!(),
+            column: ::core::column!(),
+            crate_dir: ::core::env!("CARGO_MANIFEST_DIR"),
+        }
+    }
+}
+
 fn router_path(guinea: &TokenStream) -> TokenStream {
     match crate_name("guinea-router") {
         Ok(FoundCrate::Itself) => quote!(crate::router),
@@ -482,14 +497,16 @@ pub fn routes_impl(input: TokenStream1) -> TokenStream1 {
         let const_name = format_ident!("__routes_chain_{}_{}", enum_ident, ident);
         let leaf_ty = &leaf.ty;
         let ancestor_entries = leaf.ancestors.iter().map(|ty| {
-            quote! { #backend_mod::layout_entry::<#ty>() }
+            let declared = declared_at(ty);
+            quote! { #backend_mod::layout_entry::<#ty>().at(#declared) }
         });
         let len = leaf.ancestors.len() + 1;
+        let declared = declared_at(leaf_ty);
         quote! {
             #[allow(non_upper_case_globals)]
             const #const_name: [#router::SegmentEntry<#backend_ty>; #len] = [
                 #(#ancestor_entries,)*
-                #backend_mod::segment_entry::<#leaf_ty>(),
+                #backend_mod::segment_entry::<#leaf_ty>().at(#declared),
             ];
         }
     });

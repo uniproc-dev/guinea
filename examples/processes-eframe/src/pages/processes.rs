@@ -4,6 +4,7 @@ use guinea::feature::FeatureInitContext;
 use processes_core::processes::contracts::{Kill, Processes as Running};
 use processes_core::processes::pid_at;
 
+#[derive(Default)]
 pub struct Processes;
 
 impl Page for Processes {
@@ -15,7 +16,7 @@ impl Page for Processes {
         ctx.install(params.context.as_str())
     }
 
-    fn render(cx: &mut PageCx<'_, Self>) {
+    fn render(&mut self, cx: &mut PageCx<'_, Self>) {
         let (state, dispatch) = cx.state::<Running, _>();
 
         egui::ScrollArea::vertical().show(cx.ui(), |ui| {

@@ -2,7 +2,7 @@ use std::panic::Location;
 
 use crate::timers::{self, Period, Timer};
 use guinea_core::SharedState;
-use guinea_core::actor::{Addr, Handler, ManagedActor, Message, UiThreadToken};
+use guinea_core::actor::{Addr, Handler, ManagedActor, UiThreadToken};
 use guinea_core::lifecycle_tracker::LifecycleTracker;
 
 pub trait FeatureContext {
@@ -57,7 +57,7 @@ pub trait ContextTimersExt: FeatureContext {
     ) -> Timer
     where
         A: Handler<M>,
-        M: Message + Send + 'static,
+        M: Send + 'static,
     {
         let addr = addr.clone();
         start(self, Location::caller(), period.into(), move || addr.send(message()))

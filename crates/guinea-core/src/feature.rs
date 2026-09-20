@@ -15,7 +15,6 @@
 
 use std::rc::{Rc, Weak};
 
-use crate::actor::traits::Message;
 use crate::actor::registry::DebugRegistry;
 use crate::actor::{Addr, ManagedActor, UiThreadToken};
 use crate::scope::{Reducer, Scope};
@@ -112,7 +111,7 @@ impl Dispatch {
     }
 
     /// Hands the action to whatever answers it in that feature.
-    pub fn emit<M: Message>(&self, action: M) {
+    pub fn emit<M: 'static>(&self, action: M) {
         let found = self
             .at
             .as_ref()
@@ -355,7 +354,7 @@ impl<R: Reducer> Bound<R> {
         self.push.send(update);
     }
 
-    pub fn emit<M: Message>(&self, action: M) {
+    pub fn emit<M: 'static>(&self, action: M) {
         self.dispatch.emit(action);
     }
 

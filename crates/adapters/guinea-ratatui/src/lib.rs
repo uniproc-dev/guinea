@@ -60,6 +60,10 @@ pub trait Page: Sized + 'static {
     /// while the page is not mounted.
     const CACHE_STATE_IN_MEMORY: bool = false;
 
+    /// Where `impl Page` was written. `#[segment]` fills it in; an impl
+    /// without it loses only the source link.
+    const DECLARED: Option<guinea_core::actor::shape::Declared> = None;
+
     /// What this page captured from the route, named by `routes!`. `()` for a
     /// page that captures nothing.
     ///
@@ -91,6 +95,9 @@ pub trait Page: Sized + 'static {
 
 /// A branch: draws its own chrome and decides where its child goes.
 pub trait Layout: Sized + 'static {
+    /// Where `impl Layout` was written; see [`Page::DECLARED`].
+    const DECLARED: Option<guinea_core::actor::shape::Declared> = None;
+
     /// What every page under this layout carries, derived by `routes!` as the
     /// intersection of their parameters. A layout declares nothing; it is
     /// handed what all of its children were reached with.
@@ -119,6 +126,7 @@ pub const fn segment_entry<P: Page>() -> SegmentEntry<Tui> {
         &const { MountPage::<P>(std::marker::PhantomData) },
         P::CACHE_STATE_IN_MEMORY,
     )
+    .written(P::DECLARED)
 }
 
 pub const fn layout_entry<L: Layout>() -> SegmentEntry<Tui> {
@@ -128,6 +136,7 @@ pub const fn layout_entry<L: Layout>() -> SegmentEntry<Tui> {
         &const { MountLayout::<L>(std::marker::PhantomData) },
         false,
     )
+    .written(L::DECLARED)
 }
 
 fn install_page<P: Page>(
@@ -160,6 +169,7 @@ pub struct MountLayout<L>(pub std::marker::PhantomData<L>);
 impl<P: Page> Mount<Tui> for MountPage<P> {
     fn view<'a>(&self, props: SegmentProps<Tui>, _nodes: &'a ()) -> Node {
         Node::new(move |frame, area| {
+            let _drawing = guinea_core::devtools::Rendering::of(std::any::type_name::<P>());
             P::render(&mut PageCx {
                 frame,
                 area,
@@ -173,6 +183,7 @@ impl<P: Page> Mount<Tui> for MountPage<P> {
 impl<L: Layout> Mount<Tui> for MountLayout<L> {
     fn view<'a>(&self, props: SegmentProps<Tui>, _nodes: &'a ()) -> Node {
         Node::new(move |frame, area| {
+            let _drawing = guinea_core::devtools::Rendering::of(std::any::type_name::<L>());
             L::render(&mut LayoutCx {
                 frame,
                 area,

@@ -3,6 +3,7 @@ use guinea::feature::FeatureInitContext;
 
 use processes_core::services::contracts::Services as Running;
 
+#[derive(Default)]
 pub struct Services;
 
 impl Page for Services {
@@ -17,7 +18,7 @@ impl Page for Services {
         ctx.install(&())
     }
 
-    fn render(cx: &mut PageCx<'_, Self>) {
+    fn render(&mut self, cx: &mut PageCx<'_, Self>) {
         let (state, _) = cx.state::<Running, _>();
 
         egui::ScrollArea::vertical().show(cx.ui(), |ui| {

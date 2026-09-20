@@ -51,6 +51,18 @@ pub fn segment_impl(item: TokenStream1) -> TokenStream1 {
         .iter()
         .any(|entry| matches!(entry, ImplItem::Fn(f) if f.sig.ident == "install"));
 
+    let gc = crate::handler::guinea_core_crate_path();
+    let declared: ImplItem = parse_quote! {
+        const DECLARED: ::core::option::Option<#gc::actor::shape::Declared> =
+            ::core::option::Option::Some(#gc::actor::shape::Declared {
+                file: ::core::file!(),
+                line: ::core::line!(),
+                column: ::core::column!(),
+                crate_dir: ::core::env!("CARGO_MANIFEST_DIR"),
+            });
+    };
+    item.items.push(declared);
+
     if declares_installs {
         return quote!(#item).into();
     }
@@ -63,7 +75,6 @@ pub fn segment_impl(item: TokenStream1) -> TokenStream1 {
     // and then left `install` out has forgotten to install it, and the missing
     // trait item says so more clearly than anything written here could.
     if !declares_install {
-        let gc = crate::handler::guinea_core_crate_path();
         item.items.push(parse_quote! {
             fn install(
                 _ctx: &#context::FeatureInitContext,

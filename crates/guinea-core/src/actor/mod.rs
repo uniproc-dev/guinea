@@ -2,6 +2,7 @@ use once_cell::sync::Lazy;
 use std::sync::RwLock;
 
 pub mod addr;
+pub mod cancel;
 pub mod ctx;
 pub mod envelope;
 pub mod flow;
@@ -9,13 +10,13 @@ pub mod flow;
 pub mod traits;
 
 pub use addr::*;
+pub use cancel::*;
 pub use ctx::*;
 pub use envelope::*;
 pub use traits::*;
 
 pub mod event_bus;
 
-mod macros;
 pub mod registry;
 pub mod shape;
 

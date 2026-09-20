@@ -50,6 +50,10 @@ pub trait Page: Default + Sized + 'static {
     /// the last cached state immediately instead of starting from defaults.
     const CACHE_STATE_IN_MEMORY: bool = false;
 
+    /// Where `impl Page` was written. `#[segment]` fills it in; an impl
+    /// without it loses only the source link.
+    const DECLARED: Option<guinea_core::actor::shape::Declared> = None;
+
     /// What this page captured from the route, named by `routes!`. `()` for a
     /// page that captures nothing.
     ///
@@ -103,6 +107,9 @@ pub trait Page: Default + Sized + 'static {
 
 /// A branch: an Elm node that also decides where its child goes.
 pub trait Layout: Default + Sized + 'static {
+    /// Where `impl Layout` was written; see [`Page::DECLARED`].
+    const DECLARED: Option<guinea_core::actor::shape::Declared> = None;
+
     /// What every page under this layout carries, derived by `routes!` as the
     /// intersection of their parameters. A layout declares nothing; it is
     /// handed what all of its children were reached with.
@@ -136,6 +143,7 @@ pub const fn segment_entry<P: Page>() -> SegmentEntry<WinUi> {
         &const { MountPage::<P>(PhantomData) },
         P::CACHE_STATE_IN_MEMORY,
     )
+    .written(P::DECLARED)
 }
 
 pub const fn layout_entry<L: Layout>() -> SegmentEntry<WinUi> {
@@ -145,6 +153,7 @@ pub const fn layout_entry<L: Layout>() -> SegmentEntry<WinUi> {
         &const { MountLayout::<L>(PhantomData) },
         false,
     )
+    .written(L::DECLARED)
 }
 
 thread_local! {
@@ -303,6 +312,12 @@ impl<P: Page> Component for PageNode<P> {
     }
 
     fn view(&self, input: &Self::Input, cx: &mut ViewContext<Self>) -> View {
+        // The root segment starts the frame the profiler collects; the ones
+        // under it draw inside the same one.
+        if input.cursor == 0 {
+            guinea_core::devtools::profiling::frame_done();
+        }
+        let _drawing = guinea_core::devtools::Rendering::of(std::any::type_name::<P>());
         let view = self.page.view(&mut PageCx {
             props: input.clone(),
             cx,
@@ -349,6 +364,10 @@ impl<L: Layout> Component for LayoutNode<L> {
     }
 
     fn view(&self, input: &Self::Input, cx: &mut ViewContext<Self>) -> View {
+        if input.cursor == 0 {
+            guinea_core::devtools::profiling::frame_done();
+        }
+        let _drawing = guinea_core::devtools::Rendering::of(std::any::type_name::<L>());
         let view = self.layout.view(&mut LayoutCx {
             props: input.clone(),
             cx,

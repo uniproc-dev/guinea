@@ -4,14 +4,17 @@ use std::time::Duration;
 
 use guinea_core::actor::shape::Channel;
 use guinea_core::actor::{Context, ManagedActor};
-use guinea_core::messages;
-use guinea_macros::{actor, handler};
+use guinea_macros::{Event, actor, handler};
 
-messages! { Start, Tick, Report, Stopped }
+pub struct Start;
+pub struct Tick;
+pub struct Report;
 
-#[derive(Debug, Clone)]
+#[derive(Clone, Event)]
+pub struct Stopped;
+
+#[derive(Clone, Event)]
 pub struct Finished;
-impl guinea_core::actor::Message for Finished {}
 
 #[derive(Debug, Default)]
 pub struct Poller;
@@ -49,7 +52,7 @@ fn stopped(_this: &mut Poller, _ctx: Context<Poller, Stopped>) {}
 fn an_actor_knows_where_it_was_declared() {
     let declared = Poller::SHAPE.declared.expect("actor! records its place");
     assert!(declared.file.ends_with("shape.rs"), "{declared:?}");
-    assert_eq!(declared.line, 20, "the line of the actor's name");
+    assert_eq!(declared.line, 23, "the line of the actor's name");
     let path = declared.path().expect("the sources are here");
     assert!(path.ends_with("tests/shape.rs") || path.ends_with("tests\\shape.rs"));
     assert!(std::fs::read_to_string(path)

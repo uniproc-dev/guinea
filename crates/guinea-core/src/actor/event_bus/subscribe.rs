@@ -1,6 +1,6 @@
 use crate::actor::addr::Addr;
 use crate::actor::short_type_name;
-use crate::actor::traits::{Handler, Message};
+use crate::actor::traits::Handler;
 use crate::trace::{self, Bus, Point};
 
 use std::any::{Any, TypeId};
@@ -49,8 +49,13 @@ impl crate::scope::Teardown for BusSubscription {
     }
 }
 
-pub trait Event: Message + Send + Clone {}
-impl<T: Message + Clone + Send> Event for T {}
+/// A type that travels over the global bus, where subscribers find it by its
+/// `TypeId` alone.
+///
+/// Implemented by hand or with `#[derive(Event)]`, never for free: the orphan
+/// rule then keeps `String`, `u32` and `()` off the bus, since two features
+/// that each published a type nobody owns would receive each other's events.
+pub trait Event: Clone + Send + 'static {}
 
 pub trait UntypedSubscriber: 'static {
     fn deliver(&self, msg: Box<dyn Any>, bus: Bus);

@@ -721,14 +721,12 @@ mod routing {
     fn navigating_away_from_page_disposes_actor_subscribed_to_global_bus() {
         use guinea_core::actor::Context;
         use guinea_core::actor::event_bus::GlobalEventBus;
-        use guinea_core::actor::Message;
-        use guinea_macros::{actor, handler};
+        use guinea_macros::{Event, actor, handler};
         use std::cell::RefCell;
         use std::rc::Rc;
 
-        #[derive(Clone, Debug)]
+        #[derive(Clone, Debug, Event)]
         struct ProbeEvent(u32);
-        impl Message for ProbeEvent {}
 
         struct ProbeActor {
             seen: Rc<RefCell<Vec<u32>>>,

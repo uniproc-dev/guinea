@@ -1,8 +1,9 @@
-use guinea::prelude::{Reducer, messages};
+use guinea::prelude::Reducer;
 
 // The one action this feature answers. Who answers it is not written down
 // anywhere - see `install`.
-messages! { Refresh }
+#[derive(Debug, Clone)]
+pub struct Refresh;
 
 #[derive(Default, Clone, PartialEq, Debug)]
 pub struct Services {

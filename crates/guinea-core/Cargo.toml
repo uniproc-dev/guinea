@@ -16,6 +16,7 @@ http = "1.3"
 inventory.workspace = true
 once_cell = "1.21.3"
 parking_lot = "0.12.5"
+puffin = { version = "0.20", optional = true }
 
 [dev-dependencies]
 guinea-macros.workspace = true
@@ -23,6 +24,9 @@ tokio = { workspace = true, features = ["test-util"] }
 
 [features]
 test-utils = []
+# Zones for the puffin profiler, around the same places the trace marks. Off
+# until something switches them on, and free to leave compiled in.
+profiling = ["dep:puffin"]
 
 
 

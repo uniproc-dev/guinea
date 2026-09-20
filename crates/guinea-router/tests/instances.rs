@@ -16,12 +16,11 @@ use std::rc::Rc;
 
 use guinea_app::feature::{Feature, FeatureInitContext, Segment};
 use guinea_core::actor::UiThreadToken;
-use guinea_core::messages;
 use guinea_core::scope::Reducer;
 use guinea_router::headless::{Headless, HeadlessCx, Layout, Page, layout_entry, segment_entry};
 use guinea_router::router::{Router, SegmentEntry};
 
-messages! { Refresh }
+struct Refresh;
 
 /// Which list. A marker, not a string - the same answer Riverpod reached, and
 /// the one place every DI surveyed grew a stringly-typed escape hatch.

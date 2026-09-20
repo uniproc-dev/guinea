@@ -149,6 +149,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2af50177e190e07a26ab74f8b1efbfe2ef87da2116221318cb1c2e82baf7de06"
 
 [[package]]
+name = "bincode"
+version = "1.3.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b1f45e9417d87227c7a56d22e471c6206462cba514c7590c09aff4cf6d1ddcad"
+dependencies = [
+ "serde",
+]
+
+[[package]]
 name = "binrw"
 version = "0.15.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -218,6 +227,12 @@ name = "bytemuck"
 version = "1.25.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "95832e849adfb21180ccb6826a99da14e5d266ae5c2e668e1602cf234f153797"
+
+[[package]]
+name = "byteorder"
+version = "1.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1fd0f2584146f6f2ef48085050886acf353beff7305ebd1ae69500e27c67f64b"
 
 [[package]]
 name = "bytes"
@@ -538,6 +553,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5ca28b0ae3115b884660db4118d803791fd6756b6e88f39c0f3f7859060d7566"
 dependencies = [
  "libc 0.2.189",
+]
+
+[[package]]
+name = "crossbeam-channel"
+version = "0.5.17"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "98b0cc327b5bc766e7fda9c9260cc0fa81b43a8e240440422dff70788e3f9ef1"
+dependencies = [
+ "crossbeam-utils",
 ]
 
 [[package]]
@@ -1135,6 +1159,7 @@ dependencies = [
  "inventory",
  "once_cell",
  "parking_lot",
+ "puffin",
  "tokio",
  "tracing",
  "tracing-subscriber",
@@ -1143,8 +1168,7 @@ dependencies = [
 
 [[package]]
 name = "guinea-devtools-protocol"
-version = "0.7.0"
-source = "git+https://github.com/uniproc-dev/guinea-plugins?tag=v0.7.0#e4e91d56e720987436b823d02293e12848c67433"
+version = "0.7.1"
 dependencies = [
  "capnp",
  "capnp-rpc",
@@ -1186,8 +1210,7 @@ dependencies = [
 
 [[package]]
 name = "guinea-plugin-devtools"
-version = "0.7.0"
-source = "git+https://github.com/uniproc-dev/guinea-plugins?tag=v0.7.0#e4e91d56e720987436b823d02293e12848c67433"
+version = "0.7.1"
 dependencies = [
  "anyhow",
  "capnp",
@@ -1197,20 +1220,20 @@ dependencies = [
  "guinea-core",
  "guinea-devtools-protocol",
  "ogurpchik",
+ "puffin_http",
  "tracing",
 ]
 
 [[package]]
 name = "guinea-plugin-l10n"
-version = "0.7.0"
-source = "git+https://github.com/uniproc-dev/guinea-plugins?tag=v0.7.0#e4e91d56e720987436b823d02293e12848c67433"
+version = "0.7.1"
 dependencies = [
  "anyhow",
  "fluent-bundle",
  "fluent-templates",
  "guinea",
  "guinea-core",
- "guinea-plugin-store",
+ "guinea-plugin-store 0.20.0",
  "tracing",
  "unic-langid",
  "windows-reactor",
@@ -1218,8 +1241,7 @@ dependencies = [
 
 [[package]]
 name = "guinea-plugin-l10n-build"
-version = "0.7.0"
-source = "git+https://github.com/uniproc-dev/guinea-plugins?tag=v0.7.0#e4e91d56e720987436b823d02293e12848c67433"
+version = "0.7.1"
 dependencies = [
  "fluent-syntax",
  "proc-macro2",
@@ -1231,7 +1253,18 @@ dependencies = [
 [[package]]
 name = "guinea-plugin-store"
 version = "0.20.0"
-source = "git+https://github.com/uniproc-dev/guinea-plugins?tag=v0.7.0#e4e91d56e720987436b823d02293e12848c67433"
+dependencies = [
+ "amethystate",
+ "anyhow",
+ "guinea",
+ "guinea-core",
+ "tracing",
+]
+
+[[package]]
+name = "guinea-plugin-store"
+version = "0.20.0"
+source = "git+https://github.com/uniproc-dev/guinea-plugins?tag=v0.7.1#7352140f0d4f38f1554a2866d729c7dcf9258c6c"
 dependencies = [
  "amethystate",
  "anyhow",
@@ -1252,7 +1285,7 @@ dependencies = [
  "guinea-meta-build",
  "guinea-plugin-devtools",
  "guinea-plugin-l10n",
- "guinea-plugin-store",
+ "guinea-plugin-store 0.20.0 (git+https://github.com/uniproc-dev/guinea-plugins?tag=v0.7.1)",
  "guinea-widgets",
  "inventory",
  "processes-core",
@@ -1297,8 +1330,8 @@ dependencies = [
 
 [[package]]
 name = "guinea-widgets"
-version = "0.7.0"
-source = "git+https://github.com/uniproc-dev/guinea-plugins?tag=v0.7.0#e4e91d56e720987436b823d02293e12848c67433"
+version = "0.7.1"
+source = "git+https://github.com/uniproc-dev/guinea-plugins?tag=v0.7.1#7352140f0d4f38f1554a2866d729c7dcf9258c6c"
 dependencies = [
  "tracing",
  "windows-canvas",
@@ -1468,6 +1501,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "itertools"
+version = "0.14.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2b192c782037fadd9cfa75548310488aabdbf3d2da73885b31bd0abd03351285"
+dependencies = [
+ "either",
+]
+
+[[package]]
 name = "itoa"
 version = "1.0.18"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1571,6 +1613,12 @@ name = "lru-slab"
 version = "0.1.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4050469837a6ff301cd14c1f8f24f88549e6d548f24f64e2148eb0f72cebc51f"
+
+[[package]]
+name = "lz4_flex"
+version = "0.13.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7ef0d4ed8669f8f8826eb00dc878084aa8f253506c4fd5e8f58f5bce72ddb97e"
 
 [[package]]
 name = "matchers"
@@ -1807,10 +1855,39 @@ dependencies = [
  "guinea",
  "guinea-plugin-l10n",
  "guinea-plugin-l10n-build",
- "guinea-plugin-store",
+ "guinea-plugin-store 0.20.0 (git+https://github.com/uniproc-dev/guinea-plugins?tag=v0.7.1)",
  "guinea-widgets",
  "tokio",
  "tracing",
+]
+
+[[package]]
+name = "puffin"
+version = "0.20.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "84b514d95a258be801fde8a1ff1c974f4a4841d9750f5d1d6690fc07a5ad4049"
+dependencies = [
+ "anyhow",
+ "bincode",
+ "byteorder",
+ "cfg-if",
+ "itertools",
+ "lz4_flex",
+ "parking_lot",
+ "serde",
+]
+
+[[package]]
+name = "puffin_http"
+version = "0.17.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4f912991aab1adae69d2be9455e8db0f41e5ad3da87706ab2de64908678c2c76"
+dependencies = [
+ "anyhow",
+ "crossbeam-channel",
+ "log",
+ "parking_lot",
+ "puffin",
 ]
 
 [[package]]

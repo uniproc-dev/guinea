@@ -10,7 +10,8 @@ pub struct StartedAt(pub Instant);
 
 const LAUNCHES: [&str; 2] = ["app", "launches"];
 
-messages! { Sweep }
+#[derive(Debug, Clone)]
+pub struct Sweep;
 
 #[derive(Default, Debug)]
 pub struct Housekeeping {

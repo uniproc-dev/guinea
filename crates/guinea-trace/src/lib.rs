@@ -268,6 +268,7 @@ mod tests {
         let seen = collect();
         let spawn = mark(|| Point::Spawn {
             actor: "Poller",
+            actor_id: 1,
             output: "Tick",
         });
         {

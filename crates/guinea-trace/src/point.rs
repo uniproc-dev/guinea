@@ -36,10 +36,28 @@ pub enum Point {
         message: &'static str,
     },
     /// An actor started background work whose result will come back as
-    /// `output`.
+    /// `output`. `actor` is the address it will come back to, by the id the
+    /// snapshot lists it under: what a task belongs to is what that actor
+    /// belongs to.
     Spawn {
         actor: &'static str,
+        actor_id: u64,
         output: &'static str,
+    },
+    /// Background work finished, and its result is on its way to the actor.
+    Settled {
+        actor: &'static str,
+        actor_id: u64,
+        output: &'static str,
+        took_us: u64,
+    },
+    /// Background work was dropped where it last awaited, because the actor
+    /// that started it is gone. Nothing comes back.
+    Cancelled {
+        actor: &'static str,
+        actor_id: u64,
+        output: &'static str,
+        took_us: u64,
     },
     /// An event went out.
     Publish {
@@ -66,6 +84,12 @@ pub enum Point {
         /// Whether the change came from outside the process, an edited file.
         outside: bool,
     },
+    /// A page or layout drew itself, and how long that took. Recorded only
+    /// for the frames worth looking at - see `devtools::rendering`.
+    Render {
+        segment: &'static str,
+        took_us: u64,
+    },
     /// An ordinary `tracing` event the application wrote.
     Log {
         level: tracing::Level,
@@ -85,12 +109,15 @@ impl Point {
             Point::Send { .. } => "send",
             Point::Handle { .. } => "handle",
             Point::Spawn { .. } => "spawn",
+            Point::Settled { .. } => "settled",
+            Point::Cancelled { .. } => "cancelled",
             Point::Publish { .. } => "publish",
             Point::Deliver { .. } => "deliver",
             Point::Push { .. } => "push",
             Point::Navigate { .. } => "navigate",
             Point::Tick { .. } => "tick",
             Point::Store { .. } => "store",
+            Point::Render { .. } => "render",
             Point::Log { .. } => "log",
             Point::Note(_) => "note",
         }
@@ -112,7 +139,27 @@ impl fmt::Display for Point {
             Point::Action { message } => write!(f, "action {message}"),
             Point::Send { actor, message } => write!(f, "send {message} → {actor}"),
             Point::Handle { actor, message } => write!(f, "{actor} handles {message}"),
-            Point::Spawn { actor, output } => write!(f, "{actor} starts work for {output}"),
+            Point::Spawn { actor, output, .. } => write!(f, "{actor} starts work for {output}"),
+            Point::Settled {
+                actor,
+                output,
+                took_us,
+                ..
+            } => write!(
+                f,
+                "{actor} has its {output} after {:.1} ms",
+                *took_us as f64 / 1000.0
+            ),
+            Point::Cancelled {
+                actor,
+                output,
+                took_us,
+                ..
+            } => write!(
+                f,
+                "{actor} is gone: {output} cancelled after {:.1} ms",
+                *took_us as f64 / 1000.0
+            ),
             Point::Publish {
                 event,
                 bus,
@@ -122,6 +169,9 @@ impl fmt::Display for Point {
             Point::Push { reducer } => write!(f, "push into {reducer}"),
             Point::Navigate { root, to } => write!(f, "{root} navigates to {to}"),
             Point::Tick { timer } => write!(f, "timer #{timer}"),
+            Point::Render { segment, took_us } => {
+                write!(f, "{segment} drew itself in {:.1} ms", *took_us as f64 / 1000.0)
+            }
             Point::Store {
                 op,
                 path,
