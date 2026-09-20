@@ -196,12 +196,25 @@ impl AsyncBus {
     /// hand-written `Handler<RpcRequest<Req>>` both need to call it the same
     /// way, and a trait can't express "produces a value after an await" any
     /// more precisely than `Future<Output = Req::Response>` already does.
+    /// Unlike [`Context::spawn_bg`], this is not cut short when the actor
+    /// that answers is disposed: somebody is waiting for a value, and the
+    /// only thing a dropped future would leave them is the request's
+    /// timeout. A handler that would rather stop early has the token through
+    /// its `AsyncContext` - but it still owes an answer.
+    ///
+    /// [`Context::spawn_bg`]: crate::actor::Context::spawn_bg
     pub fn spawn_reply<Res, Fut>(correlation_id: Uuid, chain: Vec<TypeId>, fut: Fut)
     where
         Res: Clone + Send + 'static,
         Fut: Future<Output = Res> + Send + 'static,
     {
+        #[cfg(feature = "test-utils")]
+        let counted = crate::actor::event_bus::Counted::new();
+
         tokio::spawn(RPC_CHAIN.scope(chain, async move {
+            #[cfg(feature = "test-utils")]
+            let _counted = counted;
+
             let response = fut.await;
             AsyncBus::reply(correlation_id, response);
         }));

@@ -215,7 +215,9 @@ struct Forget((usize, TypeId));
 
 impl guinea_core::scope::Teardown for Forget {
     fn teardown(self) {
-        MOUNTED.with(|mounted| mounted.borrow_mut().remove(&self.0));
+        // `try_with`: a scope can outlive the thread local at thread
+        // teardown, and this runs from a `Drop`.
+        let _ = MOUNTED.try_with(|mounted| mounted.borrow_mut().remove(&self.0));
     }
 }
 

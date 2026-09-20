@@ -183,10 +183,10 @@ impl<A: 'static, M> Context<A, M> {
                 let settled = trace::mark_under(Some(spawned), || task.settled());
 
                 REGISTRY.with(|reg| {
-                    if let Some(boxed_addr) = reg.borrow().get(&id) {
-                        if let Some(addr) = boxed_addr.downcast_ref::<Addr<A>>() {
-                            addr.send_under(result, Some(settled));
-                        }
+                    if let Some(boxed_addr) = reg.borrow().get(&id)
+                        && let Some(addr) = boxed_addr.downcast_ref::<Addr<A>>()
+                    {
+                        addr.send_under(result, Some(settled));
                     }
                 });
             };
@@ -335,7 +335,13 @@ impl<A: 'static> AsyncContext<A> {
         bus.publish(msg);
     }
 
-    pub async fn apply<R, F>(&self, f: F) -> R
+    /// What `f` makes of the actor, on the UI thread - and `None` when there
+    /// is no actor left to ask.
+    ///
+    /// Gone is an ordinary answer here, not a failure: background work
+    /// outlives a teardown often enough, and the alternative was a panic on
+    /// a thread nobody is watching.
+    pub async fn apply<R, F>(&self, f: F) -> Option<R>
     where
         F: FnOnce(&mut A, &Context<A>) -> R + Send + 'static,
         R: Send + 'static,
@@ -348,19 +354,18 @@ impl<A: 'static> AsyncContext<A> {
             let _resumed = trace::resume(cause);
             REGISTRY.with(|reg| {
                 let reg_borrow = reg.borrow();
-                if let Some(boxed_addr) = reg_borrow.get(&id) {
-                    if let Some(addr) = boxed_addr.downcast_ref::<Addr<A>>() {
-                        addr.apply(move |actor, ctx| {
-                            let result = f(actor, ctx);
-                            let _ = tx.send(result);
-                        });
-                    }
+                if let Some(boxed_addr) = reg_borrow.get(&id)
+                    && let Some(addr) = boxed_addr.downcast_ref::<Addr<A>>()
+                {
+                    addr.apply(move |actor, ctx| {
+                        let result = f(actor, ctx);
+                        let _ = tx.send(result);
+                    });
                 }
             });
         });
 
-        rx.await
-            .expect("Actor target dropped or UI thread panicked")
+        rx.await.ok()
     }
 
     pub fn send<M>(&self, msg: M)

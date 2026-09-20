@@ -62,6 +62,10 @@ pub struct TimerInfo {
 struct Entry {
     info: TimerInfo,
     period: Period,
+    /// Which chain of wake-ups is the live one. Changing the period starts a
+    /// new chain, and whatever the old one had already queued is dropped
+    /// when it comes due.
+    generation: u64,
     active: Option<Box<dyn Fn() -> bool>>,
     run: Box<dyn FnMut()>,
     traced: bool,
@@ -118,6 +122,32 @@ impl Timer {
         self.change(|entry| entry.active = Some(Box::new(active)))
     }
 
+    /// Changes how often it ticks, from now.
+    ///
+    /// The wait already under way is cut short rather than waited out, which
+    /// is the difference from a [`Period::Varying`] that answers differently
+    /// the next time it is asked: an hourly timer told to tick every second
+    /// does so within the second, not within the hour.
+    pub fn period(self, period: impl Into<Period>) -> Self {
+        let Some(entry) = self.entry.upgrade() else {
+            return self;
+        };
+
+        let (id, generation, next) = {
+            let mut entry = entry.borrow_mut();
+            entry.period = period.into();
+            entry.generation += 1;
+
+            let next = entry.period.next();
+            entry.info.period = next;
+
+            (entry.info.id, entry.generation, next)
+        };
+
+        wake_after(id, generation, next);
+        self
+    }
+
     /// Leaves no trace and does not show up in devtools: for tooling that
     /// watches the application and must not be seen in what it watches.
     pub fn untraced(self) -> Self {
@@ -151,13 +181,14 @@ pub(crate) fn start(
             period: first,
         },
         period,
+        generation: 0,
         active: None,
         run: Box::new(run),
         traced: true,
     }));
 
     RUNNING.with(|running| running.borrow_mut().insert(id, Rc::downgrade(&entry)));
-    wake_after(id, first);
+    wake_after(id, 0, first);
 
     let timer = Timer {
         entry: Rc::downgrade(&entry),
@@ -181,11 +212,17 @@ pub fn running() -> Vec<TimerInfo> {
     timers
 }
 
-fn tick(id: u64) {
+fn tick(id: u64, generation: u64) {
     let entry = RUNNING.with(|running| running.borrow().get(&id).and_then(Weak::upgrade));
     let Some(entry) = entry else {
         return;
     };
+
+    // Left over from a period that has since changed: the chain it belonged
+    // to ended when the new one was armed.
+    if entry.borrow().generation != generation {
+        return;
+    }
 
     let (active, traced) = {
         let entry = entry.borrow();
@@ -212,17 +249,21 @@ fn tick(id: u64) {
         next
     };
 
-    wake_after(id, next);
+    // With the generation this tick came from, not the one the entry holds
+    // now: a `Timer::period` from inside `run` has already armed its own
+    // chain, and this one is over.
+    wake_after(id, generation, next);
 }
 
 struct Wake {
     at: Instant,
     id: u64,
+    generation: u64,
 }
 
 /// One thread for every timer: it sleeps until the nearest is due and hands
 /// the tick to the UI thread.
-fn wake_after(id: u64, after: Duration) {
+fn wake_after(id: u64, generation: u64, after: Duration) {
     static SCHEDULER: OnceLock<Mutex<Sender<Wake>>> = OnceLock::new();
 
     let scheduler = SCHEDULER.get_or_init(|| {
@@ -237,6 +278,7 @@ fn wake_after(id: u64, after: Duration) {
     let wake = Wake {
         at: Instant::now() + after,
         id,
+        generation,
     };
     let _ = scheduler
         .lock()
@@ -245,20 +287,20 @@ fn wake_after(id: u64, after: Duration) {
 }
 
 fn schedule(inbox: Receiver<Wake>) {
-    let mut due: BinaryHeap<Reverse<(Instant, u64)>> = BinaryHeap::new();
+    let mut due: BinaryHeap<Reverse<(Instant, u64, u64)>> = BinaryHeap::new();
 
     loop {
         let now = Instant::now();
-        while let Some(Reverse((at, id))) = due.peek().copied() {
+        while let Some(Reverse((at, id, generation))) = due.peek().copied() {
             if at > now {
                 break;
             }
             due.pop();
-            invoke_on_ui(move || tick(id));
+            invoke_on_ui(move || tick(id, generation));
         }
 
         let wake = match due.peek() {
-            Some(Reverse((at, _))) => match inbox.recv_timeout(at.saturating_duration_since(now)) {
+            Some(Reverse((at, _, _))) => match inbox.recv_timeout(at.saturating_duration_since(now)) {
                 Ok(wake) => wake,
                 Err(RecvTimeoutError::Timeout) => continue,
                 Err(RecvTimeoutError::Disconnected) => return,
@@ -268,7 +310,7 @@ fn schedule(inbox: Receiver<Wake>) {
                 Err(_) => return,
             },
         };
-        due.push(Reverse((wake.at, wake.id)));
+        due.push(Reverse((wake.at, wake.id, wake.generation)));
     }
 }
 
@@ -353,6 +395,29 @@ mod tests {
 
         wait(250);
         assert_eq!(counter.load(Ordering::SeqCst), 0);
+    }
+
+    #[test]
+    fn changing_the_period_cuts_the_wait_short_and_ends_the_old_chain() {
+        let _guard = TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let (_ticking, timer, counter) = counting(60_000);
+
+        let timer = timer.period(Duration::from_millis(20));
+        wait_for(&counter, 1);
+        assert!(
+            counter.load(Ordering::SeqCst) >= 1,
+            "a minute's wait was not waited out"
+        );
+
+        let _timer = timer.period(Duration::from_secs(60));
+        let seen = counter.load(Ordering::SeqCst);
+
+        wait(80);
+        assert_eq!(
+            counter.load(Ordering::SeqCst),
+            seen,
+            "the twenty-millisecond chain kept ticking after the period changed"
+        );
     }
 
     #[test]

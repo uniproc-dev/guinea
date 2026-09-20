@@ -147,7 +147,11 @@ fn expand_handler(item: ItemFn) -> Result<TokenStream> {
                         let actx = ctx.async_ctx();
                         let bare = ctx.detach();
                         let msg = ctx.msg;
-                        bare.spawn_bg_detached(async move {
+                        // `_with`, so the body is left to finish once it has
+                        // been told: it holds the same token through its
+                        // `AsyncContext`, and that promise is only true if
+                        // nothing drops it at the next await.
+                        bare.spawn_bg_detached_with(move |_gone| async move {
                             #fn_name(actx, msg).await;
                         });
                     }

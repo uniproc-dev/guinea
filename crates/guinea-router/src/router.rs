@@ -736,10 +736,35 @@ struct Parked<U: Ui> {
     settled: Box<dyn FnOnce(bool)>,
 }
 
+/// Says a frame is in progress for as long as it is held; see
+/// [`Router::drawing`].
+#[must_use = "the frame is over as soon as this is dropped"]
+pub struct Drawing<'a, U: Ui> {
+    router: &'a Router<U>,
+}
+
+impl<U: Ui> Drop for Drawing<'_, U> {
+    fn drop(&mut self) {
+        self.router.drawing.set(false);
+    }
+}
+
+/// A navigation asked for while the chain it would replace was being drawn.
+struct Held<U: Ui> {
+    chain: &'static [SegmentEntry<U>],
+    params: Vec<Box<dyn Any>>,
+    shared_len: usize,
+    settled: Box<dyn FnOnce(bool)>,
+}
+
 pub struct Router<U: Ui> {
     pub(crate) active: RefCell<Option<ActiveChain<U>>>,
     /// The question on screen, if a guard asked one.
     pending: RefCell<Option<Parked<U>>>,
+    /// Whether a frame is being drawn from the active chain right now, and
+    /// what was asked for while it was.
+    drawing: std::cell::Cell<bool>,
+    held: RefCell<Option<Held<U>>>,
     /// Bumped by every navigation, so an answer to a superseded question can
     /// be told from an answer to the current one.
     generation: std::cell::Cell<u64>,
@@ -789,6 +814,8 @@ impl<U: Ui> Router<U> {
         Self {
             active: RefCell::new(None),
             pending: RefCell::new(None),
+            drawing: std::cell::Cell::new(false),
+            held: RefCell::new(None),
             generation: std::cell::Cell::new(0),
             prev_route: RefCell::new(None),
             back: RefCell::new(Vec::new()),
@@ -925,6 +952,25 @@ impl<U: Ui> Router<U> {
             Verdict::Allow => {
                 *self.described.borrow_mut() = Some(route.describe());
                 *self.prev_route.borrow_mut() = Some(Box::new(route));
+
+                if self.drawing.get() {
+                    // The frame is standing on the chain this would tear
+                    // down, and holds it alive: installing now would run
+                    // every teardown against scopes nothing can drop yet.
+                    // It goes in as soon as the frame is over.
+                    let superseded = self.held.borrow_mut().replace(Held {
+                        chain,
+                        params,
+                        shared_len,
+                        settled: Box::new(settled),
+                    });
+                    if let Some(held) = superseded {
+                        (held.settled)(false);
+                    }
+
+                    return Ok(Navigation::Deferred);
+                }
+
                 let leaf = self.install_from(chain, shared_len, params)?;
                 settled(true);
                 Ok(Navigation::Done(leaf))
@@ -1151,7 +1197,20 @@ impl<U: Ui> Router<U> {
             let ctx = self
                 .host
                 .context(scope.clone(), Rc::from(scopes.clone()));
-            (entry.install)(&ctx, captured)?;
+
+            if let Err(error) = (entry.install)(&ctx, captured) {
+                // What this navigation managed to build comes down the way
+                // it went up, innermost first - including the segment that
+                // failed, which may have installed half of itself. The chain
+                // it replaced is already gone, so the router is left with
+                // none: a failed install is not a navigation that can be
+                // taken back.
+                scopes.push(scope);
+                unwind(Rc::new(scopes), 0);
+
+                return Err(error);
+            }
+
             scopes.push(scope);
         }
 
@@ -1265,11 +1324,48 @@ impl<U: Ui> Router<U> {
     /// `nodes` is the backend's own store, borrowed for as long as the view
     /// lives - which is what lets a widget hold a reference into the state it
     /// shows instead of a copy of it.
+    /// Says that a frame is being drawn from the active chain until the
+    /// guard is dropped, so a navigation from inside the drawing waits for
+    /// [`Router::settle`] instead of happening underneath it.
+    ///
+    /// For an immediate-mode backend, where drawing borrows the chain: the
+    /// view holds the scopes alive, so tearing them down mid-frame drops
+    /// nothing and leaves the teardown to run later, outside in, when the
+    /// frame lets go. A retained backend builds its view and hands it over,
+    /// and has nothing to hold.
+    pub fn drawing(&self) -> Drawing<'_, U> {
+        self.drawing.set(true);
+
+        Drawing { router: self }
+    }
+
+    /// Carries out what was asked for during the frame, and says whether
+    /// anything moved.
+    pub fn settle(self: &Rc<Self>) -> anyhow::Result<bool> {
+        let Some(held) = self.held.borrow_mut().take() else {
+            return Ok(false);
+        };
+
+        match self.install_from(held.chain, held.shared_len, held.params) {
+            Ok(_) => {
+                (held.settled)(true);
+                Ok(true)
+            }
+            Err(error) => {
+                (held.settled)(false);
+                Err(error)
+            }
+        }
+    }
+
     pub fn render<'a>(&self, nodes: &'a U::Nodes) -> U::View<'a> {
         self.active
             .borrow()
             .as_ref()
-            .expect("Router::render called with no active chain - call activate/navigate first")
+            .expect(
+                "Router::render called with no active chain - either activate/navigate has not \
+                 been called yet, or an install failed and took the chain it replaced with it",
+            )
             .root_view(nodes)
     }
 }

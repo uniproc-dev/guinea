@@ -17,27 +17,24 @@ pub trait FeatureContext {
     }
 }
 
-pub struct ActorBuilder<'a, Ctx: FeatureContext, A: ManagedActor> {
-    ctx: &'a mut Ctx,
-    actor: A,
-}
-
-impl<'a, Ctx: FeatureContext, A: ManagedActor + std::fmt::Debug> ActorBuilder<'a, Ctx, A> {
-    pub fn build(self) -> Addr<A> {
-        let addr = Addr::new_managed(self.actor, self.ctx.token(), self.ctx.tracker());
-        self.ctx.tracker().own_actor(&addr);
-        crate::app::actors::register(&addr, self.ctx.installing());
-        addr
-    }
-}
-
 pub trait ContextActorExt: FeatureContext + Sized {
+    /// Creates `actor`, subscribes it to what it listens for, and lists it
+    /// among the application's own.
+    ///
+    /// Application-level by construction: `PluginBuilder` is the only
+    /// [`FeatureContext`] there is, so a segment cannot reach this. A
+    /// segment's actor comes from `cx.state::<R>().driven_by(..)`, whose
+    /// registration is paired with a teardown and ends with the segment.
+    ///
+    /// The registry keeps an address of everything it lists, which is why
+    /// `AppLifecycle::shutdown` clears it before counting what leaked.
     fn spawn<A: ManagedActor + std::fmt::Debug>(&mut self, actor: A) -> Addr<A> {
-        self.actor_builder(actor).build()
-    }
+        let addr = Addr::new_managed(actor, self.token(), self.tracker());
 
-    fn actor_builder<A: ManagedActor>(&mut self, actor: A) -> ActorBuilder<'_, Self, A> {
-        ActorBuilder { ctx: self, actor }
+        self.tracker().own_actor(&addr);
+        crate::app::actors::register(&addr, self.installing());
+
+        addr
     }
 }
 

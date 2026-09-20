@@ -183,3 +183,31 @@ fn only_what_leaves_is_torn_down() {
     router.deactivate();
     assert_eq!(gone(), ["Processes", "Services", "Tabs", "Shell"]);
 }
+
+/// An immediate-mode backend draws *from* the chain, holding it alive, so a
+/// navigation asked for inside the drawing cannot take it apart yet: the
+/// scopes would be cloned rather than dropped, and the teardown would happen
+/// later and outside in.
+#[test]
+fn a_navigation_from_inside_a_frame_waits_for_the_frame() {
+    let router = router();
+
+    {
+        let _drawing = router.drawing();
+        router.navigate(Route::Services).expect("held until the frame ends");
+
+        assert!(gone().is_empty(), "nothing comes apart underneath the drawing");
+    }
+
+    assert!(
+        gone().is_empty(),
+        "the frame being over is not itself the navigation"
+    );
+    assert!(router.settle().expect("settling"), "it happens now");
+    assert_eq!(gone(), ["Processes"]);
+
+    assert!(
+        !router.settle().expect("nothing left"),
+        "and only once"
+    );
+}

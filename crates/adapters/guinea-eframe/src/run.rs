@@ -98,7 +98,19 @@ impl eframe::App for Frontend {
         // puts on every backend that draws over its own frame: while a guard's
         // question is up, the tree underneath must not take input, or the tabs
         // keep switching behind the dialog.
-        ui.add_enabled_ui(asking.is_none(), |ui| self.router.render(&()).draw(ui));
+        {
+            let _drawing = self.router.drawing();
+            ui.add_enabled_ui(asking.is_none(), |ui| self.router.render(&()).draw(ui));
+        }
+
+        // The drawing is over and has let go of the chain, so a navigation
+        // from inside it can now tear that chain down - which is the only
+        // moment at which it can, and the reason it waited.
+        match self.router.settle() {
+            Ok(true) => ui.ctx().request_repaint(),
+            Ok(false) => {}
+            Err(error) => tracing::error!(%error, "a navigation asked for while drawing failed"),
+        }
 
         if let Some(ask) = asking {
             question(ui, &ask, &self.router);

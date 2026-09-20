@@ -53,7 +53,10 @@ impl Drop for Counted {
 }
 
 pub struct EventBus {
-    subscribers: RefCell<HashMap<TypeId, Vec<Box<dyn UntypedSubscriber>>>>,
+    /// `Rc` rather than `Box`: delivery hands the subscribers out of the map
+    /// before telling them, so one that subscribes or unsubscribes while it
+    /// is being told does not find the map borrowed.
+    subscribers: RefCell<HashMap<TypeId, Vec<Rc<dyn UntypedSubscriber>>>>,
     counts: RefCell<HashMap<TypeId, usize>>,
     next_id: Cell<u64>,
     kind: Bus,
@@ -152,7 +155,7 @@ impl EventBus {
             .borrow_mut()
             .entry(event)
             .or_default()
-            .push(subscriber);
+            .push(Rc::from(subscriber));
 
         BusSubscription {
             bus: Rc::downgrade(self),
@@ -176,11 +179,20 @@ impl EventBus {
             subscribers: self.count_subscribers::<M>(),
         });
 
+        // Told from a copy of the list, not from the map: a handler is free
+        // to subscribe or unsubscribe while it is being told, and either
+        // would borrow the map this delivery is walking. One that goes
+        // mid-publication still hears this one out.
         let type_id = TypeId::of::<M>();
-        if let Some(subs) = self.subscribers.borrow().get(&type_id) {
-            for sub in subs {
-                sub.deliver(Box::new(msg.clone()), self.kind);
-            }
+        let telling: Vec<Rc<dyn UntypedSubscriber>> = self
+            .subscribers
+            .borrow()
+            .get(&type_id)
+            .cloned()
+            .unwrap_or_default();
+
+        for sub in telling {
+            sub.deliver(Box::new(msg.clone()), self.kind);
         }
     }
 
@@ -280,6 +292,38 @@ mod tests {
 
         bus.publish(Ping);
         assert_eq!(seen.get(), 1, "no delivery after the handle is dropped");
+    }
+
+    #[test]
+    fn a_subscriber_may_subscribe_and_unsubscribe_while_it_is_being_told() {
+        let bus = Rc::new(EventBus::new());
+        let seen = Rc::new(StdCell::new(0));
+
+        let later = Rc::new(RefCell::new(None));
+        let kept = later.clone();
+        let subscribing = bus.clone();
+        let counter = seen.clone();
+
+        // Two things a handler is allowed to do, both of which used to
+        // borrow the map that the publication was walking.
+        let sub = bus.subscribe_fn(move |_: Ping| {
+            counter.set(counter.get() + 1);
+
+            let counting = counter.clone();
+            *kept.borrow_mut() = Some(subscribing.subscribe_fn(move |_: Pong| {
+                counting.set(counting.get() + 10);
+            }));
+        });
+
+        bus.publish(Ping);
+        assert_eq!(seen.get(), 1);
+
+        bus.publish(Pong);
+        assert_eq!(seen.get(), 11, "what subscribed during the publication hears the next one");
+
+        drop(sub);
+        bus.publish(Ping);
+        assert_eq!(seen.get(), 11, "and the one that went is not told again");
     }
 
     #[test]
