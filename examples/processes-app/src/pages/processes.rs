@@ -89,7 +89,7 @@ impl Page for Processes {
             .spacing(16.0)
             .children((
                 TextBlock::new().text("Processes"),
-                table(rows, columns, |row: &Row| row.pid.to_string())
+                table(rows, columns)
                     .widths(&self.widths)
                     .on_resize(cx.on(Msg::Resized))
                     .selection(self.selected, cx.on(Msg::Selected))

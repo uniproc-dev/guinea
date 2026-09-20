@@ -1211,7 +1211,7 @@ dependencies = [
  "libc",
  "option-ext",
  "redox_users",
- "windows-sys 0.60.2",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -1385,7 +1385,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "39cab71617ae0d63f51a36d69f866391735b51691dbda63cf6f96d042b63efeb"
 dependencies = [
  "libc",
- "windows-sys 0.60.2",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -2031,7 +2031,7 @@ checksum = "b40ca9252762c466af32d0b1002e91e4e1bc5398f77455e55474deb466355ff5"
 
 [[package]]
 name = "guinea"
-version = "0.7.1"
+version = "0.8.0"
 dependencies = [
  "guinea-app",
  "guinea-codegen",
@@ -2045,7 +2045,7 @@ dependencies = [
 
 [[package]]
 name = "guinea-app"
-version = "0.7.1"
+version = "0.8.0"
 dependencies = [
  "anyhow",
  "guinea-core",
@@ -2055,7 +2055,7 @@ dependencies = [
 
 [[package]]
 name = "guinea-codegen"
-version = "0.7.1"
+version = "0.8.0"
 dependencies = [
  "guinea-core",
  "guinea-meta-build",
@@ -2070,7 +2070,7 @@ dependencies = [
 
 [[package]]
 name = "guinea-core"
-version = "0.7.1"
+version = "0.8.0"
 dependencies = [
  "anyhow",
  "arc-swap",
@@ -2088,7 +2088,7 @@ dependencies = [
 
 [[package]]
 name = "guinea-macros"
-version = "0.7.1"
+version = "0.8.0"
 dependencies = [
  "guinea-codegen",
  "guinea-route-dsl",
@@ -2117,8 +2117,8 @@ dependencies = [
 
 [[package]]
 name = "guinea-plugin-l10n"
-version = "0.7.1"
-source = "git+https://github.com/uniproc-dev/guinea-plugins?tag=v0.7.1#7352140f0d4f38f1554a2866d729c7dcf9258c6c"
+version = "0.8.0"
+source = "git+https://github.com/uniproc-dev/guinea-plugins?tag=v0.8.0#6edfe16de9d4e367498e5efe9e08eedc4b26c990"
 dependencies = [
  "anyhow",
  "fluent-bundle",
@@ -2132,8 +2132,8 @@ dependencies = [
 
 [[package]]
 name = "guinea-plugin-l10n-build"
-version = "0.7.1"
-source = "git+https://github.com/uniproc-dev/guinea-plugins?tag=v0.7.1#7352140f0d4f38f1554a2866d729c7dcf9258c6c"
+version = "0.8.0"
+source = "git+https://github.com/uniproc-dev/guinea-plugins?tag=v0.8.0#6edfe16de9d4e367498e5efe9e08eedc4b26c990"
 dependencies = [
  "fluent-syntax",
  "proc-macro2",
@@ -2145,7 +2145,7 @@ dependencies = [
 [[package]]
 name = "guinea-plugin-store"
 version = "0.20.0"
-source = "git+https://github.com/uniproc-dev/guinea-plugins?tag=v0.7.1#7352140f0d4f38f1554a2866d729c7dcf9258c6c"
+source = "git+https://github.com/uniproc-dev/guinea-plugins?tag=v0.8.0#6edfe16de9d4e367498e5efe9e08eedc4b26c990"
 dependencies = [
  "amethystate",
  "anyhow",
@@ -2156,8 +2156,8 @@ dependencies = [
 
 [[package]]
 name = "guinea-plugin-window-state"
-version = "0.7.1"
-source = "git+https://github.com/uniproc-dev/guinea-plugins?tag=v0.7.1#7352140f0d4f38f1554a2866d729c7dcf9258c6c"
+version = "0.8.0"
+source = "git+https://github.com/uniproc-dev/guinea-plugins?tag=v0.8.0#6edfe16de9d4e367498e5efe9e08eedc4b26c990"
 dependencies = [
  "anyhow",
  "guinea",
@@ -2168,7 +2168,7 @@ dependencies = [
 
 [[package]]
 name = "guinea-route-dsl"
-version = "0.7.1"
+version = "0.8.0"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -2178,7 +2178,7 @@ dependencies = [
 
 [[package]]
 name = "guinea-router"
-version = "0.7.1"
+version = "0.8.0"
 dependencies = [
  "anyhow",
  "guinea-app",
@@ -2190,7 +2190,7 @@ dependencies = [
 
 [[package]]
 name = "guinea-slint"
-version = "0.7.1"
+version = "0.8.0"
 dependencies = [
  "anyhow",
  "guinea-app",
@@ -2202,7 +2202,7 @@ dependencies = [
 
 [[package]]
 name = "guinea-slint-build"
-version = "0.7.1"
+version = "0.8.0"
 dependencies = [
  "anyhow",
  "guinea-route-dsl",
@@ -2213,7 +2213,7 @@ dependencies = [
 
 [[package]]
 name = "guinea-trace"
-version = "0.7.1"
+version = "0.8.0"
 dependencies = [
  "anyhow",
  "tracing",
@@ -2222,15 +2222,15 @@ dependencies = [
 
 [[package]]
 name = "guinea-widgets"
-version = "0.7.1"
-source = "git+https://github.com/uniproc-dev/guinea-plugins?tag=v0.7.1#7352140f0d4f38f1554a2866d729c7dcf9258c6c"
+version = "0.8.0"
+source = "git+https://github.com/uniproc-dev/guinea-plugins?tag=v0.8.0#6edfe16de9d4e367498e5efe9e08eedc4b26c990"
 dependencies = [
  "tracing",
 ]
 
 [[package]]
 name = "guinea-winui"
-version = "0.7.1"
+version = "0.8.0"
 dependencies = [
  "anyhow",
  "guinea-app",
@@ -3419,7 +3419,7 @@ dependencies = [
  "once_cell",
  "png",
  "thiserror 2.0.20",
- "windows-sys 0.60.2",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -3543,7 +3543,7 @@ version = "0.50.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7957b9740744892f114936ab4a57b3f487491bbeafaf8083688b16841a4240e5"
 dependencies = [
- "windows-sys 0.60.2",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -4845,7 +4845,7 @@ dependencies = [
  "errno",
  "libc",
  "linux-raw-sys 0.12.1",
- "windows-sys 0.60.2",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -5300,7 +5300,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c3d1e2c7f27f8d4cb10542a02c49005dbd6e93095799d6f3be745fae9f8fedd4"
 dependencies = [
  "libc",
- "windows-sys 0.60.2",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -5499,7 +5499,7 @@ dependencies = [
  "getrandom 0.4.3",
  "once_cell",
  "rustix 1.1.4",
- "windows-sys 0.60.2",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -5928,7 +5928,7 @@ checksum = "f2f6fb2847f6742cd76af783a2a2c49e9375d0a111c7bef6f71cd9e738c72d6e"
 dependencies = [
  "memoffset",
  "tempfile",
- "windows-sys 0.60.2",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -6419,7 +6419,7 @@ version = "0.1.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c2a7b1c03c876122aa43f3020e6c3c3ee5c05081c9a00739faf7503aeba10d22"
 dependencies = [
- "windows-sys 0.60.2",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]

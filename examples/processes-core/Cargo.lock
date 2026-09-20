@@ -499,56 +499,56 @@ dependencies = [
 
 [[package]]
 name = "guinea"
-version = "0.7.1"
+version = "0.8.0"
 dependencies = [
- "guinea-app 0.7.1",
- "guinea-codegen 0.7.1",
- "guinea-core 0.7.1",
- "guinea-macros 0.7.1",
+ "guinea-app 0.8.0",
+ "guinea-codegen 0.8.0",
+ "guinea-core 0.8.0",
+ "guinea-macros 0.8.0",
  "guinea-meta",
- "guinea-router 0.7.1",
+ "guinea-router 0.8.0",
 ]
 
 [[package]]
 name = "guinea"
-version = "0.7.1"
-source = "git+https://github.com/uniproc-dev/guinea?tag=v0.7.1#6a68f5e8fcee41a7af8e8d891e5fd463e76f2d31"
+version = "0.8.0"
+source = "git+https://github.com/uniproc-dev/guinea?tag=v0.8.0#3b4b8668eac91e747a6fd3930b15aecd32dcef3d"
 dependencies = [
- "guinea-app 0.7.1 (git+https://github.com/uniproc-dev/guinea?tag=v0.7.1)",
- "guinea-codegen 0.7.1 (git+https://github.com/uniproc-dev/guinea?tag=v0.7.1)",
- "guinea-core 0.7.1 (git+https://github.com/uniproc-dev/guinea?tag=v0.7.1)",
- "guinea-macros 0.7.1 (git+https://github.com/uniproc-dev/guinea?tag=v0.7.1)",
+ "guinea-app 0.8.0 (git+https://github.com/uniproc-dev/guinea?tag=v0.8.0)",
+ "guinea-codegen 0.8.0 (git+https://github.com/uniproc-dev/guinea?tag=v0.8.0)",
+ "guinea-core 0.8.0 (git+https://github.com/uniproc-dev/guinea?tag=v0.8.0)",
+ "guinea-macros 0.8.0 (git+https://github.com/uniproc-dev/guinea?tag=v0.8.0)",
  "guinea-meta",
- "guinea-router 0.7.1 (git+https://github.com/uniproc-dev/guinea?tag=v0.7.1)",
+ "guinea-router 0.8.0 (git+https://github.com/uniproc-dev/guinea?tag=v0.8.0)",
  "guinea-winui",
 ]
 
 [[package]]
 name = "guinea-app"
-version = "0.7.1"
+version = "0.8.0"
 dependencies = [
  "anyhow",
- "guinea-core 0.7.1",
+ "guinea-core 0.8.0",
  "tokio",
  "tracing",
 ]
 
 [[package]]
 name = "guinea-app"
-version = "0.7.1"
-source = "git+https://github.com/uniproc-dev/guinea?tag=v0.7.1#6a68f5e8fcee41a7af8e8d891e5fd463e76f2d31"
+version = "0.8.0"
+source = "git+https://github.com/uniproc-dev/guinea?tag=v0.8.0#3b4b8668eac91e747a6fd3930b15aecd32dcef3d"
 dependencies = [
  "anyhow",
- "guinea-core 0.7.1 (git+https://github.com/uniproc-dev/guinea?tag=v0.7.1)",
+ "guinea-core 0.8.0 (git+https://github.com/uniproc-dev/guinea?tag=v0.8.0)",
  "tokio",
  "tracing",
 ]
 
 [[package]]
 name = "guinea-codegen"
-version = "0.7.1"
+version = "0.8.0"
 dependencies = [
- "guinea-core 0.7.1",
+ "guinea-core 0.8.0",
  "guinea-meta-build",
  "heck",
  "proc-macro2",
@@ -561,10 +561,10 @@ dependencies = [
 
 [[package]]
 name = "guinea-codegen"
-version = "0.7.1"
-source = "git+https://github.com/uniproc-dev/guinea?tag=v0.7.1#6a68f5e8fcee41a7af8e8d891e5fd463e76f2d31"
+version = "0.8.0"
+source = "git+https://github.com/uniproc-dev/guinea?tag=v0.8.0#3b4b8668eac91e747a6fd3930b15aecd32dcef3d"
 dependencies = [
- "guinea-core 0.7.1 (git+https://github.com/uniproc-dev/guinea?tag=v0.7.1)",
+ "guinea-core 0.8.0 (git+https://github.com/uniproc-dev/guinea?tag=v0.8.0)",
  "guinea-meta-build",
  "heck",
  "proc-macro2",
@@ -577,12 +577,12 @@ dependencies = [
 
 [[package]]
 name = "guinea-core"
-version = "0.7.1"
+version = "0.8.0"
 dependencies = [
  "anyhow",
  "arc-swap",
  "derive_more",
- "guinea-trace 0.7.1",
+ "guinea-trace 0.8.0",
  "http",
  "inventory",
  "once_cell",
@@ -595,13 +595,13 @@ dependencies = [
 
 [[package]]
 name = "guinea-core"
-version = "0.7.1"
-source = "git+https://github.com/uniproc-dev/guinea?tag=v0.7.1#6a68f5e8fcee41a7af8e8d891e5fd463e76f2d31"
+version = "0.8.0"
+source = "git+https://github.com/uniproc-dev/guinea?tag=v0.8.0#3b4b8668eac91e747a6fd3930b15aecd32dcef3d"
 dependencies = [
  "anyhow",
  "arc-swap",
  "derive_more",
- "guinea-trace 0.7.1 (git+https://github.com/uniproc-dev/guinea?tag=v0.7.1)",
+ "guinea-trace 0.8.0 (git+https://github.com/uniproc-dev/guinea?tag=v0.8.0)",
  "http",
  "inventory",
  "once_cell",
@@ -614,10 +614,10 @@ dependencies = [
 
 [[package]]
 name = "guinea-macros"
-version = "0.7.1"
+version = "0.8.0"
 dependencies = [
- "guinea-codegen 0.7.1",
- "guinea-route-dsl 0.7.1",
+ "guinea-codegen 0.8.0",
+ "guinea-route-dsl 0.8.0",
  "heck",
  "proc-macro-crate",
  "proc-macro2",
@@ -628,11 +628,11 @@ dependencies = [
 
 [[package]]
 name = "guinea-macros"
-version = "0.7.1"
-source = "git+https://github.com/uniproc-dev/guinea?tag=v0.7.1#6a68f5e8fcee41a7af8e8d891e5fd463e76f2d31"
+version = "0.8.0"
+source = "git+https://github.com/uniproc-dev/guinea?tag=v0.8.0#3b4b8668eac91e747a6fd3930b15aecd32dcef3d"
 dependencies = [
- "guinea-codegen 0.7.1 (git+https://github.com/uniproc-dev/guinea?tag=v0.7.1)",
- "guinea-route-dsl 0.7.1 (git+https://github.com/uniproc-dev/guinea?tag=v0.7.1)",
+ "guinea-codegen 0.8.0 (git+https://github.com/uniproc-dev/guinea?tag=v0.8.0)",
+ "guinea-route-dsl 0.8.0 (git+https://github.com/uniproc-dev/guinea?tag=v0.8.0)",
  "heck",
  "proc-macro-crate",
  "proc-macro2",
@@ -658,21 +658,23 @@ dependencies = [
 
 [[package]]
 name = "guinea-plugin-l10n"
-version = "0.7.1"
+version = "0.8.0"
+source = "git+https://github.com/uniproc-dev/guinea-plugins?tag=v0.8.0#6edfe16de9d4e367498e5efe9e08eedc4b26c990"
 dependencies = [
  "anyhow",
  "fluent-bundle",
  "fluent-templates",
- "guinea 0.7.1 (git+https://github.com/uniproc-dev/guinea?tag=v0.7.1)",
- "guinea-core 0.7.1 (git+https://github.com/uniproc-dev/guinea?tag=v0.7.1)",
- "guinea-plugin-store 0.20.0",
+ "guinea 0.8.0 (git+https://github.com/uniproc-dev/guinea?tag=v0.8.0)",
+ "guinea-core 0.8.0 (git+https://github.com/uniproc-dev/guinea?tag=v0.8.0)",
+ "guinea-plugin-store",
  "tracing",
  "unic-langid",
 ]
 
 [[package]]
 name = "guinea-plugin-l10n-build"
-version = "0.7.1"
+version = "0.8.0"
+source = "git+https://github.com/uniproc-dev/guinea-plugins?tag=v0.8.0#6edfe16de9d4e367498e5efe9e08eedc4b26c990"
 dependencies = [
  "fluent-syntax",
  "proc-macro2",
@@ -684,29 +686,18 @@ dependencies = [
 [[package]]
 name = "guinea-plugin-store"
 version = "0.20.0"
+source = "git+https://github.com/uniproc-dev/guinea-plugins?tag=v0.8.0#6edfe16de9d4e367498e5efe9e08eedc4b26c990"
 dependencies = [
  "amethystate",
  "anyhow",
- "guinea 0.7.1 (git+https://github.com/uniproc-dev/guinea?tag=v0.7.1)",
- "guinea-core 0.7.1 (git+https://github.com/uniproc-dev/guinea?tag=v0.7.1)",
- "tracing",
-]
-
-[[package]]
-name = "guinea-plugin-store"
-version = "0.20.0"
-source = "git+https://github.com/uniproc-dev/guinea-plugins?tag=v0.7.1#7352140f0d4f38f1554a2866d729c7dcf9258c6c"
-dependencies = [
- "amethystate",
- "anyhow",
- "guinea 0.7.1 (git+https://github.com/uniproc-dev/guinea?tag=v0.7.1)",
- "guinea-core 0.7.1 (git+https://github.com/uniproc-dev/guinea?tag=v0.7.1)",
+ "guinea 0.8.0 (git+https://github.com/uniproc-dev/guinea?tag=v0.8.0)",
+ "guinea-core 0.8.0 (git+https://github.com/uniproc-dev/guinea?tag=v0.8.0)",
  "tracing",
 ]
 
 [[package]]
 name = "guinea-route-dsl"
-version = "0.7.1"
+version = "0.8.0"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -716,8 +707,8 @@ dependencies = [
 
 [[package]]
 name = "guinea-route-dsl"
-version = "0.7.1"
-source = "git+https://github.com/uniproc-dev/guinea?tag=v0.7.1#6a68f5e8fcee41a7af8e8d891e5fd463e76f2d31"
+version = "0.8.0"
+source = "git+https://github.com/uniproc-dev/guinea?tag=v0.8.0#3b4b8668eac91e747a6fd3930b15aecd32dcef3d"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -727,11 +718,11 @@ dependencies = [
 
 [[package]]
 name = "guinea-router"
-version = "0.7.1"
+version = "0.8.0"
 dependencies = [
  "anyhow",
- "guinea-app 0.7.1",
- "guinea-core 0.7.1",
+ "guinea-app 0.8.0",
+ "guinea-core 0.8.0",
  "serde",
  "serde_json",
  "tracing",
@@ -739,12 +730,12 @@ dependencies = [
 
 [[package]]
 name = "guinea-router"
-version = "0.7.1"
-source = "git+https://github.com/uniproc-dev/guinea?tag=v0.7.1#6a68f5e8fcee41a7af8e8d891e5fd463e76f2d31"
+version = "0.8.0"
+source = "git+https://github.com/uniproc-dev/guinea?tag=v0.8.0#3b4b8668eac91e747a6fd3930b15aecd32dcef3d"
 dependencies = [
  "anyhow",
- "guinea-app 0.7.1 (git+https://github.com/uniproc-dev/guinea?tag=v0.7.1)",
- "guinea-core 0.7.1 (git+https://github.com/uniproc-dev/guinea?tag=v0.7.1)",
+ "guinea-app 0.8.0 (git+https://github.com/uniproc-dev/guinea?tag=v0.8.0)",
+ "guinea-core 0.8.0 (git+https://github.com/uniproc-dev/guinea?tag=v0.8.0)",
  "serde",
  "serde_json",
  "tracing",
@@ -752,7 +743,7 @@ dependencies = [
 
 [[package]]
 name = "guinea-trace"
-version = "0.7.1"
+version = "0.8.0"
 dependencies = [
  "anyhow",
  "tracing",
@@ -761,8 +752,8 @@ dependencies = [
 
 [[package]]
 name = "guinea-trace"
-version = "0.7.1"
-source = "git+https://github.com/uniproc-dev/guinea?tag=v0.7.1#6a68f5e8fcee41a7af8e8d891e5fd463e76f2d31"
+version = "0.8.0"
+source = "git+https://github.com/uniproc-dev/guinea?tag=v0.8.0#3b4b8668eac91e747a6fd3930b15aecd32dcef3d"
 dependencies = [
  "anyhow",
  "tracing",
@@ -771,22 +762,22 @@ dependencies = [
 
 [[package]]
 name = "guinea-widgets"
-version = "0.7.1"
-source = "git+https://github.com/uniproc-dev/guinea-plugins?tag=v0.7.1#7352140f0d4f38f1554a2866d729c7dcf9258c6c"
+version = "0.8.0"
+source = "git+https://github.com/uniproc-dev/guinea-plugins?tag=v0.8.0#6edfe16de9d4e367498e5efe9e08eedc4b26c990"
 dependencies = [
  "tracing",
 ]
 
 [[package]]
 name = "guinea-winui"
-version = "0.7.1"
-source = "git+https://github.com/uniproc-dev/guinea?tag=v0.7.1#6a68f5e8fcee41a7af8e8d891e5fd463e76f2d31"
+version = "0.8.0"
+source = "git+https://github.com/uniproc-dev/guinea?tag=v0.8.0#3b4b8668eac91e747a6fd3930b15aecd32dcef3d"
 dependencies = [
  "anyhow",
- "guinea-app 0.7.1 (git+https://github.com/uniproc-dev/guinea?tag=v0.7.1)",
- "guinea-core 0.7.1 (git+https://github.com/uniproc-dev/guinea?tag=v0.7.1)",
- "guinea-macros 0.7.1 (git+https://github.com/uniproc-dev/guinea?tag=v0.7.1)",
- "guinea-router 0.7.1 (git+https://github.com/uniproc-dev/guinea?tag=v0.7.1)",
+ "guinea-app 0.8.0 (git+https://github.com/uniproc-dev/guinea?tag=v0.8.0)",
+ "guinea-core 0.8.0 (git+https://github.com/uniproc-dev/guinea?tag=v0.8.0)",
+ "guinea-macros 0.8.0 (git+https://github.com/uniproc-dev/guinea?tag=v0.8.0)",
+ "guinea-router 0.8.0 (git+https://github.com/uniproc-dev/guinea?tag=v0.8.0)",
  "tracing",
  "windows-core",
  "windows-reactor",
@@ -1122,10 +1113,10 @@ dependencies = [
 name = "processes-core"
 version = "0.1.0"
 dependencies = [
- "guinea 0.7.1",
+ "guinea 0.8.0",
  "guinea-plugin-l10n",
  "guinea-plugin-l10n-build",
- "guinea-plugin-store 0.20.0 (git+https://github.com/uniproc-dev/guinea-plugins?tag=v0.7.1)",
+ "guinea-plugin-store",
  "guinea-widgets",
  "tokio",
  "tracing",

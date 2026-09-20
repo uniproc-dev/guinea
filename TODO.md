@@ -121,12 +121,3 @@ side until reactor has them.
 - Column resize was not checked after the rewrite; synthetic input did not
   move the handle. Check by hand.
 
-## processes-eframe does not build
-
-`wgpu-hal` fails to compile: `gpu-allocator` is resolved to `windows 0.61`,
-which `ogurpchik` (via `guinea-plugin-devtools`) pins, while `wgpu-hal` uses
-`windows 0.62`. `cargo update -p windows@0.61.3 --precise 0.62.2` is refused
-for the same reason.
-
-Either build eframe with `glow` only, as `tools/devtools` does, or move
-`ogurpchik` to `windows 0.62`.
