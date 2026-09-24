@@ -27,7 +27,9 @@ use guinea_router::router::{
     Mount, NavigateHandle, RouteChain, RouteSink, Router, SegmentEntry, SegmentProps, Ui,
     single_entry_chain,
 };
-use windows_reactor::{Callback, Component, ComponentContext, View, ViewContext};
+use windows_reactor::{
+    AutomationExt, Border, Callback, Component, ComponentContext, ContentControl, View, ViewContext,
+};
 
 /// windows-reactor as a [`Ui`].
 pub struct WinUi;
@@ -324,7 +326,7 @@ impl<P: Page> Component for PageNode<P> {
             page: PhantomData,
         });
         crate::devtools::record(input, &view);
-        view
+        marked::<P>(view)
     }
 }
 
@@ -374,8 +376,17 @@ impl<L: Layout> Component for LayoutNode<L> {
             layout: PhantomData,
         });
         crate::devtools::record(input, &view);
-        view
+        marked::<L>(view)
     }
+}
+
+/// A segment's view inside a border whose `AutomationId` is the segment's
+/// name, so the XAML tree shows where each page and layout begins.
+fn marked<S>(view: View) -> View {
+    Border::new()
+        .automation_id(guinea_router::devtools::short(std::any::type_name::<S>()))
+        .content(view)
+        .into()
 }
 
 fn open<C: Component>(cx: &ComponentContext<C>, window: View) {

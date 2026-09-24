@@ -68,7 +68,8 @@ pub fn routers() -> Vec<RouterView> {
     alive.iter().map(|router| router.view()).collect()
 }
 
-fn short(name: &'static str) -> &'static str {
+/// The name a segment goes by: its type, without the path or the generics.
+pub fn short(name: &'static str) -> &'static str {
     let generic = name.find('<').unwrap_or(name.len());
     let start = name[..generic].rfind("::").map_or(0, |at| at + 2);
     &name[start..generic]
