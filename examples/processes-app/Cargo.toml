@@ -15,6 +15,7 @@ guinea-plugin-store = { git = "https://github.com/uniproc-dev/guinea-plugins", t
 guinea-widgets = { git = "https://github.com/uniproc-dev/guinea-plugins", tag = "v0.8.1" }
 guinea-plugin-l10n = { git = "https://github.com/uniproc-dev/guinea-plugins", tag = "v0.8.1", features = ["winui"] }
 guinea-plugin-devtools = { git = "https://github.com/uniproc-dev/guinea-plugins", tag = "v0.8.1" }
+guinea-xaml-tap = { path = "../../../guinea-plugins/tools/devtools/xaml-tap" }
 anyhow = "1.0"
 inventory = "0.3"
 tokio = { version = "1", features = ["time", "rt-multi-thread"] }

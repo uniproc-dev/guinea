@@ -37,6 +37,10 @@ fn main() -> anyhow::Result<()> {
         .with(guinea_core::devtools::layer())
         .init();
 
+    if let Some(dll) = std::env::var_os("GUINEA_XAML_TAP") {
+        std::thread::spawn(move || load_tap(dll.into()));
+    }
+
     let app = GuineaApp::new()
         .meta(guinea::app_meta!())
         .plugin(
@@ -56,4 +60,30 @@ fn main() -> anyhow::Result<()> {
             .client_size(420.0, 420.0),
         initial_route,
     )
+}
+
+/// Loads the XAML tap into this very process once XAML is up, instead of
+/// devtools injecting it from outside. An experiment.
+fn load_tap(dll: std::path::PathBuf) {
+    let pid = std::process::id();
+    let copy = std::env::temp_dir().join(format!("guinea-xaml-tap-self-{pid}.dll"));
+    if let Err(error) = std::fs::copy(&dll, &copy) {
+        tracing::warn!(%error, "copying the tap");
+        return;
+    }
+
+    for attempt in 1..=40 {
+        match guinea_xaml_tap::inject::inject(pid, &copy) {
+            Ok(()) => {
+                tracing::info!(attempt, "the tap loaded into its own process");
+                return;
+            }
+            Err(error) => {
+                tracing::info!(attempt, %error, "the tap is not in yet");
+                std::thread::sleep(std::time::Duration::from_millis(250));
+            }
+        }
+    }
+
+    tracing::warn!("the tap never loaded");
 }
