@@ -252,12 +252,14 @@ impl<A: 'static, M> Context<A, M> {
             let _counted = counted;
 
             let running = trace::within(Some(spawned), fut);
-            let ran = match listens {
-                true => Some(running.await),
-                false => cancel.guard(running).await,
+            let ran = if listens {
+                running.await;
+                true
+            } else {
+                cancel.guard(running).await.is_some()
             };
 
-            let ended = match ran.is_some() && !cancel.is_cancelled() {
+            let ended = match ran && !cancel.is_cancelled() {
                 true => task.settled(),
                 false => task.cancelled(),
             };

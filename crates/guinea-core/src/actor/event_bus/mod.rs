@@ -192,6 +192,16 @@ impl EventBus {
             .unwrap_or_default();
 
         for sub in telling {
+            // Around each one, not around the lot: the copy every subscriber
+            // is handed is made here, and time spent making it belongs to the
+            // delivery that needed it rather than to the publication as a
+            // whole. Without this it is the difference between a publication
+            // and the sum of its handlers, which is to say invisible.
+            let _delivered = trace::enter(|| Point::Deliver {
+                event: short_type_name::<M>(),
+                bus: self.kind,
+            });
+
             sub.deliver(Box::new(msg.clone()), self.kind);
         }
     }

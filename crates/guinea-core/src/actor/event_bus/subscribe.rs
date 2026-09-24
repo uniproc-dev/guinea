@@ -1,7 +1,7 @@
 use crate::actor::addr::Addr;
 use crate::actor::short_type_name;
 use crate::actor::traits::Handler;
-use crate::trace::{self, Bus, Point};
+use crate::trace::Bus;
 
 use std::any::{Any, TypeId};
 use std::marker::PhantomData;
@@ -95,12 +95,10 @@ pub struct FnSubscriber<M: Event> {
 }
 
 impl<M: Event> UntypedSubscriber for FnSubscriber<M> {
-    fn deliver(&self, msg: Box<dyn Any>, bus: Bus) {
+    /// No `Deliver` of its own: the publication marks one around every
+    /// subscriber, so one here would be the same span twice.
+    fn deliver(&self, msg: Box<dyn Any>, _bus: Bus) {
         if let Ok(concrete_msg) = msg.downcast::<M>() {
-            let _delivered = trace::enter(|| Point::Deliver {
-                event: short_type_name::<M>(),
-                bus,
-            });
             (self.callback)(*concrete_msg);
         }
     }

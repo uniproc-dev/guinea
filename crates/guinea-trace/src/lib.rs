@@ -92,6 +92,27 @@ pub fn current() -> Option<Cause> {
     CURRENT.with(Cell::get)
 }
 
+thread_local! {
+    /// What recording has cost since the point that is current now opened.
+    ///
+    /// Observing is not free - a record is built, given to devtools, written
+    /// through `tracing` - and it all happens inside whatever is being
+    /// measured. Charged to the observer instead, so a duration means the
+    /// same whether or not anyone is watching.
+    static WATCHING: Cell<Duration> = const { Cell::new(Duration::ZERO) };
+}
+
+/// Runs `recording` and charges what it took to the observer rather than to
+/// the point that is open.
+fn observed<R>(recording: impl FnOnce() -> R) -> R {
+    let started = Instant::now();
+    let done = recording();
+
+    WATCHING.with(|watching| watching.set(watching.get() + started.elapsed()));
+
+    done
+}
+
 /// Records a point caused by whatever is current, without making it current.
 pub fn mark(point: impl FnOnce() -> Point) -> Cause {
     mark_under(current(), point)
@@ -102,12 +123,14 @@ pub fn mark(point: impl FnOnce() -> Point) -> Cause {
 pub fn mark_under(parent: Option<Cause>, point: impl FnOnce() -> Point) -> Cause {
     let id = Cause::next();
     if sink::wanted() {
-        sink::emit(Trace::Mark(Record {
-            id,
-            parent,
-            at: now(),
-            point: point(),
-        }));
+        observed(|| {
+            sink::emit(Trace::Mark(Record {
+                id,
+                parent,
+                at: now(),
+                point: point(),
+            }));
+        });
     }
     id
 }
@@ -123,18 +146,25 @@ pub fn enter_under(parent: Option<Cause>, point: impl FnOnce() -> Point) -> Ente
     let id = Cause::next();
     let started = now();
     if sink::wanted() {
-        sink::emit(Trace::Begin(Record {
-            id,
-            parent,
-            at: started,
-            point: point(),
-        }));
+        observed(|| {
+            sink::emit(Trace::Begin(Record {
+                id,
+                parent,
+                at: started,
+                point: point(),
+            }));
+        });
     }
     let previous = CURRENT.with(|current| current.replace(Some(id)));
+
     Entered {
         id,
         previous,
         started,
+        // What observing had cost before this point opened. Whatever is
+        // added to it while the point is open was spent watching it, not
+        // doing it.
+        watched: WATCHING.with(Cell::get),
     }
 }
 
@@ -179,6 +209,8 @@ pub struct Entered {
     id: Cause,
     previous: Option<Cause>,
     started: Duration,
+    /// What observing had cost by the time this point opened.
+    watched: Duration,
 }
 
 impl Entered {
@@ -190,11 +222,16 @@ impl Entered {
 impl Drop for Entered {
     fn drop(&mut self) {
         CURRENT.with(|current| current.set(self.previous));
+
         if sink::wanted() {
-            sink::emit(Trace::End {
-                id: self.id,
-                took: now().saturating_sub(self.started),
-            });
+            // Everything observing cost while this point was open comes off
+            // what the point is said to have taken. It stays on the running
+            // total, so the point above this one discounts it too - it was
+            // open for all of it as well.
+            let watching = WATCHING.with(Cell::get).saturating_sub(self.watched);
+            let took = now().saturating_sub(self.started).saturating_sub(watching);
+
+            observed(|| sink::emit(Trace::End { id: self.id, took }));
         }
     }
 }
@@ -228,6 +265,36 @@ mod tests {
             Trace::Begin(record) | Trace::Mark(record) if record.id == id => Some(record.parent),
             _ => None,
         })?
+    }
+
+    /// Observing costs time, and it is spent inside whatever is open. Left
+    /// in, a duration would say how long the work took *while watched*,
+    /// which is not a number anyone wants.
+    #[test]
+    fn what_a_point_took_leaves_out_what_watching_it_cost() {
+        let slow = Rc::new(RefCell::new(Vec::new()));
+        let sink = slow.clone();
+        observe(move |trace| {
+            // An observer that takes its time, so the cost is unmistakable.
+            std::thread::sleep(std::time::Duration::from_millis(2));
+            if let Trace::End { took, .. } = trace {
+                sink.borrow_mut().push(*took);
+            }
+        });
+
+        {
+            let _action = enter(|| Point::Action { message: "Save" });
+            for _ in 0..5 {
+                mark(|| Point::Push { reducer: "Metrics" });
+            }
+        }
+        stop_observing();
+
+        let took = *slow.borrow().first().expect("the action ended");
+        assert!(
+            took < std::time::Duration::from_millis(5),
+            "five marks at two milliseconds of observer each were charged to the action: {took:?}"
+        );
     }
 
     #[test]
