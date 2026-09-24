@@ -2,6 +2,29 @@
 
 ## Devtools (guinea-plugins)
 
+### ogurpchik 0.5.0 moves both ends of the link at once
+
+`v0.5.0` is pushed. The handshake
+gained a `SchemaId` after `HandshakeMode` on `authenticate_server` /
+`authenticate_client` and `accept_session` / `connect_session`, and
+`HANDSHAKE_VERSION` went to 2 - so a 0.4.0 peer and a 0.5.0 peer do not
+connect at all, they refuse with `UnsupportedVersion`.
+
+The two ends here are the devtools plugin, which ships inside every
+application, and the hub, which is devtools itself. There is no partial move:
+an application built against the old plugin stops talking to new devtools, and
+the other way round. So the plugin and the hub go out in one release, and the
+applications that embed the plugin - uniproc, the examples - move onto that
+tag before anyone runs the pair.
+
+Until then uniproc builds two copies: its own 0.5.0, and 0.4.0 brought in by
+`guinea-plugin-devtools` and `guinea-devtools-protocol` from plugins `v0.8.1`.
+Harmless, by ogurpchik's owner: neither version keeps global state, compio and
+capnp resolve to one copy, and a 0.4.0 end meeting a 0.5.0 end fails loudly in
+the handshake rather than quietly. Plugin and hub still both speak 0.4.0 to
+each other, so nothing is broken - the cost is binary size and build time.
+Unblocked; the move waits only for a plugins release to carry it.
+
 ### The MCP server answers in JSON meant for a window
 
 `tools/devtools/mcp` offers every route of the API as a tool, generated from
@@ -120,4 +143,133 @@ side until reactor has them.
   the fix is in reactor's shell.
 - Column resize was not checked after the rewrite; synthetic input did not
   move the handle. Check by hand.
+
+## Core: the scope before the router
+
+Decided in conversation, not started. Three wants need the same change: a
+router that stays out of the way, devtools that see all of the core, and
+backends that bring their own navigation.
+
+### Scopes are created by whoever hosts them
+
+Today only the router creates scopes, and every adapter must start from a
+route: `guinea_eframe::run` takes `initial: impl FnOnce() -> R` with
+`R: RouteChain<_>`, and each of the five adapters carries a `nav.rs`. Make the
+scope the core's own primitive and the router one host among several - the
+application, a window, a Tauri webview, a Dioxus component. An application with
+no routes runs with one root scope.
+
+The devtools snapshot has the same shape problem: it is roots, then chains, then
+segments, and everything else hangs off a segment index. Make it a scope tree,
+with the router as a note on the scopes it holds.
+
+What the snapshot does not show yet:
+
+- an actor's mailbox depth and the message it is handling now;
+- live background tasks - today devtools rebuild them from the trace
+  (`tasks.rs`), so after a reconnect, or with the trace off, they are gone;
+- plugins and the `provide` / `require` graph;
+- what a scope will tear down (`own` / `Teardown`);
+- held navigation (`Held` between `drawing` and `settle`) and the
+  `notify::turn` queue.
+
+Worth copying from Bevy BRP: `+watch` subscriptions to changes, and methods
+that plugins register themselves, so a plugin shows its own insides through
+the same channel. Free while nobody is watching, as the trace already is
+(`sink::wanted()`).
+
+### Plugin API: Tauri's shape, Bevy's composition
+
+After the scope change, since window hooks need scopes a host creates.
+
+From Tauri, take the v3 names, not v2 (`run_invoke_handler`, not `extend_api`):
+
+| Tauri | guinea |
+|---|---|
+| `setup(app, api)` | today's `build` |
+| `on_event(RunEvent)`: `Ready`, `ExitRequested { prevent_exit }`, `Exit` | an application event enum, which does not exist yet |
+| `on_window_ready` / window destroyed | a root scope created / torn down |
+| `on_page_load` | a segment mounted, when there is a router |
+| `on_drop` | the plugin torn down |
+
+- Extension traits on the context (`cx.store()` instead of
+  `require::<Store>()`), the way `impl<R, T: Manager<R>> XExt<R> for T` works.
+- A plugin's actors reachable from outside under its name
+  (`plugin:store|...`), for the Tauri bridge and for devtools and MCP.
+- A typed plugin config.
+- One monorepo, one layout, a `plugin new` scaffold, and plugin majors that
+  move with guinea's.
+
+Do not take: a runtime generic on every plugin (`Plugin<R>` - Tauri itself
+moves runtime-specific API into extension traits in v3; here backend-specific
+parts go through their own extension points, like devtools'
+`winui.components` panels); a panicking `state::<T>()` (`require` returning
+`Result` is better); config as `serde_json::Value`; "the last
+`invoke_handler` wins"; permissions, until there is a trust boundary.
+
+Tauri has no ordering - registration order is the order, and its docs say
+`single-instance` must come first. Take that part from Bevy instead: groups with
+`add_before` / `add_after` / `disable` / `set`, a `ready` phase for a plugin
+still coming up, `finish` once all are built, and `is_unique`.
+
+The biggest obstacle to third-party plugins is not in the API: plugins pin a
+guinea rev, and an application has to patch guinea to that same rev or build
+two `PluginBuilder`s. A small, semver'd plugin-API crate on crates.io removes
+it.
+
+### Tauri: guinea as one Tauri plugin, actors instead of commands
+
+- A Tauri plugin (`tauri::plugin::Builder`) whose `setup` builds the
+  `GuineaApp`, sets the dispatcher to `AppHandle::run_on_main_thread` and
+  `provide`s the `AppHandle`; `on_webview_ready` creates a scope for the
+  webview label, and closing the window tears it down; `on_event(Exit)` stops
+  the actors.
+- `invoke_handler` is a plain `Fn(Invoke<R>) -> bool` (from memory - check):
+  route `plugin:guinea|ProcessActor.Kill` to an actor by a table generated
+  from what `actor!` already declares, and answer through `invoke.resolver`
+  once the actor replies.
+- Cancellation, which Tauri lacks (issue #8351): an id per `ask`, a JS
+  `AbortSignal` sends a cancel that fires that request's `Cancel`.
+- The trace crosses IPC: an `invoke` is a root; send, handle and publish
+  follow; `emit_to` goes back to the frontend.
+- ACL: plugin command permissions are generated in the plugin's `build.rs`
+  from its command list (`tauri_plugin::Builder::new(COMMANDS)`); codegen
+  supplies that list.
+- No pages and no router here: `View = ()`, and the frontend routes. What goes
+  to the frontend must serialise.
+- The line for users: OS access from the webview is a Tauri plugin; logic with
+  state, lifetimes and causes is a guinea feature or plugin. Tauri plugins'
+  Rust APIs (`app.dialog()`, `ShellExt`, ...) are services guinea features
+  `require`.
+- Check before relying on it: CrabNebula DevTools is known to clash with
+  other loggers, and guinea installs its own subscriber (`init_subscriber`).
+  Tauri 3 is in alpha and moves the plugin API; start on 2.x and keep this
+  layer thin.
+
+### Dioxus: without guinea's router
+
+Dioxus keeps navigation (`dioxus-router`); guinea brings features, actors and
+reducers.
+
+- `use_scope::<Features>()`: `use_hook` installs, `use_drop` tears down, so a
+  route mounted through `Outlet` gets its features and loses them, tasks
+  included, when it unmounts - the same rule Dioxus applies to `spawn`.
+- `use_reducer::<R>()` returns a `ReadSignal` fed by a subscription to the
+  reducer, so Dioxus keeps its own reactivity.
+- `use_addr::<A>()`.
+- The dispatcher is a channel drained by a `spawn_forever` coroutine. Each
+  window is its own VirtualDom, so application-level work must target the main
+  one.
+
+### From the research into other frameworks
+
+- A deterministic test harness, as `#[gpui::test]` has: one dispatcher, picked
+  by a seed, runs mailboxes, `spawn_bg`, timers and `notify::turn`, with
+  virtual time; `iterations = N` runs a test over N orders and `SEED=`
+  replays a failure. Background work runs on tokio today, so this needs an
+  executor seam in the core.
+- The call site on `send` and `spawn_bg`. `#[track_caller]` is on timers and
+  some registration only; guinea-core's `send` and `spawn_bg` record no
+  location. GPUI's profiler records where each task was spawned and Rerun puts
+  a `Location` on every command; in the trace it would be a jump to source.
 
