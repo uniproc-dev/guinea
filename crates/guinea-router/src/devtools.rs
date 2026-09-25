@@ -46,6 +46,11 @@ pub struct SegmentView {
 
 trait Inspected {
     fn view(&self) -> RouterView;
+
+    fn root_id(&self) -> RootId;
+
+    /// The scopes of the active chain, from the outermost layout down.
+    fn scopes(&self) -> Vec<Rc<guinea_core::scope::Scope>>;
 }
 
 thread_local! {
@@ -57,15 +62,47 @@ pub(crate) fn register<U: Ui>(router: &Rc<Router<U>>) {
     ROUTERS.with(|routers| routers.borrow_mut().push(weak));
 }
 
-/// Every router on this thread that is still alive, in the order they first
-/// navigated.
-pub fn routers() -> Vec<RouterView> {
-    let alive: Vec<Rc<dyn Inspected>> = ROUTERS.with(|routers| {
+fn alive() -> Vec<Rc<dyn Inspected>> {
+    ROUTERS.with(|routers| {
         let mut routers = routers.borrow_mut();
         routers.retain(|router| router.strong_count() > 0);
         routers.iter().filter_map(Weak::upgrade).collect()
-    });
-    alive.iter().map(|router| router.view()).collect()
+    })
+}
+
+/// Every router on this thread that is still alive, in the order they first
+/// navigated.
+pub fn routers() -> Vec<RouterView> {
+    alive().iter().map(|router| router.view()).collect()
+}
+
+/// Sends the action registered as `action`, decoded from `json`, to the scope
+/// that answers it - under the router of window `root`, or the newest one.
+///
+/// The page's own scope is asked first and the layouts above it after, the
+/// order a page reading the state would find it in. Answers the action's id
+/// in the trace.
+pub fn act(root: Option<u64>, action: &str, json: &str) -> Result<u64, String> {
+    let remote = guinea_core::remote::action(action).ok_or_else(|| {
+        format!(
+            "no action is registered as {action:?} - these are: {:?}",
+            guinea_core::remote::actions()
+        )
+    })?;
+
+    let routers = alive();
+    let router = match root {
+        Some(root) => routers.iter().find(|router| router.root_id().get() == root),
+        None => routers.last(),
+    }
+    .ok_or_else(|| format!("no window {root:?} is open"))?;
+
+    router
+        .scopes()
+        .iter()
+        .rev()
+        .find_map(|scope| (remote.emit)(scope, json))
+        .unwrap_or_else(|| Err(format!("nothing on the open page answers {action}")))
 }
 
 /// The name a segment goes by: its type, without the path or the generics.
@@ -111,6 +148,16 @@ impl<U: Ui> Inspected for Router<U> {
             panels: guinea_core::devtools::panels(root.get()),
             bus: self.host().event_bus().subscriptions(),
         }
+    }
+
+    fn root_id(&self) -> RootId {
+        self.root()
+    }
+
+    fn scopes(&self) -> Vec<Rc<guinea_core::scope::Scope>> {
+        self.active_scopes()
+            .map(|scopes| scopes.iter().cloned().collect())
+            .unwrap_or_default()
     }
 }
 

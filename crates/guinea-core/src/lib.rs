@@ -7,6 +7,7 @@ pub mod guard;
 pub mod lifecycle_tracker;
 pub mod load;
 pub use guinea_mark as mark;
+pub mod remote;
 pub mod notify;
 pub mod page_status;
 pub mod ratelimit_tracing;
@@ -31,6 +32,7 @@ pub use actor::event_bus::subscribe::BusSubscription;
 #[doc(hidden)]
 pub mod __private {
     pub use anyhow;
+    pub use inventory;
     pub use tokio;
     pub use tracing;
 }

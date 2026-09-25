@@ -7,6 +7,7 @@ mod handler;
 mod harness_test;
 mod installs;
 mod mark;
+mod remote;
 mod routes_dsl;
 mod segment;
 
@@ -172,6 +173,21 @@ pub fn event(item: TokenStream) -> TokenStream {
 pub fn mark(item: TokenStream) -> TokenStream {
     let input = parse_macro_input!(item as syn::DeriveInput);
     mark::derive_mark(input).into()
+}
+
+/// Lets a tool send this type to the running application as JSON: as an
+/// action to whichever scope answers it, as an event on the global bus, or
+/// both. The type derives `serde::Deserialize` too.
+///
+/// ```ignore
+/// #[derive(Clone, Debug, Deserialize, guinea::Remote)]
+/// #[remote(action)]
+/// pub struct Kill(pub u32);
+/// ```
+#[proc_macro_derive(Remote, attributes(remote))]
+pub fn remote(item: TokenStream) -> TokenStream {
+    let input = parse_macro_input!(item as syn::DeriveInput);
+    remote::derive_remote(input).into()
 }
 
 #[proc_macro_attribute]

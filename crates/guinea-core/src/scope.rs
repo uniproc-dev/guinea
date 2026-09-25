@@ -477,6 +477,14 @@ impl Scope {
         answer.downcast::<Rc<dyn Fn(M)>>().ok().map(|a| (*a).clone())
     }
 
+    /// What answers `M` anywhere in this scope - the first feature that does,
+    /// in the order they installed. For a sender that knows the action and
+    /// not which state it was reading.
+    pub fn first_answerer<M: 'static>(&self) -> Option<Rc<dyn Fn(M)>> {
+        let sections = self.sections.borrow().len();
+        (0..sections).find_map(|section| self.answerer::<M>(section))
+    }
+
     /// Applies `msg` to `F`'s state now, and marks the cell so its listeners
     /// run at the next [`notify::drain`](crate::notify::drain).
     ///
