@@ -100,7 +100,7 @@ pub(crate) use seeded::queue_ui;
 #[cfg(feature = "test-utils")]
 mod seeded {
     use std::cell::{Cell, RefCell};
-    use std::collections::HashMap;
+    use std::collections::{HashMap, VecDeque};
     use std::future::Future;
     use std::pin::Pin;
     use std::rc::Rc;
@@ -124,9 +124,17 @@ mod seeded {
     }
 
     /// What wakers reach, from whichever thread wakes them.
+    ///
+    /// Two kinds, kept apart. Tasks that are ready may go in any order - they
+    /// run on threads of their own in the application, and whichever finishes
+    /// first is what the seed stands for. Jobs for the UI thread may not: the
+    /// application's dispatcher queue runs them first in, first out, so two
+    /// posts from one place never swap. The seed decides only when the queue
+    /// moves, against the tasks.
     #[derive(Default)]
     struct Ready {
-        work: Mutex<Vec<Work>>,
+        polls: Mutex<Vec<u64>>,
+        ui: Mutex<VecDeque<Job>>,
         /// The clock waiting in [`Seeded::advance`] for something to become
         /// ready, if it is.
         waiting: Mutex<Option<Waker>>,
@@ -134,7 +142,10 @@ mod seeded {
 
     impl Ready {
         fn push(&self, work: Work) {
-            lock(&self.work).push(work);
+            match work {
+                Work::Poll(id) => lock(&self.polls).push(id),
+                Work::Ui(job) => lock(&self.ui).push_back(job),
+            }
 
             if let Some(waiting) = lock(&self.waiting).take() {
                 waiting.wake();
@@ -142,7 +153,7 @@ mod seeded {
         }
 
         fn is_empty(&self) -> bool {
-            lock(&self.work).is_empty()
+            lock(&self.polls).is_empty() && lock(&self.ui).is_empty()
         }
     }
 
@@ -302,14 +313,23 @@ mod seeded {
             (z % bound as u64) as usize
         }
 
+        /// One of the ready tasks, or the job at the head of the UI queue -
+        /// which of those, the seed picks.
         fn take(&self) -> Option<Work> {
-            let mut work = self.ready.work.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
-            if work.is_empty() {
+            let mut polls = lock(&self.ready.polls);
+            let mut ui = lock(&self.ready.ui);
+
+            let choices = polls.len() + usize::from(!ui.is_empty());
+            if choices == 0 {
                 return None;
             }
 
-            let at = self.below(work.len());
-            Some(work.swap_remove(at))
+            let at = self.below(choices);
+            if at == polls.len() {
+                ui.pop_front().map(Work::Ui)
+            } else {
+                Some(Work::Poll(polls.swap_remove(at)))
+            }
         }
 
         fn step(&self) -> bool {
@@ -476,6 +496,37 @@ mod seeded {
 
             executor.run_until_parked();
             assert_eq!(ran.load(Ordering::SeqCst), 1);
+        }
+
+        /// Posts to the UI thread from one place arrive in the order they
+        /// were made, whatever the seed - the application's dispatcher queue
+        /// never swaps them - while tasks ready beside them still move around
+        /// them.
+        #[test]
+        fn posts_to_the_ui_thread_keep_their_order_in_every_seed() {
+            let mut interleavings = std::collections::HashSet::new();
+
+            for seed in 0..64 {
+                let executor = install(seed);
+                let seen = Arc::new(Mutex::new(Vec::new()));
+
+                for post in ["first", "second", "third"] {
+                    let seen = seen.clone();
+                    crate::actor::invoke_on_ui(move || seen.lock().unwrap().push(post));
+                }
+
+                let beside = seen.clone();
+                crate::executor::spawn(async move { beside.lock().unwrap().push("task") });
+
+                executor.run_until_parked();
+                let seen = seen.lock().unwrap().clone();
+
+                let posts: Vec<&str> = seen.iter().copied().filter(|name| *name != "task").collect();
+                assert_eq!(posts, ["first", "second", "third"], "seed {seed}");
+                interleavings.insert(seen);
+            }
+
+            assert!(interleavings.len() > 1, "the task always ran in one place: {interleavings:?}");
         }
 
         #[test]
