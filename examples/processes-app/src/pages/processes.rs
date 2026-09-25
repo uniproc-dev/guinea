@@ -7,7 +7,7 @@
 //! field, a drag is a message, and `update` is the one place they change.
 
 use guinea::feature::FeatureInitContext;
-use guinea::winui::{Page, PageCx, UpdateCx, page};
+use guinea::winui::{MarkExt, Page, PageCx, UpdateCx, page};
 use guinea_widgets::table::{ColumnSpec, ColumnWidths, Resized, table};
 use windows_reactor::{
     Button, ChildrenControl, ContentControl, Orientation, StackPanel, TextBlock, View,
@@ -30,6 +30,17 @@ pub struct Processes {
 pub enum Msg {
     Resized(Resized),
     Selected(Option<usize>),
+}
+
+#[derive(guinea::Mark, Clone, Copy, PartialEq)]
+enum Column {
+    Name,
+    Actions,
+}
+
+#[derive(guinea::Mark)]
+enum Marks {
+    Kill,
 }
 
 struct Row {
@@ -69,15 +80,16 @@ impl Page for Processes {
             .collect();
 
         let columns = vec![
-            ColumnSpec::new("name", "Process", 280.0, |row: &Row| {
+            ColumnSpec::new(Column::Name, "Process", 280.0, |row: &Row| {
                 TextBlock::new().text(row.label.clone()).into()
             }),
-            ColumnSpec::new("actions", "", 80.0, {
+            ColumnSpec::new(Column::Actions, "", 80.0, {
                 let dispatch = dispatch.clone();
                 move |row: &Row| {
                     let pid = row.pid;
                     let dispatch = dispatch.clone();
                     Button::new()
+                        .mark(Marks::Kill)
                         .on_click(move || dispatch.emit(Kill(pid)))
                         .content(TextBlock::new().text("Kill"))
                 }

@@ -180,9 +180,9 @@ checksum = "683d7910e743518b0e34f1186f92494becacb047c7b6bf616c96772180fef923"
 
 [[package]]
 name = "amethystate"
-version = "0.21.0"
+version = "0.22.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6937a6795b648a2ab49b7f69e4ebca4c624d822335016459018362cf369c7063"
+checksum = "220bb2dd465e7e9100407316ca79a3717cf833e7e156836b5071f14131dd6e43"
 dependencies = [
  "amethystate-core",
  "amethystate-macros",
@@ -195,6 +195,7 @@ dependencies = [
  "futures-core",
  "indexmap",
  "inventory",
+ "js-sys",
  "notify",
  "parking_lot",
  "rayon",
@@ -211,9 +212,9 @@ dependencies = [
 
 [[package]]
 name = "amethystate-core"
-version = "0.21.0"
+version = "0.22.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "abc75d3452966944b720cb661793fd0752f52d1afe265b7400f4d4520d9fb19a"
+checksum = "cb24139ccd850bd4bf1f50283b5dc075ffd6bd158a1dd4c7da08f64ae00f4e42"
 dependencies = [
  "arc-swap",
  "dashmap",
@@ -231,9 +232,9 @@ dependencies = [
 
 [[package]]
 name = "amethystate-macros"
-version = "0.21.0"
+version = "0.22.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ef9bde75b68bc0e3231b707add848ab7363a10c9e0e11dc116dc82384c55eb08"
+checksum = "80173d01d00a69053e31712bbac9cf1ead96276afb0b77189a5b9423f73dec93"
 dependencies = [
  "amethystate-macros-core",
  "darling",
@@ -245,9 +246,9 @@ dependencies = [
 
 [[package]]
 name = "amethystate-macros-core"
-version = "0.21.0"
+version = "0.22.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "42ecd5cf1410802efbeb12a9c9f955a750a27d5d9f4a6d22296450875cc3615b"
+checksum = "942e2f72c407d97746fa0e82c1a622d805f3c1296e73d1695575a08e9e766d83"
 dependencies = [
  "darling",
  "proc-macro2",
@@ -1211,7 +1212,7 @@ dependencies = [
  "libc",
  "option-ext",
  "redox_users",
- "windows-sys 0.61.2",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
@@ -1385,7 +1386,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "39cab71617ae0d63f51a36d69f866391735b51691dbda63cf6f96d042b63efeb"
 dependencies = [
  "libc",
- "windows-sys 0.61.2",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
@@ -1732,15 +1733,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "fsevent-sys"
-version = "4.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "76ee7a02da4d231650c7cea31349b889be2f45ddb3ef3032d2ec8185f6313fd2"
-dependencies = [
- "libc",
-]
-
-[[package]]
 name = "futures"
 version = "0.3.34"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2031,7 +2023,7 @@ checksum = "b40ca9252762c466af32d0b1002e91e4e1bc5398f77455e55474deb466355ff5"
 
 [[package]]
 name = "guinea"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "guinea-app",
  "guinea-codegen",
@@ -2045,7 +2037,7 @@ dependencies = [
 
 [[package]]
 name = "guinea-app"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "anyhow",
  "guinea-core",
@@ -2055,7 +2047,7 @@ dependencies = [
 
 [[package]]
 name = "guinea-codegen"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "guinea-core",
  "guinea-meta-build",
@@ -2070,11 +2062,12 @@ dependencies = [
 
 [[package]]
 name = "guinea-core"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "anyhow",
  "arc-swap",
  "derive_more",
+ "guinea-mark",
  "guinea-trace",
  "http",
  "inventory",
@@ -2088,7 +2081,7 @@ dependencies = [
 
 [[package]]
 name = "guinea-macros"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "guinea-codegen",
  "guinea-route-dsl",
@@ -2099,6 +2092,10 @@ dependencies = [
  "syn 2.0.119",
  "winnow 1.0.4",
 ]
+
+[[package]]
+name = "guinea-mark"
+version = "0.9.0"
 
 [[package]]
 name = "guinea-meta"
@@ -2117,8 +2114,8 @@ dependencies = [
 
 [[package]]
 name = "guinea-plugin-l10n"
-version = "0.8.1"
-source = "git+https://github.com/uniproc-dev/guinea-plugins?tag=v0.8.1#74d0670066726a3fc41d793e05381a3110f9cfb1"
+version = "0.9.0"
+source = "git+https://github.com/uniproc-dev/guinea-plugins?tag=v0.9.0#a5380c01fe61ff082942cf9a62a66e46b19339b3"
 dependencies = [
  "anyhow",
  "fluent-bundle",
@@ -2132,8 +2129,8 @@ dependencies = [
 
 [[package]]
 name = "guinea-plugin-l10n-build"
-version = "0.8.1"
-source = "git+https://github.com/uniproc-dev/guinea-plugins?tag=v0.8.1#74d0670066726a3fc41d793e05381a3110f9cfb1"
+version = "0.9.0"
+source = "git+https://github.com/uniproc-dev/guinea-plugins?tag=v0.9.0#a5380c01fe61ff082942cf9a62a66e46b19339b3"
 dependencies = [
  "fluent-syntax",
  "proc-macro2",
@@ -2144,8 +2141,8 @@ dependencies = [
 
 [[package]]
 name = "guinea-plugin-store"
-version = "0.21.0"
-source = "git+https://github.com/uniproc-dev/guinea-plugins?tag=v0.8.1#74d0670066726a3fc41d793e05381a3110f9cfb1"
+version = "0.22.0"
+source = "git+https://github.com/uniproc-dev/guinea-plugins?tag=v0.9.0#a5380c01fe61ff082942cf9a62a66e46b19339b3"
 dependencies = [
  "amethystate",
  "anyhow",
@@ -2156,8 +2153,8 @@ dependencies = [
 
 [[package]]
 name = "guinea-plugin-window-state"
-version = "0.8.1"
-source = "git+https://github.com/uniproc-dev/guinea-plugins?tag=v0.8.1#74d0670066726a3fc41d793e05381a3110f9cfb1"
+version = "0.9.0"
+source = "git+https://github.com/uniproc-dev/guinea-plugins?tag=v0.9.0#a5380c01fe61ff082942cf9a62a66e46b19339b3"
 dependencies = [
  "anyhow",
  "guinea",
@@ -2168,7 +2165,7 @@ dependencies = [
 
 [[package]]
 name = "guinea-route-dsl"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -2178,7 +2175,7 @@ dependencies = [
 
 [[package]]
 name = "guinea-router"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "anyhow",
  "guinea-app",
@@ -2190,7 +2187,7 @@ dependencies = [
 
 [[package]]
 name = "guinea-slint"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "anyhow",
  "guinea-app",
@@ -2202,7 +2199,7 @@ dependencies = [
 
 [[package]]
 name = "guinea-slint-build"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "anyhow",
  "guinea-route-dsl",
@@ -2213,7 +2210,7 @@ dependencies = [
 
 [[package]]
 name = "guinea-trace"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "anyhow",
  "tracing",
@@ -2222,15 +2219,16 @@ dependencies = [
 
 [[package]]
 name = "guinea-widgets"
-version = "0.8.1"
-source = "git+https://github.com/uniproc-dev/guinea-plugins?tag=v0.8.1#74d0670066726a3fc41d793e05381a3110f9cfb1"
+version = "0.9.0"
+source = "git+https://github.com/uniproc-dev/guinea-plugins?tag=v0.9.0#a5380c01fe61ff082942cf9a62a66e46b19339b3"
 dependencies = [
+ "guinea-mark",
  "tracing",
 ]
 
 [[package]]
 name = "guinea-winui"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "anyhow",
  "guinea-app",
@@ -3419,7 +3417,7 @@ dependencies = [
  "once_cell",
  "png",
  "thiserror 2.0.20",
- "windows-sys 0.61.2",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
@@ -3512,20 +3510,22 @@ checksum = "0676bb32a98c1a483ce53e500a81ad9c3d5b3f7c920c28c24e9cb0980d0b5bc8"
 
 [[package]]
 name = "notify"
-version = "8.2.0"
+version = "9.0.0-rc.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4d3d07927151ff8575b7087f245456e549fea62edf0ec4e565a5ee50c8402bc3"
+checksum = "7768eb7201a1964d8eb10224e850df046ab584ee3c3d26e340a993d81f748148"
 dependencies = [
  "bitflags 2.13.1",
- "fsevent-sys",
  "inotify",
  "kqueue",
  "libc",
  "log",
  "mio",
  "notify-types",
+ "objc2-core-foundation",
+ "objc2-core-services",
  "walkdir",
- "windows-sys 0.60.2",
+ "windows-sys 0.61.2",
+ "xxhash-rust",
 ]
 
 [[package]]
@@ -3543,7 +3543,7 @@ version = "0.50.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7957b9740744892f114936ab4a57b3f487491bbeafaf8083688b16841a4240e5"
 dependencies = [
- "windows-sys 0.61.2",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
@@ -3805,6 +3805,16 @@ dependencies = [
  "objc2 0.5.2",
  "objc2-contacts",
  "objc2-foundation 0.2.2",
+]
+
+[[package]]
+name = "objc2-core-services"
+version = "0.3.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "583300ad934cba24ff5292aee751ecc070f7ca6b39a574cc21b7b5e588e06a0b"
+dependencies = [
+ "libc",
+ "objc2-core-foundation",
 ]
 
 [[package]]
@@ -4845,7 +4855,7 @@ dependencies = [
  "errno",
  "libc",
  "linux-raw-sys 0.12.1",
- "windows-sys 0.61.2",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
@@ -5300,7 +5310,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c3d1e2c7f27f8d4cb10542a02c49005dbd6e93095799d6f3be745fae9f8fedd4"
 dependencies = [
  "libc",
- "windows-sys 0.61.2",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
@@ -5499,7 +5509,7 @@ dependencies = [
  "getrandom 0.4.3",
  "once_cell",
  "rustix 1.1.4",
- "windows-sys 0.61.2",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
@@ -5928,7 +5938,7 @@ checksum = "f2f6fb2847f6742cd76af783a2a2c49e9375d0a111c7bef6f71cd9e738c72d6e"
 dependencies = [
  "memoffset",
  "tempfile",
- "windows-sys 0.61.2",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
@@ -6419,7 +6429,7 @@ version = "0.1.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c2a7b1c03c876122aa43f3020e6c3c3ee5c05081c9a00739faf7503aeba10d22"
 dependencies = [
- "windows-sys 0.61.2",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
