@@ -83,13 +83,6 @@ pub fn routers() -> Vec<RouterView> {
 /// order a page reading the state would find it in. Answers the action's id
 /// in the trace.
 pub fn act(root: Option<u64>, action: &str, json: &str) -> Result<u64, String> {
-    let remote = guinea_core::remote::action(action).ok_or_else(|| {
-        format!(
-            "no action is registered as {action:?} - these are: {:?}",
-            guinea_core::remote::actions()
-        )
-    })?;
-
     let routers = alive();
     let router = match root {
         Some(root) => routers.iter().find(|router| router.root_id().get() == root),
@@ -97,12 +90,7 @@ pub fn act(root: Option<u64>, action: &str, json: &str) -> Result<u64, String> {
     }
     .ok_or_else(|| format!("no window {root:?} is open"))?;
 
-    router
-        .scopes()
-        .iter()
-        .rev()
-        .find_map(|scope| (remote.emit)(scope, json))
-        .unwrap_or_else(|| Err(format!("nothing on the open page answers {action}")))
+    guinea_core::remote::act_in(&router.scopes(), action, json)
 }
 
 /// The name a segment goes by: its type, without the path or the generics.

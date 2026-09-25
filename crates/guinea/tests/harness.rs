@@ -538,6 +538,57 @@ mod named {
     }
 }
 
+/// Another page's action with the same name as `named::Rename`, answered by a
+/// feature of its own.
+mod titled {
+    use super::*;
+
+    #[derive(Clone, Debug, serde::Deserialize, guinea::Remote)]
+    #[remote(action)]
+    pub struct Rename(pub String);
+
+    #[derive(Default, Clone, PartialEq, Debug)]
+    pub struct Title(pub String);
+
+    impl Reducer for Title {
+        type Update = Rename;
+
+        fn reduce(&mut self, rename: Rename) {
+            self.0 = rename.0;
+        }
+    }
+
+    #[derive(Debug)]
+    pub struct Titler {
+        pub push: Push<Title>,
+    }
+
+    actor! {
+        Titler {
+            handlers { Rename }
+        }
+    }
+
+    #[handler]
+    fn rename(this: &mut Titler, ctx: Context<Titler, Rename>) {
+        this.push.send(ctx.msg.clone());
+    }
+
+    pub struct Titling {
+        _title: Bound<Title>,
+    }
+
+    #[installs]
+    impl Feature for Titling {
+        type Exports = ();
+
+        fn install(cx: &FeatureInitContext, _params: &()) -> anyhow::Result<Self> {
+            let (title, _) = cx.state::<Title>().driven_by(|push| Titler { push });
+            Ok(Self { _title: title })
+        }
+    }
+}
+
 #[guinea::test(iterations = 4)]
 fn an_action_sent_as_json_reaches_the_scope_that_answers_it(h: &mut Harness) {
     use guinea::core::remote;
@@ -545,18 +596,58 @@ fn an_action_sent_as_json_reaches_the_scope_that_answers_it(h: &mut Harness) {
     h.install::<named::Naming>(&()).unwrap();
     assert!(remote::actions().contains(&"Rename"), "{:?}", remote::actions());
 
-    let scope = h.segment().context().scope.clone();
-    let rename = remote::action("Rename").unwrap();
+    let scopes = [h.segment().context().scope.clone()];
 
-    let sent = (rename.emit)(&scope, r#""guinea""#);
-    assert!(matches!(sent, Some(Ok(_))), "{sent:?}");
+    remote::act_in(&scopes, "Rename", r#""guinea""#).unwrap();
     h.settled();
     assert_eq!(h.state::<named::Name>().0, "guinea");
 
-    assert!(matches!((rename.emit)(&scope, "42"), Some(Err(_))), "a number is not a name");
+    assert!(remote::act_in(&scopes, "Rename", "42").is_err(), "a number is not a name");
+    assert!(remote::act_in(&scopes, "Rename", "42").unwrap_err().contains("Rename"));
 
-    let elsewhere = std::rc::Rc::new(guinea::core::scope::Scope::new());
-    assert!((rename.emit)(&elsewhere, r#""x""#).is_none(), "nothing there answers it");
+    let elsewhere = [std::rc::Rc::new(guinea::core::scope::Scope::new())];
+    let refused = remote::act_in(&elsewhere, "Rename", r#""x""#).unwrap_err();
+    assert!(refused.contains("nothing on the open page answers"), "{refused}");
+}
+
+/// Two pages each have a `Rename`. The short name means the one the open
+/// page answers, the page before the layout above it.
+#[guinea::test(iterations = 4)]
+fn two_actions_of_one_name_each_reach_the_page_that_answers_it(h: &mut Harness) {
+    use guinea::core::remote;
+
+    h.install::<named::Naming>(&()).unwrap();
+    let page = h.child();
+    page.install::<titled::Titling>(&()).unwrap();
+
+    let layout = [h.segment().context().scope.clone()];
+    let both = [h.segment().context().scope.clone(), page.context().scope.clone()];
+
+    remote::act_in(&both, "Rename", r#""page""#).unwrap();
+    remote::act_in(&layout, "Rename", r#""layout""#).unwrap();
+    h.settled();
+
+    assert_eq!(page.state::<titled::Title>().0, "page");
+    assert_eq!(h.state::<named::Name>().0, "layout");
+}
+
+/// Where both answer in one place, the short name is not enough - and the
+/// path is.
+#[guinea::test(iterations = 4)]
+fn two_actions_of_one_name_in_one_scope_are_told_apart_by_path(h: &mut Harness) {
+    use guinea::core::remote;
+
+    h.install::<named::Naming>(&()).unwrap();
+    h.install::<titled::Titling>(&()).unwrap();
+    let scopes = [h.segment().context().scope.clone()];
+
+    let refused = remote::act_in(&scopes, "Rename", r#""x""#).unwrap_err();
+    assert!(refused.contains("send one by its path"), "{refused}");
+    assert!(refused.contains("titled::Rename"), "{refused}");
+
+    remote::act_in(&scopes, "harness::titled::Rename", r#""by path""#).unwrap();
+    h.settled();
+    assert_eq!(h.state::<titled::Title>().0, "by path");
 }
 
 #[guinea::test(iterations = 4)]
@@ -566,7 +657,7 @@ fn an_event_sent_as_json_goes_out_on_the_global_bus(h: &mut Harness) {
     h.install::<named::Naming>(&()).unwrap();
     assert!(remote::events().contains(&"Renamed"), "{:?}", remote::events());
 
-    (remote::event("Renamed").unwrap().publish)(r#""code""#).unwrap();
+    remote::publish("Renamed", r#""code""#).unwrap();
     h.settled();
     assert_eq!(h.state::<named::Name>().0, "code");
 }
@@ -614,6 +705,29 @@ fn a_plugin_installed_into_the_harness_serves_its_features(h: &mut Harness) {
 fn a_service_provided_to_the_harness_serves_its_features(h: &mut Harness) {
     h.provide(reports::Prefix("proc-"));
     h.child().install::<reports::Prefixed>(&()).unwrap();
+}
+
+/// How many tests are inside the one thing a process has one of.
+static INSIDE: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+
+/// What a test holding a process-wide resource does: takes it, holds it a
+/// while, lets it go - and would see another test in there with it.
+fn hold_the_one_thing() {
+    use std::sync::atomic::Ordering;
+
+    assert_eq!(INSIDE.fetch_add(1, Ordering::SeqCst), 0, "another test is in here too");
+    std::thread::sleep(std::time::Duration::from_millis(10));
+    INSIDE.fetch_sub(1, Ordering::SeqCst);
+}
+
+#[guinea::test(iterations = 5, exclusive = "the one thing")]
+fn tests_that_name_one_key_take_turns(_h: &mut Harness) {
+    hold_the_one_thing();
+}
+
+#[guinea::test(iterations = 5, exclusive = "the one thing")]
+fn tests_that_name_one_key_take_turns_with_this_one_too(_h: &mut Harness) {
+    hold_the_one_thing();
 }
 
 /// Every seed installs the plugin again: the harness before it has to have

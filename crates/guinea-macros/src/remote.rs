@@ -48,6 +48,8 @@ pub(crate) fn derive_remote(input: DeriveInput) -> TokenStream {
             #gc::__private::inventory::submit! {
                 #gc::remote::RemoteAction {
                     name: #called,
+                    path: ::core::concat!(::core::module_path!(), "::", #called),
+                    answered_by: #gc::remote::answered_by::<#name>,
                     emit: #gc::remote::emit_json::<#name>,
                 }
             }
@@ -58,6 +60,7 @@ pub(crate) fn derive_remote(input: DeriveInput) -> TokenStream {
             #gc::__private::inventory::submit! {
                 #gc::remote::RemoteEvent {
                     name: #called,
+                    path: ::core::concat!(::core::module_path!(), "::", #called),
                     publish: #gc::remote::publish_json::<#name>,
                 }
             }
