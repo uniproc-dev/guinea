@@ -1102,6 +1102,8 @@ dependencies = [
  "once_cell",
  "parking_lot",
  "puffin",
+ "serde",
+ "serde_json",
  "tokio",
  "tracing",
  "tracing-subscriber",
@@ -1839,6 +1841,7 @@ dependencies = [
  "guinea-plugin-l10n-build",
  "guinea-plugin-store",
  "guinea-widgets",
+ "serde",
  "tokio",
  "tracing",
 ]

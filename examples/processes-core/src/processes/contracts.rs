@@ -7,15 +7,21 @@
 //! function. What is left is a struct, an enum, and an impl.
 
 use guinea::prelude::Reducer;
+use serde::Deserialize;
 
 // What the actor answers to: kill the process with this pid, and list them
 // again. Which actor that is, is settled where the two are already listed
 // together - in `actor!` - and not here: this file knows state, and an actor
 // named in it would be exactly the leak the layering exists to prevent.
-#[derive(Debug, Clone)]
+//
+// Both can be sent from devtools, or by an agent through them: `Remote` lists
+// them, by name, among what a tool may do to the running application.
+#[derive(Debug, Clone, Deserialize, guinea::Remote)]
+#[remote(action)]
 pub struct Kill(pub u32);
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Deserialize, guinea::Remote)]
+#[remote(action)]
 pub struct Refresh;
 
 /// The state, which is the reducer.
