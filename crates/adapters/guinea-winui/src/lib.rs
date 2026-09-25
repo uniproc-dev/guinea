@@ -8,11 +8,15 @@
 
 mod devtools;
 mod dispatching;
+#[cfg(feature = "harness")]
+pub mod harness;
+mod mark;
 mod run;
 mod winui;
 
 pub use guinea_app::feature::FeatureInitContext;
 pub use guinea_core::guard::{Ask, Verdict};
 pub use guinea_macros::{winui_layout as layout, winui_page as page};
+pub use mark::MarkExt;
 pub use run::{MAIN, Window, run, window};
 pub use winui::*;

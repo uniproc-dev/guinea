@@ -1,0 +1,64 @@
+---
+source: crates/guinea/tests/harness.rs
+expression: asked.chain().shape()
+---
+Shape(
+  step: Action(
+    message: "harness::Query",
+  ),
+  then: [
+    Shape(
+      step: Send(
+        actor: "latest::Searcher",
+        message: "harness::Query",
+      ),
+      then: [
+        Shape(
+          step: Handle(
+            actor: "latest::Searcher",
+            message: "harness::Query",
+          ),
+          then: [
+            Shape(
+              step: Spawn(
+                actor: "latest::Searcher",
+                output: "latest::Answered",
+              ),
+              then: [
+                Shape(
+                  step: Settled(
+                    actor: "latest::Searcher",
+                    output: "latest::Answered",
+                  ),
+                  then: [
+                    Shape(
+                      step: Send(
+                        actor: "latest::Searcher",
+                        message: "latest::Answered",
+                      ),
+                      then: [
+                        Shape(
+                          step: Handle(
+                            actor: "latest::Searcher",
+                            message: "latest::Answered",
+                          ),
+                          then: [
+                            Shape(
+                              step: Push(
+                                reducer: "harness::Results",
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ],
+        ),
+      ],
+    ),
+  ],
+)

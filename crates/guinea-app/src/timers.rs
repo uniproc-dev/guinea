@@ -4,16 +4,17 @@
 //! long as its scope. There is no timer without an owner: dropping what the
 //! context holds stops it. Each remembers where it was set up, which is how
 //! devtools tell one from another, and ticks on the UI thread.
+//!
+//! They wait on `tokio::time`, through the same executor as background work,
+//! so they need the runtime `spawn_bg` needs - and under a test harness they
+//! wait on the test's clock and tick when it is advanced.
 
 use std::cell::RefCell;
-use std::cmp::Reverse;
-use std::collections::{BinaryHeap, HashMap};
+use std::collections::HashMap;
 use std::panic::Location;
 use std::rc::{Rc, Weak};
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::mpsc::{Receiver, RecvTimeoutError, Sender, channel};
-use std::sync::{Mutex, OnceLock};
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 use guinea_core::actor::invoke_on_ui;
 
@@ -255,94 +256,34 @@ fn tick(id: u64, generation: u64) {
     wake_after(id, generation, next);
 }
 
-struct Wake {
-    at: Instant,
-    id: u64,
-    generation: u64,
-}
-
-/// One thread for every timer: it sleeps until the nearest is due and hands
-/// the tick to the UI thread.
+/// Arms one tick: a task that waits `after` on the clock guinea's work runs by
+/// and hands the tick to the UI thread - tokio's in an application, the test's
+/// own under a harness.
 fn wake_after(id: u64, generation: u64, after: Duration) {
-    static SCHEDULER: OnceLock<Mutex<Sender<Wake>>> = OnceLock::new();
-
-    let scheduler = SCHEDULER.get_or_init(|| {
-        let (wakes, inbox) = channel();
-        std::thread::Builder::new()
-            .name("guinea-timers".into())
-            .spawn(move || schedule(inbox))
-            .expect("spawning the timer thread");
-        Mutex::new(wakes)
+    guinea_core::executor::spawn(async move {
+        tokio::time::sleep(after).await;
+        invoke_on_ui(move || tick(id, generation));
     });
-
-    let wake = Wake {
-        at: Instant::now() + after,
-        id,
-        generation,
-    };
-    let _ = scheduler
-        .lock()
-        .unwrap_or_else(|poisoned| poisoned.into_inner())
-        .send(wake);
-}
-
-fn schedule(inbox: Receiver<Wake>) {
-    let mut due: BinaryHeap<Reverse<(Instant, u64, u64)>> = BinaryHeap::new();
-
-    loop {
-        let now = Instant::now();
-        while let Some(Reverse((at, id, generation))) = due.peek().copied() {
-            if at > now {
-                break;
-            }
-            due.pop();
-            invoke_on_ui(move || tick(id, generation));
-        }
-
-        let wake = match due.peek() {
-            Some(Reverse((at, _, _))) => match inbox.recv_timeout(at.saturating_duration_since(now)) {
-                Ok(wake) => wake,
-                Err(RecvTimeoutError::Timeout) => continue,
-                Err(RecvTimeoutError::Disconnected) => return,
-            },
-            None => match inbox.recv() {
-                Ok(wake) => wake,
-                Err(_) => return,
-            },
-        };
-        due.push(Reverse((wake.at, wake.id, wake.generation)));
-    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use guinea_core::actor::event_bus::EventBus;
+    use guinea_core::executor::{Installed, install};
     use std::sync::Arc;
     use std::sync::atomic::{AtomicBool, AtomicUsize};
 
-    /// `invoke_on_ui` (under `test-utils`) queues onto `EventBus`'s single
-    /// *global* task queue, so one test's `wait()` would drain another's
-    /// ticks. This keeps the module's tests one at a time.
-    static TEST_LOCK: Mutex<()> = Mutex::new(());
-
-    fn wait(ms: u64) {
-        std::thread::sleep(Duration::from_millis(ms));
-        EventBus::process_queue();
+    /// The test's own clock: timers wait on it, and it moves only when told.
+    fn clock() -> Installed {
+        install(0)
     }
 
-    /// Waits for the counter to reach `expected`, or gives up after two
-    /// seconds and lets the assertion report what it actually saw.
-    fn wait_for(counter: &Arc<AtomicUsize>, expected: usize) {
-        let deadline = Instant::now() + Duration::from_secs(2);
+    fn wait(clock: &Installed, ms: u64) {
+        clock.advance(Duration::from_millis(ms));
+    }
 
-        while Instant::now() < deadline {
-            EventBus::process_queue();
-            if counter.load(Ordering::SeqCst) >= expected {
-                return;
-            }
-            std::thread::sleep(Duration::from_millis(2));
-        }
+    fn count(counter: &Arc<AtomicUsize>) -> usize {
+        counter.load(Ordering::SeqCst)
     }
 
     fn counting(period: u64) -> (Ticking, Timer, Arc<AtomicUsize>) {
@@ -364,87 +305,88 @@ mod tests {
 
     #[test]
     fn a_timer_ticks_every_period() {
-        let _guard = TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let clock = clock();
         let (_ticking, _timer, counter) = counting(30);
 
-        assert_eq!(counter.load(Ordering::SeqCst), 0);
-        wait_for(&counter, 1);
-        assert_eq!(counter.load(Ordering::SeqCst), 1);
-        wait_for(&counter, 2);
-        assert_eq!(counter.load(Ordering::SeqCst), 2);
+        wait(&clock, 29);
+        assert_eq!(count(&counter), 0, "ticked before its period was up");
+
+        wait(&clock, 1);
+        assert_eq!(count(&counter), 1);
+
+        wait(&clock, 30);
+        assert_eq!(count(&counter), 2);
     }
 
     #[test]
     fn a_timer_stops_with_what_keeps_it() {
-        let _guard = TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let clock = clock();
         let (ticking, _timer, counter) = counting(30);
 
-        wait_for(&counter, 1);
+        wait(&clock, 30);
+        assert_eq!(count(&counter), 1);
         drop(ticking);
 
-        wait(80);
-        assert_eq!(counter.load(Ordering::SeqCst), 1);
+        wait(&clock, 90);
+        assert_eq!(count(&counter), 1);
     }
 
     #[test]
     fn a_timer_dropped_before_its_first_tick_never_ticks() {
-        let _guard = TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let clock = clock();
         let (ticking, _timer, counter) = counting(200);
 
         drop(ticking);
 
-        wait(250);
-        assert_eq!(counter.load(Ordering::SeqCst), 0);
+        wait(&clock, 250);
+        assert_eq!(count(&counter), 0);
     }
 
     #[test]
     fn changing_the_period_cuts_the_wait_short_and_ends_the_old_chain() {
-        let _guard = TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let clock = clock();
         let (_ticking, timer, counter) = counting(60_000);
 
         let timer = timer.period(Duration::from_millis(20));
-        wait_for(&counter, 1);
-        assert!(
-            counter.load(Ordering::SeqCst) >= 1,
-            "a minute's wait was not waited out"
-        );
+        wait(&clock, 20);
+        assert_eq!(count(&counter), 1, "a minute's wait was waited out");
 
         let _timer = timer.period(Duration::from_secs(60));
-        let seen = counter.load(Ordering::SeqCst);
-
-        wait(80);
+        wait(&clock, 80);
         assert_eq!(
-            counter.load(Ordering::SeqCst),
-            seen,
+            count(&counter),
+            1,
             "the twenty-millisecond chain kept ticking after the period changed"
         );
+
+        wait(&clock, 60_000);
+        assert_eq!(count(&counter), 2);
     }
 
     #[test]
     fn a_timer_ticks_only_while_active() {
-        let _guard = TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let clock = clock();
         let (_ticking, timer, counter) = counting(30);
 
         let active = Arc::new(AtomicBool::new(false));
         let a = active.clone();
         let _timer = timer.when(move || a.load(Ordering::SeqCst));
 
-        wait(60);
-        assert_eq!(counter.load(Ordering::SeqCst), 0);
+        wait(&clock, 60);
+        assert_eq!(count(&counter), 0);
 
         active.store(true, Ordering::SeqCst);
-        wait_for(&counter, 1);
-        assert!(counter.load(Ordering::SeqCst) >= 1);
+        wait(&clock, 30);
+        assert_eq!(count(&counter), 1);
 
         active.store(false, Ordering::SeqCst);
-        let seen = counter.load(Ordering::SeqCst);
-        wait(60);
-        assert_eq!(counter.load(Ordering::SeqCst), seen);
+        wait(&clock, 60);
+        assert_eq!(count(&counter), 1);
     }
 
     #[test]
     fn a_tick_may_list_the_running_timers_itself() {
-        let _guard = TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let clock = clock();
         let seen = Arc::new(AtomicUsize::new(0));
 
         let s = seen.clone();
@@ -458,13 +400,13 @@ mod tests {
             },
         );
 
-        wait_for(&seen, 1);
-        assert!(seen.load(Ordering::SeqCst) >= 1);
+        wait(&clock, 30);
+        assert_eq!(count(&seen), 1);
     }
 
     #[test]
     fn a_running_timer_says_where_it_was_set_up_and_what_it_is_called() {
-        let _guard = TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _clock = clock();
         let (ticking, timer, _counter) = counting(1_000);
         let (_kept, hidden, _) = counting(1_000);
 

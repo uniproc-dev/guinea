@@ -206,8 +206,13 @@ pub use guinea_core::uri;
 pub use guinea_meta as meta;
 
 pub use guinea_core::actor::event_bus::Event;
+pub use guinea_core::mark::Mark;
 pub use guinea_core::{ratelimit, rpc_bind};
-pub use guinea_macros::{Event, actor, handler, installs, routes, segment};
+pub use guinea_macros::{Event, Mark, actor, handler, installs, routes, segment};
+
+/// `#[guinea::test]`: one test, run once per seed on a fresh `app::Harness` -
+/// which the `test-utils` feature brings.
+pub use guinea_macros::test;
 
 /// The error type `install` returns, so that writing a feature does not need
 /// a dependency of its own.

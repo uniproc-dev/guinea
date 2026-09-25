@@ -1,0 +1,11 @@
+---
+source: crates/guinea/tests/harness.rs
+expression: "*h.state::<Results>()"
+---
+Results(
+  query: "guinea",
+  found: [
+    "guinea",
+    "guinea-app",
+  ],
+)

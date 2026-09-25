@@ -185,7 +185,7 @@ fn take_staged<S: Default + 'static>() -> S {
         .unwrap_or_default()
 }
 
-fn install_page<P: Page>(ctx: &FeatureInitContext, params: &dyn Any) -> anyhow::Result<()> {
+pub(crate) fn install_page<P: Page>(ctx: &FeatureInitContext, params: &dyn Any) -> anyhow::Result<()> {
     let params = guinea_router::router::narrow::<P::Params, P>(params)?;
     own(ctx, P::install(ctx, params)?);
     stage(P::init(ctx, params));
@@ -285,6 +285,12 @@ impl<P: Page> Component for PageNode<P> {
     type Message = Signal<P::Message>;
 
     fn create(input: &Self::Input, _cx: &ComponentContext<Self>) -> Self {
+        #[cfg(feature = "harness")]
+        {
+            let sender = _cx.sender();
+            crate::harness::remember::<P>(move |signal| sender.send(signal));
+        }
+
         Self {
             page: take_staged::<P>(),
             props: input.clone(),

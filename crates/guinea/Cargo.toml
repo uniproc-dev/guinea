@@ -40,7 +40,9 @@ slint-winit = ["slint", "guinea-slint/winit"]
 own-runtime = ["guinea-app/own-runtime"]
 
 # `app::TestApp` - an application without a window, for crates that write
-# plugins or features out of tree and need to install them in a test.
+# plugins or features out of tree and need to install them in a test - and
+# `app::Harness` with `#[guinea::test]`, which run what those spawn in an
+# order a seed decides.
 test-utils = ["guinea-app/test-utils"]
 
 [lints]
@@ -53,6 +55,10 @@ tempfile = "3.27.0"
 uuid.workspace = true
 inventory.workspace = true
 guinea-core = { workspace = true, features = ["test-utils"] }
+guinea-app = { workspace = true, features = ["test-utils"] }
+insta = { version = "1", features = ["ron"] }
+serde.workspace = true
 
 [target.'cfg(target_os = "windows")'.dev-dependencies]
 windows-reactor.workspace = true
+guinea-winui = { workspace = true, features = ["harness"] }

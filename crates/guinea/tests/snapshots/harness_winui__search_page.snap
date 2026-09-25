@@ -1,0 +1,33 @@
+---
+source: crates/guinea/tests/harness_winui.rs
+expression: page.tree()
+---
+Node(
+  kind: "Border",
+  id: Some("SearchPage"),
+  children: [
+    Node(
+      kind: "StackPanel",
+      children: [
+        Node(
+          kind: "TextBlock",
+          text: Some("typed: gu"),
+        ),
+        Node(
+          kind: "Button",
+          id: Some("Search"),
+          children: [
+            Node(
+              kind: "TextBlock",
+              text: Some("Search"),
+            ),
+          ],
+        ),
+        Node(
+          kind: "TextBlock",
+          text: Some("found 6 for \"gu\""),
+        ),
+      ],
+    ),
+  ],
+)

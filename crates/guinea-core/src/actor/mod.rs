@@ -48,7 +48,9 @@ where
 {
     #[cfg(feature = "test-utils")]
     {
-        crate::actor::event_bus::EventBus::queue_test_task(Box::new(f));
+        if let Err(f) = crate::executor::queue_ui(Box::new(f)) {
+            crate::actor::event_bus::EventBus::queue_test_task(f);
+        }
     }
 
     #[cfg(not(feature = "test-utils"))]
@@ -71,7 +73,9 @@ where
 {
     #[cfg(feature = "test-utils")]
     {
-        crate::actor::event_bus::EventBus::queue_test_task(Box::new(f));
+        if let Err(f) = crate::executor::queue_ui(Box::new(f)) {
+            crate::actor::event_bus::EventBus::queue_test_task(f);
+        }
         Ok(())
     }
 
@@ -87,7 +91,9 @@ where
     }
 }
 
-pub(crate) fn short_type_name<T: ?Sized>() -> &'static str {
+/// The name the trace gives `T`: its type and the module it sits in, without
+/// the rest of the path or the generics.
+pub fn short_type_name<T: ?Sized>() -> &'static str {
     let full = std::any::type_name::<T>();
     let raw = full.split('<').next().unwrap_or(full);
     let mut parts = raw.rsplitn(3, "::");

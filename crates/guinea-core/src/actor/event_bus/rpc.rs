@@ -211,7 +211,7 @@ impl AsyncBus {
         #[cfg(feature = "test-utils")]
         let counted = crate::actor::event_bus::Counted::new();
 
-        tokio::spawn(RPC_CHAIN.scope(chain, async move {
+        crate::executor::spawn(RPC_CHAIN.scope(chain, async move {
             #[cfg(feature = "test-utils")]
             let _counted = counted;
 

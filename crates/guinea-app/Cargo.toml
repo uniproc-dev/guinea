@@ -8,6 +8,7 @@ guinea-core.workspace = true
 tracing.workspace = true
 anyhow.workspace = true
 tokio.workspace = true
+serde = { workspace = true, optional = true }
 
 [features]
 default = ["own-runtime"]
@@ -18,8 +19,9 @@ default = ["own-runtime"]
 # application repeating the same two lines - and one that has its own keeps it.
 own-runtime = []
 # `TestApp` - an application without a window, for crates that write plugins or
-# features out of tree and need to install them in a test.
-test-utils = []
+# features out of tree and need to install them in a test - and `Harness`,
+# which runs what they spawn on the test's thread in an order a seed decides.
+test-utils = ["guinea-core/test-utils", "dep:serde"]
 
 [lints]
 workspace = true
@@ -27,3 +29,4 @@ workspace = true
 [dev-dependencies]
 guinea-macros.workspace = true
 guinea-core = { workspace = true, features = ["test-utils"] }
+serde.workspace = true

@@ -6,6 +6,7 @@ edition.workspace = true
 [dependencies]
 anyhow.workspace = true
 arc-swap.workspace = true
+guinea-mark.workspace = true
 guinea-trace.workspace = true
 tokio.workspace = true
 tracing.workspace = true
@@ -23,7 +24,9 @@ guinea-macros.workspace = true
 tokio = { workspace = true, features = ["test-util"] }
 
 [features]
-test-utils = []
+# The test queue for `invoke_on_ui`, and the seeded executor whose clock is a
+# paused tokio runtime - which is tokio's `test-util`.
+test-utils = ["tokio/test-util"]
 # Zones for the puffin profiler, around the same places the trace marks. Off
 # until something switches them on, and free to leave compiled in.
 profiling = ["dep:puffin"]

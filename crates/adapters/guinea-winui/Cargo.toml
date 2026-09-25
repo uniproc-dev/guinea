@@ -10,6 +10,13 @@ guinea-router.workspace = true
 guinea-macros.workspace = true
 anyhow.workspace = true
 tracing.workspace = true
+serde = { workspace = true, optional = true }
+
+[features]
+# `harness::Mounted` - a page mounted on reactor's recording runtime, with no
+# window: its messages, its native tree, and clicks on it, under guinea-app's
+# `Harness`.
+harness = ["windows-reactor/test", "guinea-app/test-utils", "dep:serde"]
 
 [target.'cfg(target_os = "windows")'.dependencies]
 windows-reactor.workspace = true

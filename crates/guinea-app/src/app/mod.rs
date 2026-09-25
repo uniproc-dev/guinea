@@ -10,6 +10,8 @@ mod runtime;
 pub mod windows;
 
 #[cfg(any(test, feature = "test-utils"))]
+mod acts;
+#[cfg(any(test, feature = "test-utils"))]
 mod harness;
 
 pub use builder::{FeatureBuilder, PluginBuilder};
@@ -17,7 +19,9 @@ pub use meta::AppMeta;
 pub use plugin::{AppFeature, Plugin};
 
 #[cfg(any(test, feature = "test-utils"))]
-pub use harness::TestApp;
+pub use acts::{Chain, Shape, Step};
+#[cfg(any(test, feature = "test-utils"))]
+pub use harness::{Act, Harness, Segment, TestApp, check};
 
 pub use runtime::{
     AppRuntime, app_services, install_runtime, installed_plugins, is_installed, shutdown_current,

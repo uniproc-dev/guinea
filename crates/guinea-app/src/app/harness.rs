@@ -1,11 +1,24 @@
 use std::ops::{Deref, DerefMut};
+use std::panic::{AssertUnwindSafe, catch_unwind};
+use std::rc::Rc;
+use std::time::Duration;
 
 use guinea_core::actor::UiThreadToken;
+use guinea_core::actor::event_bus::EventBus;
+use guinea_core::actor::registry::DebugRegistry;
+use guinea_core::executor::{self, Installed};
+use guinea_core::feature::Dispatch;
+use guinea_core::scope::{DropGuard, Reducer, Scope};
+use guinea_core::trace::Cause;
 
+use crate::feature::context_ext::FeatureContext;
+use crate::feature::{Feature, FeatureInitContext};
 use crate::lifecycle_tracker::AppLifecycle;
 
+use super::acts::{Chain, Recorder};
 use super::builder::FeatureBuilder;
 use super::plugin::{AppFeature, Plugin};
+use super::roots::Registration;
 use super::runtime;
 
 /// An application without a window, for testing plugins and features.
@@ -62,5 +75,303 @@ impl Deref for TestApp {
 impl DerefMut for TestApp {
     fn deref_mut(&mut self) -> &mut FeatureBuilder {
         &mut self.builder
+    }
+}
+
+/// Features, their actors and everything those spawn, on this one thread and
+/// in an order a seed decides.
+///
+/// A segment without a router: one scope that features install into, the way
+/// a page installs them. Background tasks and answers bound for the UI thread
+/// do not run until [`settled`](Self::settled), and then run one at a time -
+/// whenever several are ready, the seed picks which goes first. The same seed
+/// picks the same order every time.
+///
+/// Time is the executor's: a `tokio::time::sleep`, `interval` or `timeout` in
+/// the code under test is made against a paused clock, which moves only by
+/// [`advance`](Self::advance).
+pub struct Harness {
+    segment: FeatureInitContext,
+    _root: Registration,
+    _app: TestApp,
+    recorder: Recorder,
+    executor: Installed,
+}
+
+/// How far the clock may run ahead to finish an action before the harness
+/// gives up on it.
+const HORIZON: Duration = Duration::from_secs(24 * 60 * 60);
+
+impl Harness {
+    pub fn new(seed: u64) -> Self {
+        let executor = executor::install(seed);
+        let app = TestApp::new();
+        let root = Registration::open();
+
+        let segment = FeatureInitContext {
+            scope: Rc::new(Scope::new()),
+            ancestors: Rc::from([]),
+            root: root.id(),
+            token: app.token.clone(),
+            event_bus: Rc::new(EventBus::new()),
+            debug_registry: Rc::new(DebugRegistry::new()),
+            services: app.shared().clone(),
+        };
+
+        Self {
+            segment,
+            _root: root,
+            _app: app,
+            recorder: Recorder::start(),
+            executor,
+        }
+    }
+
+    pub fn seed(&self) -> u64 {
+        self.executor.seed()
+    }
+
+    /// The harness's own segment - the one [`install`](Self::install) and
+    /// the rest act on.
+    pub fn segment(&self) -> Segment<'_> {
+        Segment {
+            harness: self,
+            cx: self.segment.clone(),
+        }
+    }
+
+    fn root(&self) -> Segment<'_> {
+        self.segment()
+    }
+
+    /// Installs `F` into the harness's own segment, which keeps it for as
+    /// long as the harness lives.
+    pub fn install<F: Feature>(&self, params: &F::Params) -> anyhow::Result<()> {
+        self.root().install::<F>(params)
+    }
+
+    /// What a page reading `R` is handed to act with: its actions go to the
+    /// feature that owns `R`.
+    pub fn dispatch<R: Reducer>(&self) -> Dispatch {
+        self.root().dispatch::<R>()
+    }
+
+    /// Acts on the feature that owns `R`, as [`dispatch`](Self::dispatch)
+    /// does, and hands back what the action set off - to wait for, or to
+    /// read.
+    pub fn act<R: Reducer>(&self, action: impl Sized + 'static) -> Act<'_> {
+        self.root().act::<R>(action)
+    }
+
+    /// `R` as it is now.
+    pub fn state<R: Reducer>(&self) -> Rc<R> {
+        self.root().state::<R>()
+    }
+
+    /// A segment below the harness's own, the way a page sits below a
+    /// layout: it reads what the segment above exports, and leaving it tears
+    /// down only what it installed.
+    pub fn child(&self) -> Segment<'_> {
+        self.root().child()
+    }
+
+    /// Runs everything that was set off until nothing is left to run, and
+    /// says how many pieces ran. The clock does not move: a task waiting on a
+    /// timer waits.
+    pub fn settled(&self) -> usize {
+        self.executor.run_until_parked()
+    }
+
+    /// Moves the clock on by `by`, one timer at a time, with everything each
+    /// timer sets off run before the next one fires - and no real waiting.
+    pub fn advance(&self, by: Duration) {
+        self.executor.advance(by);
+    }
+
+    /// Tasks still waiting: on a timer the clock has not reached, or on
+    /// something nothing here will wake.
+    pub fn stuck(&self) -> usize {
+        self.executor.stuck()
+    }
+}
+
+/// One segment of a [`Harness`]: a scope features install into, with the
+/// segments above it as its ancestors.
+///
+/// It owns its scope. Leaving it - or dropping it - tears the scope down the
+/// way a navigation does: its actors are disposed and their tasks cancelled,
+/// while the segments above carry on.
+pub struct Segment<'h> {
+    harness: &'h Harness,
+    cx: FeatureInitContext,
+}
+
+impl<'h> Segment<'h> {
+    /// Installs `F` here, for as long as the segment lives.
+    pub fn install<F: Feature>(&self, params: &F::Params) -> anyhow::Result<()> {
+        let installed = self.cx.install::<F>(params)?;
+        self.cx.scope.own(DropGuard(installed));
+        Ok(())
+    }
+
+    /// Where a page here reads `R` from: this scope if it claimed `R`, or the
+    /// nearest one above that exports it - the rule the router reads by.
+    fn owner<R: Reducer>(&self) -> Rc<Scope> {
+        if self.cx.scope.claims::<R>() {
+            return self.cx.scope.clone();
+        }
+
+        self.cx
+            .ancestors
+            .iter()
+            .rev()
+            .find(|scope| scope.exports::<R>())
+            .cloned()
+            .unwrap_or_else(|| {
+                panic!(
+                    "nothing here claims {} and nothing above exports it - install the feature \
+                     that does",
+                    std::any::type_name::<R>()
+                )
+            })
+    }
+
+    /// What a page here reading `R` is handed to act with.
+    pub fn dispatch<R: Reducer>(&self) -> Dispatch {
+        Dispatch::owning::<R>(&self.owner::<R>())
+    }
+
+    /// See [`Harness::act`].
+    pub fn act<R: Reducer>(&self, action: impl Sized + 'static) -> Act<'h> {
+        let named = std::any::type_name_of_val(&action);
+        let recorder = &self.harness.recorder;
+        let from = recorder.heard();
+
+        self.dispatch::<R>().emit(action);
+
+        let cause = recorder.action_since(from).unwrap_or_else(|| {
+            panic!(
+                "nothing in the feature that owns {} answers {named}",
+                std::any::type_name::<R>()
+            )
+        });
+
+        Act {
+            harness: self.harness,
+            cause,
+        }
+    }
+
+    /// `R` as a page here reads it: from this segment, or the nearest above
+    /// that holds it.
+    pub fn state<R: Reducer>(&self) -> Rc<R> {
+        self.owner::<R>().state::<R>().borrow().clone()
+    }
+
+    /// A segment below this one.
+    pub fn child(&self) -> Segment<'h> {
+        let mut above: Vec<Rc<Scope>> = self.cx.ancestors.to_vec();
+        above.push(self.cx.scope.clone());
+
+        Segment {
+            harness: self.harness,
+            cx: FeatureInitContext {
+                scope: Rc::new(Scope::new()),
+                ancestors: Rc::from(above),
+                ..self.cx.clone()
+            },
+        }
+    }
+
+    /// Tears the segment down, as leaving a page does.
+    pub fn leave(self) {}
+
+    /// What a feature installing here is handed - for a backend's own
+    /// harness to mount a page into this segment.
+    pub fn context(&self) -> &FeatureInitContext {
+        &self.cx
+    }
+
+    /// The harness this segment belongs to.
+    pub fn harness(&self) -> &'h Harness {
+        self.harness
+    }
+}
+
+/// One action, and everything it set off.
+pub struct Act<'h> {
+    harness: &'h Harness,
+    cause: Cause,
+}
+
+impl Act<'_> {
+    pub fn cause(&self) -> Cause {
+        self.cause
+    }
+
+    /// Whether everything the action set off has finished.
+    pub fn is_settled(&self) -> bool {
+        self.harness.recorder.is_settled(self.cause)
+    }
+
+    /// Runs until everything the action set off has finished, and no longer.
+    ///
+    /// Work it did not set off runs too, in the seed's order, because it is
+    /// ready alongside - but a timer that nothing here waits on does not move
+    /// the clock. When what the action set off waits on time, the clock goes
+    /// to each next timer until it is done, and whatever else those timers
+    /// set off runs as well.
+    pub fn settle(&self) -> &Self {
+        loop {
+            if self.is_settled() {
+                return self;
+            }
+
+            if self.harness.executor.step() {
+                continue;
+            }
+
+            if !self.harness.executor.wake_next(HORIZON) {
+                panic!(
+                    "the action never finished: something it set off waits on what nothing \
+                     here will wake, and no timer is due within {HORIZON:?}\n{:#?}",
+                    self.chain()
+                );
+            }
+        }
+    }
+
+    /// What it set off so far, as a tree.
+    pub fn chain(&self) -> Chain {
+        self.harness.recorder.chain(self.cause)
+    }
+}
+
+/// Runs `test` once per seed, `0..iterations`, each on a fresh [`Harness`];
+/// with `SEED` set, only that seed.
+///
+/// A seed that fails is named in the panic, and `SEED=<n>` replays exactly the
+/// order that failed.
+pub fn check(iterations: u64, test: impl Fn(&mut Harness)) {
+    let seeds: Vec<u64> = match std::env::var("SEED") {
+        Ok(seed) => vec![seed.trim().parse().expect("SEED is a number")],
+        Err(_) => (0..iterations).collect(),
+    };
+
+    for seed in seeds {
+        let outcome = catch_unwind(AssertUnwindSafe(|| {
+            let mut harness = Harness::new(seed);
+            test(&mut harness);
+        }));
+
+        if let Err(panic) = outcome {
+            let said = panic
+                .downcast_ref::<String>()
+                .cloned()
+                .or_else(|| panic.downcast_ref::<&str>().map(|said| said.to_string()))
+                .unwrap_or_default();
+
+            panic!("{said}\n\nfailed with SEED={seed}; `SEED={seed} cargo test` runs this order again");
+        }
     }
 }

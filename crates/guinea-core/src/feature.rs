@@ -99,7 +99,7 @@ pub struct Dispatch {
 
 impl Dispatch {
     /// The section that owns `R` - what a reader of `R` is handed.
-    pub(crate) fn owning<R: 'static>(scope: &Rc<Scope>) -> Self {
+    pub fn owning<R: 'static>(scope: &Rc<Scope>) -> Self {
         Self::in_section(scope, scope.section_of::<R>())
     }
 

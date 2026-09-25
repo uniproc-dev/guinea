@@ -4,7 +4,9 @@ use syn::{ItemFn, parse_macro_input};
 mod actor_dsl;
 mod elm;
 mod handler;
+mod harness_test;
 mod installs;
+mod mark;
 mod routes_dsl;
 mod segment;
 
@@ -34,6 +36,27 @@ mod segment;
 #[proc_macro_attribute]
 pub fn installs(_attr: TokenStream, item: TokenStream) -> TokenStream {
     installs::installs_impl(item)
+}
+
+/// A test run once per seed, each time on a fresh `Harness`, with the order of
+/// everything it sets off decided by the seed.
+///
+/// A failing seed is named in the panic; `SEED=<n> cargo test` runs that order
+/// alone, and again.
+///
+/// ```ignore
+/// #[guinea::test(iterations = 200)]
+/// fn the_latest_query_wins(h: &mut Harness) {
+///     h.install::<Search>(&()).unwrap();
+///     h.dispatch::<Results>().emit(Query("gu".into()));
+///     h.dispatch::<Results>().emit(Query("guinea".into()));
+///     h.settled();
+///     assert_eq!(h.state::<Results>().query, "guinea");
+/// }
+/// ```
+#[proc_macro_attribute]
+pub fn test(attr: TokenStream, item: TokenStream) -> TokenStream {
+    harness_test::test_impl(attr, item)
 }
 
 /// Writes `type Installs = ();` and the `install` that goes with it, for a
@@ -141,6 +164,14 @@ pub fn event(item: TokenStream) -> TokenStream {
         impl #impl_generics #gc::actor::event_bus::Event for #name #ty_generics #where_clause {}
     }
     .into()
+}
+
+/// Makes an enum of unit variants the application's marks: each variant is a
+/// name, written as the variant is.
+#[proc_macro_derive(Mark)]
+pub fn mark(item: TokenStream) -> TokenStream {
+    let input = parse_macro_input!(item as syn::DeriveInput);
+    mark::derive_mark(input).into()
 }
 
 #[proc_macro_attribute]

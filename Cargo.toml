@@ -6,6 +6,7 @@ edition = "2024"
 resolver = "2"
 members = [
     "crates/guinea-trace",
+    "crates/guinea-mark",
     "crates/guinea-codegen",
     "crates/guinea-core",
     "crates/guinea-app",
@@ -23,6 +24,7 @@ members = [
 
 [workspace.dependencies]
 guinea-trace = { path = "crates/guinea-trace" }
+guinea-mark = { path = "crates/guinea-mark" }
 guinea-codegen = { path = "crates/guinea-codegen" }
 guinea-core = { path = "crates/guinea-core" }
 guinea-app = { path = "crates/guinea-app" }

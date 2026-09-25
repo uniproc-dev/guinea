@@ -1,0 +1,8 @@
+[package]
+name = "guinea-mark"
+description = "Names for what tests and tools reach for on screen"
+version.workspace = true
+edition.workspace = true
+
+[lints]
+workspace = true

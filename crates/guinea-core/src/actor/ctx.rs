@@ -164,7 +164,7 @@ impl<A: 'static, M> Context<A, M> {
         #[cfg(feature = "test-utils")]
         let counted = crate::actor::event_bus::Counted::new();
 
-        tokio::spawn(async move {
+        crate::executor::spawn(async move {
             let running = trace::within(Some(spawned), fut);
             let result = match listens {
                 true => Some(running.await),
@@ -247,7 +247,7 @@ impl<A: 'static, M> Context<A, M> {
         #[cfg(feature = "test-utils")]
         let counted = crate::actor::event_bus::Counted::new();
 
-        tokio::spawn(async move {
+        crate::executor::spawn(async move {
             #[cfg(feature = "test-utils")]
             let _counted = counted;
 
