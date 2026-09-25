@@ -1,29 +1,36 @@
 # TODO
 
+## Store plugin: amethystate 0.22.0: moved, not released
+
+The store plugin (now 0.22.0, following amethystate's minor) and
+`tools/devtools` are on amethystate 0.22.0; `Watching` holds the
+`StoreSubscription` guard and has no `Drop` of its own. One amethystate and
+one `notify` (`=9.0.0-rc.5`, amethystate's exact pin) per lock.
+
+uniproc's pin has to move in the same step as it takes the plugins release -
+two copies are two global stores.
+
 ## Devtools (guinea-plugins)
 
-### ogurpchik 0.5.0 moves both ends of the link at once
+### ogurpchik 0.5.1: moved, not released
 
-`v0.5.0` is pushed. The handshake
-gained a `SchemaId` after `HandshakeMode` on `authenticate_server` /
-`authenticate_client` and `accept_session` / `connect_session`, and
-`HANDSHAKE_VERSION` went to 2 - so a 0.4.0 peer and a 0.5.0 peer do not
-connect at all, they refuse with `UnsupportedVersion`.
+guinea-plugins is on `v0.5.1` in its working tree: the plugin, the protocol,
+the hub and the XAML tap together, one ogurpchik copy per build. The handshake
+names a `SchemaId`, generated in `devtools-protocol`'s build script as FNV-1a
+over `schema/devtools.capnp` with CRLF read as LF, and all three ends take it
+from `guinea_devtools_protocol::schema()`. Checked live: the WinUI example on
+the local plugin, the tap loading itself, and the hub all connected.
 
-The two ends here are the devtools plugin, which ships inside every
-application, and the hub, which is devtools itself. There is no partial move:
-an application built against the old plugin stops talking to new devtools, and
-the other way round. So the plugin and the hub go out in one release, and the
-applications that embed the plugin - uniproc, the examples - move onto that
-tag before anyone runs the pair.
+What is left is the release. 0.4.x and 0.5.x refuse each other at the
+handshake, so the plugin and devtools go out in one plugins tag, and uniproc
+and the examples move onto it before anyone runs the pair; until then they
+keep speaking 0.4.0 from `v0.8.1`.
 
-Until then uniproc builds two copies: its own 0.5.0, and 0.4.0 brought in by
-`guinea-plugin-devtools` and `guinea-devtools-protocol` from plugins `v0.8.1`.
-Harmless, by ogurpchik's owner: neither version keeps global state, compio and
-capnp resolve to one copy, and a 0.4.0 end meeting a 0.5.0 end fails loudly in
-the handshake rather than quietly. Plugin and hub still both speak 0.4.0 to
-each other, so nothing is broken - the cost is binary size and build time.
-Unblocked; the move waits only for a plugins release to carry it.
+The schema id guards the capnp wrapper only. What actually crosses is JSON
+inside `Peer.send` - `Report` and `Command` in `devtools-protocol` - and a
+plugin and devtools that disagree there still connect and then fail to decode.
+Hashing the protocol's Rust types into the id too would catch that, at the cost
+of refusing each other over an edit that changes nothing on the wire.
 
 ### The MCP server answers in JSON meant for a window
 
@@ -133,6 +140,20 @@ screen readers and automated tests alike.
 Reactor offers `automation_name`, `automation_id` and `automation_heading_level`
 only - no control type, no selection pattern. Nothing to fix on the table's
 side until reactor has them.
+
+### Columns are marks: not released
+
+`ColumnSpec<T, C>` / `Table<T, C>`: a column is a variant of the application's
+`#[derive(guinea::Mark)]` enum, which is also its sort key (`SortState<C>`, the
+sort callback carries `C`) and is put as `AutomationId` on its header cell and
+its cell in every row. `ColumnWidths` and `Resized` stay by name, so saved
+widths remain strings - but the name is the variant's (`"Cpu"`), so an
+application whose ids were `"cpu"` loses its saved widths once.
+
+The widgets take `guinea-mark` by path. The order out: tag guinea with
+`guinea-mark`, move the plugins onto the tag, release the plugins, and only
+then tell uniproc - it is a breaking change there (`sort_column: String` and
+`Sort(String)` become its column enum).
 
 ### Smaller
 
@@ -263,11 +284,34 @@ reducers.
 
 ### From the research into other frameworks
 
-- A deterministic test harness, as `#[gpui::test]` has: one dispatcher, picked
-  by a seed, runs mailboxes, `spawn_bg`, timers and `notify::turn`, with
-  virtual time; `iterations = N` runs a test over N orders and `SEED=`
-  replays a failure. Background work runs on tokio today, so this needs an
-  executor seam in the core.
+- The deterministic harness is in (`crates/guinea/tests/harness.rs`,
+  `harness_winui.rs`): `guinea_core::executor` is the seam everything guinea
+  spawns goes through; `app::Harness` runs background tasks and answers bound
+  for the UI thread on the test's thread in a seed's order, and
+  `#[guinea::test(iterations = N)]` names the failing seed for `SEED=` to
+  replay. Its clock is a paused tokio runtime, so `tokio::time` in the code
+  under test and guinea's own timers move by `advance`. `act` / `settle` wait
+  for one action's consequences; `chain().shape()` is a snapshot of what it
+  set off; `child()` / `leave()` are segments; `guinea_winui::harness::Mounted`
+  mounts a page on reactor's recording runtime and reads back what it drew.
+  Elements are reached by `Mark` - an application's enum, derived, put on as
+  `AutomationId` with `.mark(..)`; `within(mark)` and `item(index)` (a list
+  item, realized as scrolling to it would) narrow where the next find looks,
+  so one mark in every row still names one thing. Text is `find_text` /
+  `click_text`, for reading back what was drawn.
+- Not started, and waiting on the ogurpchik and agent contract to settle: the
+  harness through devtools, for scripts and agents on a running application.
+  It needs a registry of actions built from data (`Deserialize` plus a
+  generated registration - the same registry the Tauri bridge needs), a way to
+  find the scope that answers an action among the open segments (the router
+  hands out scope keys, not scopes), `Act` / `Acted { cause }` in the devtools
+  protocol - which breaks anyway with the move to ogurpchik 0.5, so one
+  release for both - and in the hub `POST /act` plus a wait on the chain,
+  judged from the trace it already receives. Reducer state reaches devtools as
+  `Debug` text only; structured state needs the same opt-in as actions.
+- Backend harnesses other than WinUI: eframe through `egui_kittest`, ratatui
+  through `TestBackend`'s cell buffer, Slint through its testing backend
+  (pinned to the exact version), iced through `iced_test`.
 - The call site on `send` and `spawn_bg`. `#[track_caller]` is on timers and
   some registration only; guinea-core's `send` and `spawn_bg` record no
   location. GPUI's profiler records where each task was spawned and Rerun puts
