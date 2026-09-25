@@ -1,6 +1,7 @@
 use std::ops::{Deref, DerefMut};
 use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::rc::Rc;
+use std::sync::Mutex;
 use std::time::Duration;
 
 use guinea_core::actor::event_bus::{Event, EventBus, GlobalEventBus};
@@ -410,6 +411,32 @@ impl Act<'_> {
     pub fn chain(&self) -> Chain {
         self.harness.recorder.chain(self.cause)
     }
+}
+
+/// Runs `test` as [`check`] does, one at a time among the tests in this
+/// process that name the same `key`.
+///
+/// For what one process has one of - a global store, a named pipe, a port -
+/// which tests running side by side on their own threads would otherwise
+/// fight over. Held until the last seed's harness is gone, its teardown
+/// included.
+pub fn check_exclusive(key: &'static str, iterations: u64, test: impl Fn(&mut Harness)) {
+    static KEYS: Mutex<Vec<(&str, &Mutex<()>)>> = Mutex::new(Vec::new());
+
+    let held = {
+        let mut keys = KEYS.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+        match keys.iter().find(|(known, _)| *known == key) {
+            Some((_, held)) => *held,
+            None => {
+                let held: &'static Mutex<()> = Box::leak(Box::new(Mutex::new(())));
+                keys.push((key, held));
+                held
+            }
+        }
+    };
+
+    let _turn = held.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+    check(iterations, test);
 }
 
 /// Runs `test` once per seed, `0..iterations`, each on a fresh [`Harness`];

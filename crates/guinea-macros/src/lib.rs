@@ -45,6 +45,10 @@ pub fn installs(_attr: TokenStream, item: TokenStream) -> TokenStream {
 /// A failing seed is named in the panic; `SEED=<n> cargo test` runs that order
 /// alone, and again.
 ///
+/// `exclusive = "key"` runs it one at a time with every other test in the
+/// process that names the same key - for what a process has one of, a global
+/// store say, which tests on their own threads would otherwise fight over.
+///
 /// ```ignore
 /// #[guinea::test(iterations = 200)]
 /// fn the_latest_query_wins(h: &mut Harness) {

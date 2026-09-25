@@ -21,7 +21,7 @@ pub use plugin::{AppFeature, Plugin};
 #[cfg(any(test, feature = "test-utils"))]
 pub use acts::{Chain, Shape, Step};
 #[cfg(any(test, feature = "test-utils"))]
-pub use harness::{Act, Harness, Segment, TestApp, check};
+pub use harness::{Act, Harness, Segment, TestApp, check, check_exclusive};
 
 pub use runtime::{
     AppRuntime, app_services, install_runtime, installed_plugins, is_installed, shutdown_current,
