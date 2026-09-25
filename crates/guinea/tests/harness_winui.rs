@@ -7,11 +7,11 @@
 use guinea::app::Harness;
 use guinea::feature::Segment;
 use guinea::prelude::*;
-use guinea::winui::harness::Mounted;
+use guinea::winui::harness::{Mounted, PropertyId, PropertyValue};
 use guinea::winui::{MarkExt, Page, PageCx, UpdateCx, page};
 use windows_reactor::{
-    Button, ChildrenControl, ContentControl, ItemsRepeater, StackPanel, TextBlock, View,
-    VirtualSource,
+    Border, Button, Callback, ChildrenControl, ContentControl, ItemsRepeater, PointerEventInfo,
+    StackPanel, TextBlock, View, VirtualSource,
 };
 
 const CATALOGUE: [&str; 6] = ["guinea", "guinea-app", "gui", "gum", "gulp", "gust"];
@@ -20,6 +20,8 @@ const CATALOGUE: [&str; 6] = ["guinea", "guinea-app", "gui", "gum", "gulp", "gus
 enum Marks {
     Search,
     Open,
+    Chevron,
+    Remove,
 }
 
 #[derive(Default, Clone, PartialEq, Debug)]
@@ -140,7 +142,10 @@ fn typing_and_clicking_search_draws_what_it_found(h: &mut Harness) {
     assert!(page.find_text("found 0 for \"\"").is_some(), "{:#?}", page.tree());
 
     page.send(Typing::Typed("guinea".into()));
-    page.click(Marks::Search);
+    let clicked = page.click(Marks::Search);
+    clicked.settle();
+    assert!(clicked.chain().handled::<Query>(), "{:#?}", clicked.chain());
+    assert!(clicked.chain().pushed::<Results>(), "{:#?}", clicked.chain());
     page.settle();
 
     assert!(page.find_text("typed: guinea").is_some(), "{:#?}", page.tree());
@@ -234,6 +239,163 @@ fn the_same_mark_in_every_item_is_found_within_the_item(h: &mut Harness) {
     item.click(Marks::Open);
     page.settle();
     assert!(page.find_text("opened: guinea-app").is_some(), "{:#?}", page.tree());
+}
+
+/// What a layout above would provide.
+fn shade() -> &'static windows_reactor::Context<&'static str> {
+    thread_local! {
+        static SHADE: &'static windows_reactor::Context<&'static str> =
+            Box::leak(Box::new(windows_reactor::Context::new("light")));
+    }
+    SHADE.with(|shade| *shade)
+}
+
+/// Rows the way a table draws them: the row selects on a release, the
+/// chevron inside it toggles on one of its own, and a button removes.
+#[derive(Default)]
+pub struct RowsPage {
+    selected: Option<usize>,
+    toggled: Option<usize>,
+    removed: Option<usize>,
+}
+
+pub enum Rowing {
+    Selected(usize),
+    Toggled(usize),
+    Removed(usize),
+}
+
+#[page]
+impl Page for RowsPage {
+    type Params = ();
+    type Installs = ();
+    type Message = Rowing;
+
+    fn install(_ctx: &FeatureInitContext, _params: &()) -> anyhow::Result<()> {
+        Ok(())
+    }
+
+    fn update(&mut self, message: Rowing, _cx: &mut UpdateCx<'_, Self>) {
+        match message {
+            Rowing::Selected(at) => self.selected = Some(at),
+            Rowing::Toggled(at) => self.toggled = Some(at),
+            Rowing::Removed(at) => self.removed = Some(at),
+        }
+    }
+
+    fn view(&self, cx: &mut PageCx<'_, Self>) -> View {
+        let shade = cx.use_context(shade());
+        let select = cx.on(Rowing::Selected);
+        let toggle = cx.on(Rowing::Toggled);
+        let remove = cx.on(Rowing::Removed);
+
+        let rows = VirtualSource::new(
+            CATALOGUE.len() as u64,
+            CATALOGUE.len(),
+            |index| index,
+            move |index| {
+                let (select, toggle, remove) = (select.clone(), toggle.clone(), remove.clone());
+
+                Border::new()
+                    .on_pointer_released(Callback::new(move |_: PointerEventInfo| {
+                        let _ = select.call(index);
+                    }))
+                    .content(StackPanel::new().children((
+                        Border::new()
+                            .mark(Marks::Chevron)
+                            .on_pointer_released(Callback::new(move |_: PointerEventInfo| {
+                                let _ = toggle.call(index);
+                            }))
+                            .content(TextBlock::new().text(">")),
+                        TextBlock::new().text(CATALOGUE[index]),
+                        Button::new()
+                            .mark(Marks::Remove)
+                            .is_enabled(index != 0)
+                            .on_click(move || {
+                                let _ = remove.call(index);
+                            })
+                            .content(TextBlock::new().text("Remove")),
+                    )))
+            },
+        );
+
+        StackPanel::new()
+            .children((
+                TextBlock::new().text(format!(
+                    "{shade}: selected {:?} toggled {:?} removed {:?}",
+                    self.selected, self.toggled, self.removed
+                )),
+                ItemsRepeater::new().virtual_source(rows),
+            ))
+            .into()
+    }
+}
+
+impl Segment for RowsPage {
+    type Installs = ();
+    type Above = ();
+}
+
+#[guinea::test(iterations = 2)]
+fn a_click_bubbles_through_every_listener_and_stops_at_a_button(h: &mut Harness) {
+    let mut page =
+        Mounted::<RowsPage>::mount_with(&h.segment(), (), |page| View::provide(shade(), "dark", page))
+            .unwrap();
+    assert!(
+        page.find_text("dark: selected None toggled None removed None").is_some(),
+        "{:#?}",
+        page.tree()
+    );
+
+    page.item_with_text("gum").click(Marks::Chevron);
+    page.settle();
+    assert!(
+        page.find_text("dark: selected Some(3) toggled Some(3) removed None").is_some(),
+        "{:#?}",
+        page.tree()
+    );
+
+    page.item(4).click(Marks::Remove);
+    page.settle();
+    assert!(
+        page.find_text("dark: selected Some(3) toggled Some(3) removed Some(4)").is_some(),
+        "{:#?}",
+        page.tree()
+    );
+}
+
+#[guinea::test(iterations = 1)]
+#[should_panic(expected = "\"Remove\" cannot be clicked: it is inside a disabled Button")]
+fn a_disabled_button_does_not_take_the_click(h: &mut Harness) {
+    let mut page = Mounted::<RowsPage>::mount(&h.segment(), ()).unwrap();
+    page.item(0).click(Marks::Remove);
+}
+
+#[guinea::test(iterations = 2)]
+fn a_list_says_how_long_it_is_and_its_items_what_they_hold(h: &mut Harness) {
+    let mut page = Mounted::<RowsPage>::mount(&h.segment(), ()).unwrap();
+    assert_eq!(page.item_count(), CATALOGUE.len());
+
+    let items = page.items();
+    assert_eq!(items.len(), CATALOGUE.len());
+    assert!(items[5].find_text("gust").is_some(), "{:#?}", items[5]);
+
+    let unmarked = items[2].find_text("gui").unwrap().at;
+    assert_eq!(
+        page.at(unmarked).property(PropertyId::TextBlockText),
+        Some(&PropertyValue::Str("gui".into()))
+    );
+
+    let first = page.item(0).find(Marks::Remove).unwrap();
+    let second = page.item(1).find(Marks::Remove).unwrap();
+    assert_eq!(
+        page.property(first, PropertyId::ButtonIsEnabled),
+        Some(&PropertyValue::Bool(false))
+    );
+    assert_ne!(
+        page.property(second, PropertyId::ButtonIsEnabled),
+        Some(&PropertyValue::Bool(false))
+    );
 }
 
 /// Samples on a timer; installed into the segment above the page.

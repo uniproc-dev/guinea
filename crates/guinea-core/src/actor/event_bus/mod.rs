@@ -226,12 +226,20 @@ impl EventBus {
 
 pub struct GlobalEventBus;
 
+thread_local! {
+    static GLOBAL: RefCell<Rc<EventBus>> = RefCell::new(Rc::new(EventBus::of_kind(Bus::Global)));
+}
+
 impl GlobalEventBus {
     pub(crate) fn instance() -> Rc<EventBus> {
-        thread_local! {
-            static BUS: Rc<EventBus> = Rc::new(EventBus::of_kind(Bus::Global));
-        }
-        BUS.with(|bus| bus.clone())
+        GLOBAL.with(|bus| bus.borrow().clone())
+    }
+
+    /// Puts an empty global bus in place of this thread's, so a test starts
+    /// with no subscriber a test before it left behind.
+    #[cfg(feature = "test-utils")]
+    pub fn replace_for_test() {
+        GLOBAL.with(|bus| *bus.borrow_mut() = Rc::new(EventBus::of_kind(Bus::Global)));
     }
 
     /// The global bus, for reading what is subscribed to it.

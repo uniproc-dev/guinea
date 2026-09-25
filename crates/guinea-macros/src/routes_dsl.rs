@@ -189,6 +189,13 @@ fn params_struct(name: &Ident, fields: &[guinea_route_dsl::Field]) -> TokenStrea
         quote! { pub #name: #ty }
     });
 
+    if fields.is_empty() {
+        return quote! {
+            #[derive(Clone, Debug, Default, PartialEq)]
+            pub struct #name {}
+        };
+    }
+
     if fields.iter().all(|field| field.identity) {
         return quote! {
             #[derive(Clone, Debug, PartialEq)]

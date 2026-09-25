@@ -44,6 +44,9 @@ own-runtime = ["guinea-app/own-runtime"]
 # `app::Harness` with `#[guinea::test]`, which run what those spawn in an
 # order a seed decides.
 test-utils = ["guinea-app/test-utils"]
+# `test-utils`, and each enabled backend's own harness - on WinUI,
+# `winui::harness::Mounted` - without naming the backend's crate.
+harness = ["test-utils", "guinea-winui?/harness"]
 
 [lints]
 workspace = true

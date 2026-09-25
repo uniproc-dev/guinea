@@ -12,20 +12,51 @@ use std::collections::HashMap;
 use std::marker::PhantomData;
 use std::rc::Rc;
 
-use guinea_app::app::{Harness, Segment};
+use guinea_app::app::{Act, Harness, Segment};
 use guinea_core::mark::Mark;
 use guinea_core::scope::Scope;
 use guinea_router::router::{SegmentEntry, SegmentProps};
 use windows_reactor::View;
 use windows_reactor::test::{
-    EventId, EventPayload, NodeId, PropertyId, PropertyValue, Pump, QueuedEvent, RealizedContainer,
-    RecordingRuntime,
+    Command, EventId, EventPayload, Pump, QueuedEvent, RealizedContainer, RecordingRuntime,
 };
+
+pub use windows_reactor::test::{NodeId, PropertyId, PropertyValue};
 
 use crate::winui::{Page, PageNode, Signal, WinUi, install_page, segment_entry};
 
 /// How many component turns one pass may run before it looks again.
 const TURNS: usize = 64;
+
+/// Every control's `IsEnabled`: the reactor names it per control.
+const ENABLED: &[PropertyId] = &[
+    PropertyId::AppBarButtonIsEnabled,
+    PropertyId::AutoSuggestBoxIsEnabled,
+    PropertyId::ButtonIsEnabled,
+    PropertyId::CalendarDatePickerIsEnabled,
+    PropertyId::CalendarViewIsEnabled,
+    PropertyId::CheckBoxIsEnabled,
+    PropertyId::ColorPickerIsEnabled,
+    PropertyId::ComboBoxIsEnabled,
+    PropertyId::DatePickerIsEnabled,
+    PropertyId::DropDownButtonIsEnabled,
+    PropertyId::HyperlinkButtonIsEnabled,
+    PropertyId::ListBoxIsEnabled,
+    PropertyId::NavigationViewIsEnabled,
+    PropertyId::NumberBoxIsEnabled,
+    PropertyId::PasswordBoxIsEnabled,
+    PropertyId::ProgressBarIsEnabled,
+    PropertyId::ProgressRingIsEnabled,
+    PropertyId::RadioButtonIsEnabled,
+    PropertyId::RepeatButtonIsEnabled,
+    PropertyId::RichEditBoxIsEnabled,
+    PropertyId::SliderIsEnabled,
+    PropertyId::SplitButtonIsEnabled,
+    PropertyId::TextBoxIsEnabled,
+    PropertyId::TimePickerIsEnabled,
+    PropertyId::ToggleButtonIsEnabled,
+    PropertyId::ToggleSwitchIsEnabled,
+];
 
 type Sender<M> = Rc<dyn Fn(Signal<M>) -> bool>;
 
@@ -74,6 +105,10 @@ fn chain<P: Page>(depth: usize) -> &'static [SegmentEntry<WinUi>] {
 /// One element of what a page drew, as a snapshot keeps it.
 #[derive(Clone, Debug, PartialEq, serde::Serialize)]
 pub struct Node {
+    /// Where it is, for [`Mounted::property`] and [`Mounted::at`]. Not part
+    /// of a snapshot: it changes from run to run.
+    #[serde(skip)]
+    pub at: NodeId,
     pub kind: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub text: Option<String>,
@@ -85,12 +120,35 @@ pub struct Node {
     pub children: Vec<Node>,
 }
 
+impl Node {
+    /// The first element here, depth first, that shows `text`.
+    pub fn find_text(&self, text: &str) -> Option<&Node> {
+        self.first(&|node| node.text.as_deref() == Some(text))
+    }
+
+    /// The first element here, depth first, that carries `mark`.
+    pub fn find(&self, mark: impl Mark) -> Option<&Node> {
+        let name = mark.name();
+        self.first(&|node| node.id.as_deref() == Some(name))
+    }
+
+    fn first(&self, test: &dyn Fn(&Node) -> bool) -> Option<&Node> {
+        if test(self) {
+            return Some(self);
+        }
+
+        self.children.iter().find_map(|child| child.first(test))
+    }
+}
+
 /// A page mounted with no window, in a segment of a [`Harness`].
 pub struct Mounted<'h, P: Page> {
     harness: &'h Harness,
     pump: Pump<RecordingRuntime>,
     /// The items brought into view so far, by list and index.
     realized: HashMap<(NodeId, usize), NodeId>,
+    /// How many items each list holds, as it last said.
+    counts: HashMap<NodeId, usize>,
     page: PhantomData<P>,
 }
 
@@ -98,6 +156,17 @@ impl<'h, P: Page> Mounted<'h, P> {
     /// Installs `P` into `segment` - what it `Installs`, and the node it
     /// starts as - and mounts it, the way a navigation to it would.
     pub fn mount(segment: &Segment<'h>, params: P::Params) -> anyhow::Result<Self> {
+        Self::mount_with(segment, params, |page| page)
+    }
+
+    /// [`mount`](Self::mount), with the page's view handed to `wrap` first -
+    /// for what a layout above it would give it, such as a context:
+    /// `|page| View::provide(&SCHEME, scheme, page)`.
+    pub fn mount_with(
+        segment: &Segment<'h>,
+        params: P::Params,
+        wrap: impl FnOnce(View) -> View,
+    ) -> anyhow::Result<Self> {
         let cx = segment.context();
         install_page::<P>(cx, &params)?;
 
@@ -115,14 +184,18 @@ impl<'h, P: Page> Mounted<'h, P> {
             cursor: depth - 1,
         };
 
-        let mut pump = Pump::new(RecordingRuntime::default());
-        pump.mount_view(View::component::<PageNode<P>>(props))
+        let mut runtime = RecordingRuntime::default();
+        runtime.record_commands(true);
+
+        let mut pump = Pump::new(runtime);
+        pump.mount_view(wrap(View::component::<PageNode<P>>(props)))
             .map_err(|refused| anyhow::anyhow!("mounting {}: {refused:?}", std::any::type_name::<P>()))?;
 
         let mut mounted = Self {
             harness: segment.harness(),
             pump,
             realized: HashMap::new(),
+            counts: HashMap::new(),
             page: PhantomData,
         };
         mounted.settle();
@@ -138,19 +211,20 @@ impl<'h, P: Page> Mounted<'h, P> {
         self.turn();
     }
 
-    /// Clicks what carries `mark` the way a pointer would: on the nearest
-    /// element at or above it that listens for a click.
-    pub fn click(&mut self, mark: impl Mark) {
+    /// Clicks what carries `mark` the way a pointer would - see
+    /// [`click_at`](Self::click_at) for the route it takes - and hands back
+    /// what the click set off, as an action named after the mark.
+    pub fn click(&mut self, mark: impl Mark) -> Act<'h> {
         let root = self.page_root();
         let found = self.marked(root, &mark);
-        self.click_at(found, mark.name());
+        self.click_at(found, mark.name(), mark.name())
     }
 
     /// [`click`](Self::click) for what shows `text` and carries no mark.
-    pub fn click_text(&mut self, text: &str) {
+    pub fn click_text(&mut self, text: &str) -> Act<'h> {
         let root = self.page_root();
         let found = self.showing(root, text);
-        self.click_at(found, text);
+        self.click_at(found, text, "click")
     }
 
     /// The first element, depth first, that carries `mark`.
@@ -187,6 +261,109 @@ impl<'h, P: Page> Mounted<'h, P> {
         }
     }
 
+    /// How many items the first list on the page holds - built or not.
+    pub fn item_count(&mut self) -> usize {
+        let root = self.page_root();
+        self.count(root)
+    }
+
+    /// The first item of the first list for which `test` holds, bringing
+    /// items into view in order until one does.
+    pub fn item_where(&mut self, test: impl Fn(&Node) -> bool) -> Within<'_, 'h, P> {
+        let root = self.page_root();
+        let found = self.first_item(root, test);
+
+        Within {
+            mounted: self,
+            root: found,
+        }
+    }
+
+    /// The first item of the first list that shows `text` somewhere in it.
+    pub fn item_with_text(&mut self, text: &str) -> Within<'_, 'h, P> {
+        self.item_where(|item| item.find_text(text).is_some())
+    }
+
+    /// Every item of the first list, each brought into view.
+    pub fn items(&mut self) -> Vec<Node> {
+        let root = self.page_root();
+        self.all_items(root)
+    }
+
+    /// What `node` has for `property`, if it was ever set.
+    pub fn property(&self, node: NodeId, property: PropertyId) -> Option<&PropertyValue> {
+        self.pump.runtime().node(node)?.property(property)
+    }
+
+    /// The part of the page from `node` down - one found in a [`Node`], say,
+    /// to click or read without a mark of its own.
+    pub fn at(&mut self, node: NodeId) -> Within<'_, 'h, P> {
+        Within {
+            mounted: self,
+            root: node,
+        }
+    }
+
+    fn list_of(&self, under: NodeId) -> NodeId {
+        self.list(under)
+            .unwrap_or_else(|| panic!("there is no list here:\n{:#?}", self.node(under)))
+    }
+
+    fn count(&mut self, under: NodeId) -> usize {
+        let list = self.list_of(under);
+        self.note_counts();
+        self.counts.get(&list).copied().unwrap_or(0)
+    }
+
+    /// Reads what the lists said of their length since the last look.
+    fn note_counts(&mut self) {
+        let said: Vec<(NodeId, usize)> = self
+            .pump
+            .runtime()
+            .commands()
+            .iter()
+            .flatten()
+            .filter_map(|command| match command {
+                Command::CreateVirtualCollection {
+                    node, item_count, ..
+                }
+                | Command::ResetVirtualCollection {
+                    node, item_count, ..
+                } => Some((*node, *item_count)),
+                _ => None,
+            })
+            .collect();
+        self.counts.extend(said);
+
+        let runtime = self.pump.runtime_mut();
+        runtime.record_commands(false);
+        runtime.record_commands(true);
+    }
+
+    fn first_item(&mut self, under: NodeId, test: impl Fn(&Node) -> bool) -> NodeId {
+        let count = self.count(under);
+
+        for index in 0..count {
+            let item = self.realize(under, index);
+            if test(&self.node(item)) {
+                return item;
+            }
+        }
+
+        panic!("none of the {count} items matches:\n{:#?}", self.all_items(under))
+    }
+
+    fn all_items(&mut self, under: NodeId) -> Vec<Node> {
+        let count = self.count(under);
+
+        (0..count)
+            .map(|index| {
+                let item = self.realize(under, index);
+                self.node(item)
+            })
+            .collect()
+    }
+
     fn marked(&self, under: NodeId, mark: &impl Mark) -> NodeId {
         let name = mark.name();
         self.first(under, PropertyId::AutomationId, name)
@@ -200,9 +377,7 @@ impl<'h, P: Page> Mounted<'h, P> {
 
     /// The list at or under `under`, with item `index` realized in it.
     fn realize(&mut self, under: NodeId, index: usize) -> NodeId {
-        let list = self
-            .list(under)
-            .unwrap_or_else(|| panic!("there is no list here:\n{:#?}", self.node(under)));
+        let list = self.list_of(under);
 
         let children = |mounted: &Self| -> Vec<NodeId> {
             mounted
@@ -252,19 +427,89 @@ impl<'h, P: Page> Mounted<'h, P> {
         None
     }
 
-    fn click_at(&mut self, found: NodeId, label: &str) {
+    /// A click as WinUI routes one: the pointer bubbles up from `found`
+    /// through every element listening for it, and stops at a button, which
+    /// takes the pointer for its own click. Nothing inside a disabled control
+    /// takes it at all.
+    fn click_at(&mut self, found: NodeId, label: &str, name: &'static str) -> Act<'h> {
         let parents = self.parents();
+
+        let mut above = Some(found);
+        while let Some(node) = above {
+            if self.disabled(node) {
+                panic!(
+                    "{label:?} cannot be clicked: it is inside a disabled {}\n{:#?}",
+                    self.node(node).kind,
+                    self.node(node)
+                );
+            }
+            above = parents.get(&node).copied();
+        }
+
+        let mut bubbled = Vec::new();
+        let mut button = None;
         let mut at = Some(found);
 
         while let Some(node) = at {
-            if self.press(node) {
-                self.turn();
-                return;
+            if self.pump.event_revision(node, EventId::ButtonClick).is_some() {
+                button = Some(node);
+                break;
+            }
+            if self
+                .pump
+                .event_revision(node, EventId::BorderPointerReleased)
+                .is_some()
+            {
+                bubbled.push(node);
             }
             at = parents.get(&node).copied();
         }
 
-        panic!("{label:?} is on the page, but nothing at or above it listens for a click");
+        assert!(
+            button.is_some() || !bubbled.is_empty(),
+            "{label:?} is on the page, but nothing at or above it listens for a click"
+        );
+
+        for node in &bubbled {
+            self.pointer(*node, EventId::BorderPointerPressed);
+        }
+        for node in &bubbled {
+            self.pointer(*node, EventId::BorderPointerReleased);
+        }
+        if let Some(button) = button
+            && let Some(revision) = self.pump.event_revision(button, EventId::ButtonClick)
+        {
+            self.pump.queue_event(QueuedEvent::new(
+                button,
+                EventId::ButtonClick,
+                revision,
+                EventPayload::Unit,
+            ));
+        }
+
+        let harness = self.harness;
+        harness.record(name, || {
+            self.turn();
+        })
+    }
+
+    /// Whether `node` is a control set to disabled - which takes no input, and
+    /// neither does anything inside it.
+    fn disabled(&self, node: NodeId) -> bool {
+        ENABLED
+            .iter()
+            .any(|id| matches!(self.property(node, *id), Some(PropertyValue::Bool(false))))
+    }
+
+    fn pointer(&mut self, node: NodeId, event: EventId) {
+        if let Some(revision) = self.pump.event_revision(node, event) {
+            self.pump.queue_event(QueuedEvent::new(
+                node,
+                event,
+                revision,
+                EventPayload::PointerEventInfo(Default::default()),
+            ));
+        }
     }
 
     /// Runs everything until nothing is left: the harness's work, then what
@@ -313,6 +558,7 @@ impl<'h, P: Page> Mounted<'h, P> {
     fn node(&self, id: NodeId) -> Node {
         let Some(recorded) = self.pump.runtime().node(id) else {
             return Node {
+                at: id,
                 kind: "?".to_string(),
                 text: None,
                 id: None,
@@ -321,6 +567,7 @@ impl<'h, P: Page> Mounted<'h, P> {
         };
 
         Node {
+            at: id,
             kind: recorded
                 .kind()
                 .map(|kind| format!("{kind:?}"))
@@ -347,40 +594,6 @@ impl<'h, P: Page> Mounted<'h, P> {
         parents
     }
 
-    /// Delivers a click to `node` if it listens for one.
-    fn press(&mut self, node: NodeId) -> bool {
-        if let Some(revision) = self.pump.event_revision(node, EventId::ButtonClick) {
-            self.pump.queue_event(QueuedEvent::new(
-                node,
-                EventId::ButtonClick,
-                revision,
-                EventPayload::Unit,
-            ));
-            return true;
-        }
-
-        let Some(released) = self.pump.event_revision(node, EventId::BorderPointerReleased) else {
-            return false;
-        };
-
-        if let Some(pressed) = self.pump.event_revision(node, EventId::BorderPointerPressed) {
-            self.pump.queue_event(QueuedEvent::new(
-                node,
-                EventId::BorderPointerPressed,
-                pressed,
-                EventPayload::PointerEventInfo(Default::default()),
-            ));
-        }
-        self.pump.queue_event(QueuedEvent::new(
-            node,
-            EventId::BorderPointerReleased,
-            released,
-            EventPayload::PointerEventInfo(Default::default()),
-        ));
-
-        true
-    }
-
     /// One pass of what the window would do between frames: deliver the
     /// events waiting for the page, then let its components update and draw.
     fn turn(&mut self) -> usize {
@@ -401,7 +614,7 @@ pub struct Within<'m, 'h, P: Page> {
     root: NodeId,
 }
 
-impl<P: Page> Within<'_, '_, P> {
+impl<'h, P: Page> Within<'_, 'h, P> {
     /// The part of this part that carries `mark`.
     pub fn within(self, mark: impl Mark) -> Self {
         let root = self.mounted.marked(self.root, &mark);
@@ -414,6 +627,32 @@ impl<P: Page> Within<'_, '_, P> {
         Self { root, ..self }
     }
 
+    /// See [`Mounted::item_count`].
+    pub fn item_count(&mut self) -> usize {
+        self.mounted.count(self.root)
+    }
+
+    /// See [`Mounted::item_where`].
+    pub fn item_where(self, test: impl Fn(&Node) -> bool) -> Self {
+        let root = self.mounted.first_item(self.root, test);
+        Self { root, ..self }
+    }
+
+    /// See [`Mounted::item_with_text`].
+    pub fn item_with_text(self, text: &str) -> Self {
+        self.item_where(|item| item.find_text(text).is_some())
+    }
+
+    /// See [`Mounted::items`].
+    pub fn items(&mut self) -> Vec<Node> {
+        self.mounted.all_items(self.root)
+    }
+
+    /// What this part's outermost element has for `property`.
+    pub fn property(&self, property: PropertyId) -> Option<&PropertyValue> {
+        self.mounted.property(self.root, property)
+    }
+
     pub fn find(&self, mark: impl Mark) -> Option<NodeId> {
         self.mounted.first(self.root, PropertyId::AutomationId, mark.name())
     }
@@ -423,19 +662,19 @@ impl<P: Page> Within<'_, '_, P> {
     }
 
     /// Clicks what carries `mark` in this part - see [`Mounted::click`].
-    pub fn click(self, mark: impl Mark) {
+    pub fn click(self, mark: impl Mark) -> Act<'h> {
         let found = self.mounted.marked(self.root, &mark);
-        self.mounted.click_at(found, mark.name());
+        self.mounted.click_at(found, mark.name(), mark.name())
     }
 
-    pub fn click_text(self, text: &str) {
+    pub fn click_text(self, text: &str) -> Act<'h> {
         let found = self.mounted.showing(self.root, text);
-        self.mounted.click_at(found, text);
+        self.mounted.click_at(found, text, "click")
     }
 
     /// Clicks this part itself: a row, to select it.
-    pub fn click_here(self) {
-        self.mounted.click_at(self.root, "this part");
+    pub fn click_here(self) -> Act<'h> {
+        self.mounted.click_at(self.root, "this part", "click")
     }
 
     /// What this part drew, from its outermost element down.

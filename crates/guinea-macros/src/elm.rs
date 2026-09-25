@@ -33,25 +33,33 @@ pub enum Kind {
 /// adapter does not, and the generated `update` has to name `UpdateCx` either
 /// way. `package` is the adapter's own crate, `facade` the module the facade
 /// re-exports it under.
+///
+/// The facade wins over the adapter when both are there: the lookup sees
+/// dev-dependencies too, and an application that names the adapter only to
+/// test with it would otherwise get a path its own build does not have.
 fn adapter_path(package: &str, facade: &str) -> TokenStream {
     let facade_module = syn::Ident::new(facade, proc_macro2::Span::call_site());
+    let named = |name: &str| syn::Ident::new(name, proc_macro2::Span::call_site());
 
-    match crate_name(package) {
-        Ok(FoundCrate::Itself) => return quote!(crate),
-        Ok(FoundCrate::Name(name)) => {
-            let ident = syn::Ident::new(&name, proc_macro2::Span::call_site());
-            return quote!(::#ident);
-        }
-        Err(_) => {}
+    let adapter = crate_name(package);
+    if let Ok(FoundCrate::Itself) = adapter {
+        return quote!(crate);
     }
 
-    match crate_name("guinea") {
+    let guinea = crate_name("guinea");
+    if let Ok(FoundCrate::Name(name)) = &guinea {
+        let ident = named(name);
+        return quote!(::#ident::#facade_module);
+    }
+
+    if let Ok(FoundCrate::Name(name)) = adapter {
+        let ident = named(&name);
+        return quote!(::#ident);
+    }
+
+    match guinea {
         Ok(FoundCrate::Itself) => quote!(crate::#facade_module),
-        Ok(FoundCrate::Name(name)) => {
-            let ident = syn::Ident::new(&name, proc_macro2::Span::call_site());
-            quote!(::#ident::#facade_module)
-        }
-        Err(_) => quote!(::guinea::#facade_module),
+        _ => quote!(::guinea::#facade_module),
     }
 }
 

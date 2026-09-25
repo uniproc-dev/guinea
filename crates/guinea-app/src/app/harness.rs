@@ -3,13 +3,13 @@ use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::rc::Rc;
 use std::time::Duration;
 
-use guinea_core::actor::UiThreadToken;
-use guinea_core::actor::event_bus::EventBus;
+use guinea_core::actor::event_bus::{Event, EventBus, GlobalEventBus};
+use guinea_core::actor::{UiThreadToken, short_type_name};
 use guinea_core::actor::registry::DebugRegistry;
 use guinea_core::executor::{self, Installed};
 use guinea_core::feature::Dispatch;
 use guinea_core::scope::{DropGuard, Reducer, Scope};
-use guinea_core::trace::Cause;
+use guinea_core::trace::{self, Cause, Point};
 
 use crate::feature::context_ext::FeatureContext;
 use crate::feature::{Feature, FeatureInitContext};
@@ -93,7 +93,7 @@ impl DerefMut for TestApp {
 pub struct Harness {
     segment: FeatureInitContext,
     _root: Registration,
-    _app: TestApp,
+    app: TestApp,
     recorder: Recorder,
     executor: Installed,
 }
@@ -105,6 +105,7 @@ const HORIZON: Duration = Duration::from_secs(24 * 60 * 60);
 impl Harness {
     pub fn new(seed: u64) -> Self {
         let executor = executor::install(seed);
+        GlobalEventBus::replace_for_test();
         let app = TestApp::new();
         let root = Registration::open();
 
@@ -121,7 +122,7 @@ impl Harness {
         Self {
             segment,
             _root: root,
-            _app: app,
+            app,
             recorder: Recorder::start(),
             executor,
         }
@@ -129,6 +130,54 @@ impl Harness {
 
     pub fn seed(&self) -> u64 {
         self.executor.seed()
+    }
+
+    /// Installs a plugin into the application around the harness. What it
+    /// provides reaches every segment, so install it before whatever reads it.
+    pub fn plugin<P: Plugin>(&mut self, plugin: P) -> anyhow::Result<&mut Self> {
+        self.app.install(plugin)?;
+        Ok(self)
+    }
+
+    /// Provides one service, as a plugin would - for a test that needs a
+    /// value and no plugin around it.
+    pub fn provide<T: Send + Sync + 'static>(&mut self, value: T) -> &mut Self {
+        self.app.provide(value);
+        self
+    }
+
+    /// Installs the application's own wiring, as [`plugin`](Self::plugin).
+    pub fn feature<F: AppFeature>(&mut self, feature: F) -> anyhow::Result<&mut Self> {
+        self.app.install_feature(feature)?;
+        Ok(self)
+    }
+
+    /// Publishes `event` on the global bus the way it lands on the UI thread,
+    /// and hands back what it set off.
+    pub fn publish<M: Event>(&self, event: M) -> Act<'_> {
+        self.record(short_type_name::<M>(), || GlobalEventBus::bus().publish(event))
+    }
+
+    /// Runs `done` as one action called `name`, and hands back what it set
+    /// off - for a backend's harness to make a click or a key an action like
+    /// any other.
+    pub fn record(&self, name: &'static str, done: impl FnOnce()) -> Act<'_> {
+        let from = self.recorder.heard();
+
+        {
+            let _action = trace::enter(|| Point::Action { message: name });
+            done();
+        }
+
+        let cause = self
+            .recorder
+            .action_since(from)
+            .expect("what was done is recorded as an action");
+
+        Act {
+            harness: self,
+            cause,
+        }
     }
 
     /// The harness's own segment - the one [`install`](Self::install) and
@@ -192,6 +241,17 @@ impl Harness {
     /// something nothing here will wake.
     pub fn stuck(&self) -> usize {
         self.executor.stuck()
+    }
+}
+
+impl Drop for Harness {
+    /// Tears the application down the way leaving `run` does: the segment's
+    /// features first, then every plugin's cleanups. A plugin that puts
+    /// something process-wide in place takes it away again, so the next seed
+    /// can put it back.
+    fn drop(&mut self) {
+        self.segment.scope = Rc::new(Scope::new());
+        runtime::teardown(&self.app.token, &self.app.builder);
     }
 }
 
@@ -321,14 +381,19 @@ impl Act<'_> {
     /// the clock. When what the action set off waits on time, the clock goes
     /// to each next timer until it is done, and whatever else those timers
     /// set off runs as well.
+    ///
+    /// What is ready runs before the action is judged finished. A hop to the
+    /// UI thread - `GlobalEventBus::publish` from an actor takes one - is not
+    /// traced as work of its own, so until it has run, nothing says the
+    /// action is waiting on it.
     pub fn settle(&self) -> &Self {
         loop {
-            if self.is_settled() {
-                return self;
-            }
-
             if self.harness.executor.step() {
                 continue;
+            }
+
+            if self.is_settled() {
+                return self;
             }
 
             if !self.harness.executor.wake_next(HORIZON) {
