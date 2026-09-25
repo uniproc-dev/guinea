@@ -1,97 +1,116 @@
-//! `#[installs]` - `Params` read off `install`, rather than declared beside it.
-//!
-//! Named for the method it reads rather than for the trait it sits on, because
-//! `#[feature]` is ambiguous with Rust's own `feature` attribute wherever it is
-//! imported by name.
+//! `#[installs]` - the function that installs a feature `feature!` declared.
 //!
 //! ```ignore
 //! #[installs]
-//! impl Feature for Tabs {
-//!     type Exports = (contracts::Tabs,);
-//!
-//!     fn install(cx: &FeatureInitContext, context: &str) -> anyhow::Result<Self> { .. }
+//! fn agent_link(cx: &FeatureInitContext, params: &AgentLinkParams) -> anyhow::Result<AgentLink> {
+//!     let (link, _) = cx.state::<AgentLinkState>().driven_by(|port| AgentLinkActor::new(port));
+//!     Ok(AgentLink(link))
 //! }
 //! ```
 //!
-//! `type Params = str;` beside an `install` that already takes `&str` is the
-//! same fact written twice, and the two can drift: change the parameter and
-//! the associated type keeps compiling until something else reads it. The
-//! signature is the one that cannot be wrong, because it is what the body
-//! uses, so the macro reads the type from there.
+//! Everything the trait wants is already in the signature: the feature is what
+//! it returns, `Params` is what its second argument points at - `()` when
+//! there is none - and `Exports` is what the manifest listed. So the macro
+//! writes `impl Feature` from those, and the function stays a function.
 //!
-//! It is not the same job as `Exports`. What a feature publishes is a
-//! decision, not a consequence - a feature may claim four reducers and export
-//! one - so there is nothing to derive it from, and it stays written down.
+//! Named for what the function does rather than for the trait, because
+//! `#[feature]` is ambiguous with Rust's own `feature` attribute wherever it
+//! is imported by name.
 
 use proc_macro::TokenStream as TokenStream1;
 use quote::quote;
-use syn::{FnArg, ImplItem, ItemImpl, Type, parse_quote};
+use syn::{FnArg, GenericArgument, GenericParam, ItemFn, PathArguments, ReturnType, Type};
 
 pub fn installs_impl(item: TokenStream1) -> TokenStream1 {
-    let mut item = syn::parse_macro_input!(item as ItemImpl);
+    let function = syn::parse_macro_input!(item as ItemFn);
 
-    let gc = crate::handler::guinea_core_crate_path();
-    let declared: ImplItem = parse_quote! {
-        const DECLARED: ::core::option::Option<#gc::actor::shape::Declared> =
-            ::core::option::Option::Some(#gc::actor::shape::Declared {
-                file: ::core::file!(),
-                line: ::core::line!(),
-                column: ::core::column!(),
-                crate_dir: ::core::env!("CARGO_MANIFEST_DIR"),
-            });
-    };
-
-    let declares_params = item
-        .items
-        .iter()
-        .any(|entry| matches!(entry, ImplItem::Type(ty) if ty.ident == "Params"));
-
-    if declares_params {
-        item.items.push(declared);
-        return quote!(#item).into();
-    }
-
-    let Some(params) = params_of_install(&item) else {
-        // Nothing to read it off. Say so here rather than letting the missing
-        // associated type be reported against a trait the author did not write.
+    let Some(installed) = installed(&function) else {
         return syn::Error::new_spanned(
-            &item,
-            "#[installs] reads `Params` from `install`'s second argument, and found none - \
-             write `fn install(cx: &FeatureInitContext, params: &YourParams)`, or declare \
-             `type Params` yourself",
+            &function.sig,
+            "#[installs] reads the feature from what the function returns - write \
+             `-> anyhow::Result<YourFeature>`",
         )
         .to_compile_error()
         .into();
     };
 
-    item.items.push(parse_quote! {
-        type Params = #params;
-    });
-    item.items.push(declared);
+    let gc = crate::handler::guinea_core_crate_path();
+    let feature = crate::segment::context_path();
+    let name = &function.sig.ident;
+    let (impl_generics, _, where_clause) = function.sig.generics.split_for_impl();
 
-    quote!(#item).into()
+    let turbofish: Vec<_> = function
+        .sig
+        .generics
+        .params
+        .iter()
+        .filter_map(|param| match param {
+            GenericParam::Type(ty) => Some(&ty.ident),
+            _ => None,
+        })
+        .collect();
+    let called = if turbofish.is_empty() {
+        quote!(#name)
+    } else {
+        quote!(#name::<#(#turbofish),*>)
+    };
+
+    let (params, call) = match function.sig.inputs.iter().nth(1) {
+        Some(FnArg::Typed(second)) => {
+            let params = match &*second.ty {
+                Type::Reference(reference) => (*reference.elem).clone(),
+                other => other.clone(),
+            };
+            (quote!(#params), quote!(#called(cx, params)))
+        }
+        _ => (quote!(()), quote!(#called(cx))),
+    };
+
+    quote! {
+        #function
+
+        impl #impl_generics #feature::Feature for #installed #where_clause {
+            type Params = #params;
+            type Exports = <#installed as #feature::Manifest>::Exports;
+
+            const DECLARED: ::core::option::Option<#gc::actor::shape::Declared> =
+                ::core::option::Option::Some(#gc::actor::shape::Declared {
+                    file: ::core::file!(),
+                    line: ::core::line!(),
+                    column: ::core::column!(),
+                    crate_dir: ::core::env!("CARGO_MANIFEST_DIR"),
+                });
+
+            fn install(
+                cx: &#feature::FeatureInitContext,
+                params: &Self::Params,
+            ) -> #gc::__private::anyhow::Result<Self> {
+                let _ = params;
+                #call
+            }
+        }
+    }
+    .into()
 }
 
-/// The type behind `install`'s second parameter: `&str` gives `str`,
-/// `&ProcessesParams` gives `ProcessesParams`.
-///
-/// By reference, because that is what the trait hands over - a feature is
-/// given what the route captured, not ownership of it.
-fn params_of_install(item: &ItemImpl) -> Option<Type> {
-    let install = item.items.iter().find_map(|entry| match entry {
-        ImplItem::Fn(f) if f.sig.ident == "install" => Some(f),
-        _ => None,
-    })?;
-
-    let second = install.sig.inputs.iter().nth(1)?;
-    let FnArg::Typed(second) = second else {
+/// The `T` in the function's `-> …Result<T>`.
+fn installed(function: &ItemFn) -> Option<Type> {
+    let ReturnType::Type(_, returned) = &function.sig.output else {
+        return None;
+    };
+    let Type::Path(path) = &**returned else {
+        return None;
+    };
+    let last = path.path.segments.last()?;
+    if last.ident != "Result" {
+        return None;
+    }
+    let PathArguments::AngleBracketed(arguments) = &last.arguments else {
         return None;
     };
 
-    match &*second.ty {
-        Type::Reference(reference) => Some((*reference.elem).clone()),
-        // Taken by value. Unusual, and the author may have meant it, so it is
-        // reported by the trait's own bound rather than second-guessed here.
-        other => Some(other.clone()),
-    }
+    arguments.args.iter().find_map(|argument| match argument {
+        GenericArgument::Type(ty) => Some(ty.clone()),
+        _ => None,
+    })
 }

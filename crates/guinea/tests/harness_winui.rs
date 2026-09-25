@@ -74,18 +74,16 @@ fn found(this: &mut Searcher, ctx: Context<Searcher, Found>) {
     this.push.send(ctx.msg.clone());
 }
 
-pub struct Search {
-    _results: Bound<Results>,
+feature! {
+    pub Search {
+        exports { Results }
+    }
 }
 
 #[installs]
-impl Feature for Search {
-    type Exports = (Results,);
-
-    fn install(cx: &FeatureInitContext, _params: &()) -> anyhow::Result<Self> {
-        let (results, _) = cx.state::<Results>().driven_by(|push| Searcher { push });
-        Ok(Self { _results: results })
-    }
+fn search(cx: &FeatureInitContext) -> anyhow::Result<Search> {
+    let (results, _) = cx.state::<Results>().driven_by(|push| Searcher { push });
+    Ok(Search(results))
 }
 
 /// A box to type into, a button, and what the last search found.
@@ -437,19 +435,17 @@ mod polling {
         this.push.send(Taken);
     }
 
-    pub struct Polling {
-        _samples: Bound<Samples>,
+    feature! {
+        pub Polling {
+            exports { Samples }
+        }
     }
 
     #[installs]
-    impl Feature for Polling {
-        type Exports = (Samples,);
-
-        fn install(cx: &FeatureInitContext, _params: &()) -> anyhow::Result<Self> {
-            let (samples, sampler) = cx.state::<Samples>().driven_by(|push| Sampler { push });
-            cx.every(std::time::Duration::from_millis(100), &sampler, || Sample);
-            Ok(Self { _samples: samples })
-        }
+    fn polling(cx: &FeatureInitContext) -> anyhow::Result<Polling> {
+        let (samples, sampler) = cx.state::<Samples>().driven_by(|push| Sampler { push });
+        cx.every(std::time::Duration::from_millis(100), &sampler, || Sample);
+        Ok(Polling(samples))
     }
 }
 

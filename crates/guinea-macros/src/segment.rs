@@ -18,7 +18,7 @@ use quote::quote;
 use syn::{ImplItem, ItemImpl, parse_quote};
 
 /// Where `FeatureInitContext` lives, from wherever this is being expanded.
-fn context_path() -> TokenStream {
+pub(crate) fn context_path() -> TokenStream {
     match crate_name("guinea-app") {
         Ok(FoundCrate::Itself) => return quote!(crate::feature),
         Ok(FoundCrate::Name(name)) => {

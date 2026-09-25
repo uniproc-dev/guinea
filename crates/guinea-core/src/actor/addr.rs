@@ -1,16 +1,20 @@
 use crate::actor::cancel::Cancel;
 use crate::actor::envelope::{Envelope, FnEnvelope, MessageEnvelope};
 use crate::actor::event_bus::builder::EventSubscription;
+use crate::actor::event_bus::subscribe::{BusSubscription, Event};
+use crate::actor::event_bus::{EventBus, GlobalEventBus};
+use crate::actor::shape::name;
 use crate::actor::traits::Handler;
 use crate::actor::{Context, UiThreadToken};
 use crate::actor::{ManagedActor, short_type_name};
 use crate::lifecycle_tracker::LifecycleTracker;
-use crate::trace::{self, Cause, Point};
+use crate::scope::Scope;
+use crate::trace::{self, Bus, Cause, Point};
 use std::any::Any;
 use std::cell::{Cell, RefCell};
 use std::collections::{HashMap, VecDeque};
 use std::marker::PhantomData;
-use std::rc::Rc;
+use std::rc::{Rc, Weak};
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 static NEXT_ID: AtomicUsize = AtomicUsize::new(1);
@@ -27,6 +31,15 @@ pub struct Addr<A: 'static> {
     is_processing: Rc<Cell<bool>>,
     counter: Rc<&'static str>,
     cancel: Cancel,
+    /// What it hears, for as long as it lives: disposing it ends them.
+    subscriptions: Rc<RefCell<Vec<BusSubscription>>>,
+    /// The scope it belongs to and its window's bus, when it has them.
+    home: Rc<RefCell<Option<Home>>>,
+}
+
+struct Home {
+    scope: Weak<Scope>,
+    bus: Weak<EventBus>,
 }
 
 impl<A: 'static> Clone for Addr<A> {
@@ -39,7 +52,21 @@ impl<A: 'static> Clone for Addr<A> {
             is_processing: self.is_processing.clone(),
             counter: self.counter.clone(),
             cancel: self.cancel.clone(),
+            subscriptions: self.subscriptions.clone(),
+            home: self.home.clone(),
         }
+    }
+}
+
+/// Keeps what an actor subscribed to on the actor itself.
+struct Held(Rc<RefCell<Vec<BusSubscription>>>);
+
+impl LifecycleTracker for Held {
+    fn track_loop<T: 'static>(&self, _handle: T) {}
+    fn track_actor<A: 'static>(&self, _addr: &Addr<A>) {}
+
+    fn track_sub(&self, subscription: BusSubscription) {
+        self.0.borrow_mut().push(subscription);
     }
 }
 
@@ -55,11 +82,56 @@ impl<A: 'static> Addr<A> {
         addr
     }
 
+    /// An actor a scope owns. What its manifest subscribes to is held by the
+    /// actor, and ends when the scope disposes it.
     pub fn new_managed_scoped(state: A, token: UiThreadToken) -> Self
     where
         A: ManagedActor,
     {
-        Self::new_managed(state, token, &crate::lifecycle_tracker::NullTracker)
+        let addr = Self::new(state, token, &crate::lifecycle_tracker::NullTracker);
+        A::Bus::subscribe_into(addr.clone(), &Held(addr.subscriptions.clone()));
+        addr
+    }
+
+    /// Where the actor lives: the scope that owns it, and that scope's
+    /// window bus. What `subscribe_on` reaches the window bus through, and
+    /// notes a listener on.
+    #[doc(hidden)]
+    pub fn live_in(&self, scope: &Rc<Scope>, bus: &Rc<EventBus>) {
+        *self.home.borrow_mut() = Some(Home {
+            scope: Rc::downgrade(scope),
+            bus: Rc::downgrade(bus),
+        });
+    }
+
+    /// Hears `M` on `bus` for as long as the actor lives: disposing it ends
+    /// the subscription.
+    pub fn subscribe_on<M: Event>(&self, bus: Bus)
+    where
+        A: Handler<M>,
+    {
+        let (scope, window) = match self.home.borrow().as_ref() {
+            Some(home) => (home.scope.upgrade(), home.bus.upgrade()),
+            None => (None, None),
+        };
+
+        let on = match bus {
+            Bus::Global => GlobalEventBus::bus(),
+            Bus::Window => window.unwrap_or_else(|| {
+                panic!(
+                    "{} lives in no window, so there is no window bus to hear {} on",
+                    short_type_name::<A>(),
+                    short_type_name::<M>()
+                )
+            }),
+        };
+
+        if let Some(scope) = scope {
+            scope.note_listener(name::<M>(), Some(name::<A>()), bus);
+        }
+
+        let subscription = on.subscribe::<A, M>(self.clone());
+        self.subscriptions.borrow_mut().push(subscription);
     }
 
     pub fn new_scoped(state: A, token: UiThreadToken) -> Self {
@@ -76,6 +148,8 @@ impl<A: 'static> Addr<A> {
             is_processing: Rc::new(Cell::new(false)),
             counter: Rc::new(short_type_name::<A>()),
             cancel: Cancel::new(),
+            subscriptions: Rc::new(RefCell::new(Vec::new())),
+            home: Rc::new(RefCell::new(None)),
         };
 
         let addr_clone = addr.clone();
@@ -207,6 +281,7 @@ impl<A: 'static> Addr<A> {
     /// nowhere to answer.
     pub fn dispose(&self) {
         self.cancel.cancel();
+        self.subscriptions.borrow_mut().clear();
 
         REGISTRY.with(|reg| {
             reg.borrow_mut().remove(&self.id);

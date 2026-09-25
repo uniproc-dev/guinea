@@ -44,24 +44,28 @@ pub struct FeatureInitContext {
 /// What it publishes is [`Exports`](Feature::Exports) - everything else it
 /// claims stays its own.
 ///
+/// Written as a manifest and a function, the way an actor is:
+///
 /// ```ignore
-/// pub struct Processes {
-///     listing: Bound<contracts::Processes>,
-/// }
-///
-/// impl Feature for Processes {
-///     type Params = str;
-///     type Exports = (contracts::Processes,);
-///
-///     fn install(cx: &FeatureInitContext, context: &str) -> anyhow::Result<Self> {
-///         let (listing, _) = cx.state::<contracts::Processes>()
-///             .driven_by(|push| ProcessActor::new(context.to_string(), push, cx.event_bus.clone()));
-///
-///         listing.emit(Refresh);
-///         Ok(Self { listing })
+/// feature! {
+///     pub Processes {
+///         exports { contracts::Processes }
 ///     }
 /// }
+///
+/// #[installs]
+/// fn processes(cx: &FeatureInitContext, context: &str) -> anyhow::Result<Processes> {
+///     let (listing, _) = cx.state::<contracts::Processes>()
+///         .driven_by(|push| ProcessActor::new(context.to_string(), push, cx.event_bus.clone()));
+///
+///     listing.emit(Refresh);
+///     Ok(Processes(listing))
+/// }
 /// ```
+///
+/// The feature is what the function returns, built from what it exports - a
+/// `Bound<R>` comes only from claiming `R`, so a feature cannot export what it
+/// did not claim.
 ///
 /// It is returned rather than dropped so that a segment installing two
 /// features can wire them to each other - which is usually why it installs two.
@@ -73,11 +77,17 @@ pub trait Feature: Sized + 'static {
     /// nothing, `(A,)` for one, `(A, B)` for two.
     type Exports: Exported;
 
-    /// Where `impl Feature` was written. `#[installs]` fills it in; a feature
-    /// written by hand leaves it unknown and loses only the source link.
+    /// Where the feature was written. `#[installs]` fills it in; a feature
+    /// implemented by hand leaves it unknown and loses only the source link.
     const DECLARED: Option<Declared> = None;
 
     fn install(cx: &FeatureInitContext, params: &Self::Params) -> anyhow::Result<Self>;
+}
+
+/// What `feature!` declares about a feature: what it exports. `#[installs]`
+/// reads a feature's [`Exports`](Feature::Exports) from here.
+pub trait Manifest {
+    type Exports: Exported;
 }
 
 impl FeatureInitContext {
@@ -124,7 +134,7 @@ impl FeatureInitContext {
     /// ```ignore
     /// let (processes, actor) = cx.state::<Processes>()
     ///     .driven_by(|push| ProcessActor::new(context.to_string(), push, cx.event_bus.clone()));
-    /// cx.subscribe_on_global_bus::<ProcessActor, ScanTick>(actor);
+    /// actor.subscribe_on::<ScanTick>(Bus::Global);
     ///
     /// processes.emit(Refresh);
     /// ```
@@ -141,7 +151,7 @@ impl FeatureInitContext {
             crate_dir: self.scope.current_crate_dir().unwrap_or_default(),
         });
 
-        Claim::new(&self.scope, &self.token, &self.debug_registry)
+        Claim::new(&self.scope, &self.event_bus, &self.token, &self.debug_registry)
     }
 
     /// Says this segment answers `M`, and how.
@@ -270,18 +280,9 @@ impl FeatureInitContext {
         self.scope.own(GlobalEventBus::subscribe_fn(callback));
     }
 
-    pub fn subscribe_on_global_bus<A, M>(&self, addr: Addr<A>)
-    where
-        A: Handler<M> + 'static,
-        M: Event,
-    {
-        self.scope
-            .note_listener(name::<M>(), Some(name::<A>()), Bus::Global);
-        self.scope.own(GlobalEventBus::subscribe::<A, M>(addr));
-    }
-
     pub fn spawn_actor<A: ManagedActor + Debug + 'static>(&self, actor: A) -> Addr<A> {
         let addr = Addr::new_managed_scoped(actor, self.token.clone());
+        addr.live_in(&self.scope, &self.event_bus);
         let id = addr.id();
         self.debug_registry.register_owned(
             &addr,

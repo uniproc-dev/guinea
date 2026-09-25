@@ -15,6 +15,7 @@
 
 use std::rc::{Rc, Weak};
 
+use crate::actor::event_bus::EventBus;
 use crate::actor::registry::DebugRegistry;
 use crate::actor::{Addr, ManagedActor, UiThreadToken};
 use crate::scope::{Reducer, Scope};
@@ -234,6 +235,7 @@ pub trait Serves: Sized + 'static {
 /// can be emitted to it.
 pub struct Claim<'a, R: Reducer> {
     scope: &'a Rc<Scope>,
+    bus: &'a Rc<EventBus>,
     token: &'a UiThreadToken,
     debug: &'a Rc<DebugRegistry>,
     reducer: std::marker::PhantomData<fn() -> R>,
@@ -244,12 +246,14 @@ impl<'a, R: Reducer> Claim<'a, R> {
     /// in `guinea-app`, and nothing else.
     pub fn new(
         scope: &'a Rc<Scope>,
+        bus: &'a Rc<EventBus>,
         token: &'a UiThreadToken,
         debug: &'a Rc<DebugRegistry>,
     ) -> Self {
         scope.note_reducer_owner::<R>();
         Self {
             scope,
+            bus,
             token,
             debug,
             reducer: std::marker::PhantomData,
@@ -275,15 +279,16 @@ impl<'a, R: Reducer> Claim<'a, R> {
     /// is inferred from what the closure returns; neither the reducer nor this
     /// call has to name it.
     ///
-    /// The address comes back for wiring the scope cannot do on the actor's
-    /// behalf, such as a global bus subscription. The scope still owns the
-    /// actor and disposes it.
+    /// The address comes back for wiring that is the actor's own, such as
+    /// `addr.subscribe_on::<M>(Bus::Global)`. The scope still owns the actor
+    /// and disposes it, and what it subscribed to ends with it.
     pub fn driven_by<A, F>(self, build: F) -> (Bound<R>, Addr<A>)
     where
         F: FnOnce(Push<R>) -> A,
         A: ManagedActor + Serves + std::fmt::Debug + 'static,
     {
         let actor = Addr::new_managed_scoped(build(Push::new(self.scope)), self.token.clone());
+        actor.live_in(self.scope, self.bus);
         A::serve(&actor, self.scope);
         self.debug.register_owned(
             &actor,

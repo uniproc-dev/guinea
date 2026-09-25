@@ -208,7 +208,7 @@ pub use guinea_meta as meta;
 pub use guinea_core::actor::event_bus::Event;
 pub use guinea_core::mark::Mark;
 pub use guinea_core::{ratelimit, rpc_bind};
-pub use guinea_macros::{Event, Mark, Remote, actor, handler, installs, routes, segment};
+pub use guinea_macros::{Event, Mark, Remote, actor, feature, handler, installs, routes, segment};
 
 /// `#[guinea::test]`: one test, run once per seed on a fresh `app::Harness` -
 /// which the `test-utils` feature brings.
@@ -232,7 +232,8 @@ pub mod prelude {
     pub use guinea_core::actor::event_bus::{Event, GlobalEventBus};
     pub use guinea_core::actor::{Addr, AsyncContext, Context, Handler};
     pub use guinea_core::feature::{Bound, Dispatch, Push};
+    pub use guinea_core::trace::Bus;
     pub use guinea_core::__private::anyhow;
     pub use guinea_core::{Load, Reducer};
-    pub use guinea_macros::{Event, actor, handler, installs, routes};
+    pub use guinea_macros::{Event, actor, feature, handler, installs, routes};
 }

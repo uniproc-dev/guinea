@@ -75,18 +75,16 @@ mod naive {
         this.push.send(ctx.msg.clone());
     }
 
-    pub struct Search {
-        _results: Bound<Results>,
+    feature! {
+        pub Search {
+            exports { Results }
+        }
     }
 
     #[installs]
-    impl Feature for Search {
-        type Exports = (Results,);
-
-        fn install(cx: &FeatureInitContext, _params: &()) -> anyhow::Result<Self> {
-            let (results, _) = cx.state::<Results>().driven_by(|push| Searcher { push });
-            Ok(Self { _results: results })
-        }
+    fn searching(cx: &FeatureInitContext) -> anyhow::Result<Search> {
+        let (results, _) = cx.state::<Results>().driven_by(|push| Searcher { push });
+        Ok(Search(results))
     }
 }
 
@@ -133,19 +131,16 @@ mod latest {
         }
     }
 
-    pub struct Search {
-        _results: Bound<Results>,
+    feature! {
+        pub Search {
+            exports { Results }
+        }
     }
 
     #[installs]
-    impl Feature for Search {
-        type Exports = (Results,);
-
-        fn install(cx: &FeatureInitContext, _params: &()) -> anyhow::Result<Self> {
-            let (results, _) =
-                cx.state::<Results>().driven_by(|push| Searcher { push, asked: 0 });
-            Ok(Self { _results: results })
-        }
+    fn searching(cx: &FeatureInitContext) -> anyhow::Result<Search> {
+        let (results, _) = cx.state::<Results>().driven_by(|push| Searcher { push, asked: 0 });
+        Ok(Search(results))
     }
 }
 
@@ -205,18 +200,16 @@ mod sleepy {
         this.push.send(ctx.msg.clone());
     }
 
-    pub struct Search {
-        _results: Bound<Results>,
+    feature! {
+        pub Search {
+            exports { Results }
+        }
     }
 
     #[installs]
-    impl Feature for Search {
-        type Exports = (Results,);
-
-        fn install(cx: &FeatureInitContext, _params: &()) -> anyhow::Result<Self> {
-            let (results, _) = cx.state::<Results>().driven_by(|push| Searcher { push });
-            Ok(Self { _results: results })
-        }
+    fn searching(cx: &FeatureInitContext) -> anyhow::Result<Search> {
+        let (results, _) = cx.state::<Results>().driven_by(|push| Searcher { push });
+        Ok(Search(results))
     }
 }
 
@@ -280,19 +273,17 @@ mod polling {
         this.push.send(Taken);
     }
 
-    pub struct Polling {
-        _samples: Bound<Samples>,
+    feature! {
+        pub Polling {
+            exports { Samples }
+        }
     }
 
     #[installs]
-    impl Feature for Polling {
-        type Exports = (Samples,);
-
-        fn install(cx: &FeatureInitContext, _params: &()) -> anyhow::Result<Self> {
-            let (samples, sampler) = cx.state::<Samples>().driven_by(|push| Sampler { push });
-            cx.every(std::time::Duration::from_millis(100), &sampler, || Sample);
-            Ok(Self { _samples: samples })
-        }
+    fn polling(cx: &FeatureInitContext) -> anyhow::Result<Polling> {
+        let (samples, sampler) = cx.state::<Samples>().driven_by(|push| Sampler { push });
+        cx.every(std::time::Duration::from_millis(100), &sampler, || Sample);
+        Ok(Polling(samples))
     }
 }
 
@@ -395,19 +386,17 @@ mod reports {
         GlobalEventBus::publish(Report(ctx.msg.0.clone()));
     }
 
-    pub struct Reports {
-        _running: Bound<Running>,
+    feature! {
+        pub Reports {
+            exports { Running }
+        }
     }
 
     #[installs]
-    impl Feature for Reports {
-        type Exports = (Running,);
-
-        fn install(cx: &FeatureInitContext, _params: &()) -> anyhow::Result<Self> {
-            let (running, reader) = cx.state::<Running>().driven_by(|push| Reader { push });
-            cx.subscribe_on_global_bus::<Reader, Report>(reader);
-            Ok(Self { _running: running })
-        }
+    fn reports(cx: &FeatureInitContext) -> anyhow::Result<Reports> {
+        let (running, reader) = cx.state::<Running>().driven_by(|push| Reader { push });
+        reader.subscribe_on::<Report>(Bus::Global);
+        Ok(Reports(running))
     }
 
     /// What a plugin provides, for a feature to read.
@@ -449,17 +438,15 @@ mod reports {
         }
     }
 
-    pub struct Prefixed;
+    feature! {
+        pub Prefixed {}
+    }
 
     #[installs]
-    impl Feature for Prefixed {
-        type Exports = ();
-
-        fn install(cx: &FeatureInitContext, _params: &()) -> anyhow::Result<Self> {
-            let prefix = cx.require::<Prefix>()?;
-            assert_eq!(prefix.0, "proc-");
-            Ok(Self)
-        }
+    fn prefixed(cx: &FeatureInitContext) -> anyhow::Result<Prefixed> {
+        let prefix = cx.require::<Prefix>()?;
+        assert_eq!(prefix.0, "proc-");
+        Ok(Prefixed)
     }
 }
 
@@ -522,19 +509,17 @@ mod named {
         this.push.send(ctx.msg.clone());
     }
 
-    pub struct Naming {
-        _name: Bound<Name>,
+    feature! {
+        pub Naming {
+            exports { Name }
+        }
     }
 
     #[installs]
-    impl Feature for Naming {
-        type Exports = (Name,);
-
-        fn install(cx: &FeatureInitContext, _params: &()) -> anyhow::Result<Self> {
-            let (name, namer) = cx.state::<Name>().driven_by(|push| Namer { push });
-            cx.subscribe_on_global_bus::<Namer, Renamed>(namer);
-            Ok(Self { _name: name })
-        }
+    fn naming(cx: &FeatureInitContext) -> anyhow::Result<Naming> {
+        let (name, namer) = cx.state::<Name>().driven_by(|push| Namer { push });
+        namer.subscribe_on::<Renamed>(Bus::Global);
+        Ok(Naming(name))
     }
 }
 
@@ -574,18 +559,14 @@ mod titled {
         this.push.send(ctx.msg.clone());
     }
 
-    pub struct Titling {
-        _title: Bound<Title>,
+    feature! {
+        pub Titling {}
     }
 
     #[installs]
-    impl Feature for Titling {
-        type Exports = ();
-
-        fn install(cx: &FeatureInitContext, _params: &()) -> anyhow::Result<Self> {
-            let (title, _) = cx.state::<Title>().driven_by(|push| Titler { push });
-            Ok(Self { _title: title })
-        }
+    fn titling(cx: &FeatureInitContext) -> anyhow::Result<Titling> {
+        cx.state::<Title>().driven_by(|push| Titler { push });
+        Ok(Titling)
     }
 }
 
@@ -660,6 +641,76 @@ fn an_event_sent_as_json_goes_out_on_the_global_bus(h: &mut Harness) {
     remote::publish("Renamed", r#""code""#).unwrap();
     h.settled();
     assert_eq!(h.state::<named::Name>().0, "code");
+}
+
+/// An actor that hears reports because its manifest says so.
+mod listening {
+    use super::*;
+
+    #[derive(Default, Clone, PartialEq, Debug)]
+    pub struct Heard(pub u32);
+
+    #[derive(Clone, Debug)]
+    pub struct Once;
+
+    impl Reducer for Heard {
+        type Update = Once;
+
+        fn reduce(&mut self, _once: Once) {
+            self.0 += 1;
+        }
+    }
+
+    #[derive(Debug)]
+    pub struct Listener {
+        pub push: Push<Heard>,
+    }
+
+    actor! {
+        Listener {
+            handlers { reports::Report }
+            subscribes { reports::Report }
+        }
+    }
+
+    #[handler]
+    fn report(this: &mut Listener, _ctx: Context<Listener, reports::Report>) {
+        this.push.send(Once);
+    }
+
+    feature! {
+        pub Listening {
+            exports { Heard }
+        }
+    }
+
+    #[installs]
+    fn listening(cx: &FeatureInitContext) -> anyhow::Result<Listening> {
+        let (heard, _) = cx.state::<Heard>().driven_by(|push| Listener { push });
+        Ok(Listening(heard))
+    }
+}
+
+#[guinea::test(iterations = 4)]
+fn an_actor_hears_the_bus_until_its_page_is_left(h: &mut Harness) {
+    let page = h.child();
+    page.install::<reports::Reports>(&()).unwrap();
+    assert_eq!(GlobalEventBus::bus().subscriptions(), [("reports::Report", 1)]);
+
+    page.leave();
+    assert!(GlobalEventBus::bus().subscriptions().is_empty(), "the actor went, and so did its subscription");
+}
+
+#[guinea::test(iterations = 4)]
+fn what_an_actor_s_manifest_subscribes_to_it_hears_and_lets_go_with_its_page(h: &mut Harness) {
+    let page = h.child();
+    page.install::<listening::Listening>(&()).unwrap();
+
+    h.publish(reports::Report(vec!["code"])).settle();
+    assert_eq!(page.state::<listening::Heard>().0, 1);
+
+    page.leave();
+    assert!(GlobalEventBus::bus().subscriptions().is_empty(), "the manifest's subscription outlived the page");
 }
 
 /// The actor publishes through `GlobalEventBus::publish`, which hops to the
@@ -758,22 +809,20 @@ mod echo {
         }
     }
 
-    pub struct Echo {
-        _seen: Bound<Seen>,
+    feature! {
+        pub Echo {
+            exports { Seen }
+        }
     }
 
     #[installs]
-    impl Feature for Echo {
-        type Exports = (Seen,);
+    fn echo(cx: &FeatureInitContext) -> anyhow::Result<Echo> {
+        let seen = cx.state::<Seen>().plain();
 
-        fn install(cx: &FeatureInitContext, _params: &()) -> anyhow::Result<Self> {
-            let seen = cx.state::<Seen>().plain();
+        let pushing = seen.clone();
+        cx.observe::<polling::Samples>(move |_taken| pushing.push(Saw));
 
-            let pushing = seen.clone();
-            cx.observe::<polling::Samples>(move |_taken| pushing.push(Saw));
-
-            Ok(Self { _seen: seen })
-        }
+        Ok(Echo(seen))
     }
 }
 

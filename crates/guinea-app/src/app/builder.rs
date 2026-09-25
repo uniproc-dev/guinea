@@ -7,7 +7,7 @@ use anyhow::Context as _;
 use guinea_core::SharedState;
 use guinea_core::actor::event_bus::GlobalEventBus;
 use guinea_core::actor::event_bus::subscribe::Event;
-use guinea_core::actor::{Addr, Handler, UiThreadToken};
+use guinea_core::actor::UiThreadToken;
 
 use crate::feature::{AppFeatureDeinitContext, FeatureContext};
 use crate::lifecycle_tracker::AppLifecycle;
@@ -89,16 +89,6 @@ impl PluginBuilder {
     pub fn subscribe_global<M: Event>(&self, callback: impl Fn(M) + 'static) -> &Self {
         self.lifecycle
             .track_sub(GlobalEventBus::subscribe_fn(callback));
-        self
-    }
-
-    pub fn subscribe_actor<A, M>(&self, addr: &Addr<A>) -> &Self
-    where
-        A: Handler<M> + 'static,
-        M: Event,
-    {
-        self.lifecycle
-            .track_sub(GlobalEventBus::subscribe::<A, M>(addr.clone()));
         self
     }
 

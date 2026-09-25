@@ -3,6 +3,7 @@ use syn::{ItemFn, parse_macro_input};
 
 mod actor_dsl;
 mod elm;
+mod feature_dsl;
 mod handler;
 mod harness_test;
 mod installs;
@@ -11,29 +12,36 @@ mod remote;
 mod routes_dsl;
 mod segment;
 
-/// Reads a feature's `Params` off its `install`, instead of asking for it
-/// twice.
+/// A feature's manifest: its name, and the reducers it exports.
 ///
-/// `type Params = str;` beside `fn install(cx, context: &str)` is one fact
-/// written in two places, and only one of them is load-bearing: the body uses
-/// the argument, so the signature cannot silently be wrong while the
-/// associated type can.
+/// ```ignore
+/// feature! {
+///     pub Tabs {
+///         exports { contracts::Tabs }
+///     }
+/// }
+/// ```
 ///
-/// `Exports` stays written down. What a feature publishes is a decision rather
-/// than a consequence - it may claim four reducers and export one - so there
-/// is nothing to read it from.
-///
-/// Named for the method rather than the trait: `#[feature]` is ambiguous with
-/// Rust's own `feature` attribute.
+/// It makes the feature's type - one `Bound` per export, in the order listed -
+/// and what it exports. What installs it is an [`installs`] function.
+#[proc_macro]
+pub fn feature(input: TokenStream) -> TokenStream {
+    feature_dsl::feature_impl(input)
+}
+
+/// The function that installs a feature: whatever it returns is the feature,
+/// its second argument is what it is installed with.
 ///
 /// ```ignore
 /// #[installs]
-/// impl Feature for Tabs {
-///     type Exports = (contracts::Tabs,);
-///
-///     fn install(cx: &FeatureInitContext, context: &str) -> anyhow::Result<Self> { .. }
+/// fn tabs(cx: &FeatureInitContext, context: &str) -> anyhow::Result<Tabs> {
+///     let (tabs, _) = cx.state::<contracts::Tabs>().driven_by(|push| TabsActor::new(push));
+///     Ok(Tabs(tabs))
 /// }
 /// ```
+///
+/// Named for what the function does rather than for the trait: `#[feature]`
+/// is ambiguous with Rust's own `feature` attribute.
 #[proc_macro_attribute]
 pub fn installs(_attr: TokenStream, item: TokenStream) -> TokenStream {
     installs::installs_impl(item)

@@ -793,7 +793,7 @@ mod routing {
                     seen: Rc::new(RefCell::new(Vec::new())),
                     _push: Box::new(move |()| push.send(())),
                 });
-                ctx.subscribe_on_global_bus::<ProbeActor, ProbeEvent>(addr.clone());
+                addr.subscribe_on::<ProbeEvent>(guinea::core::trace::Bus::Global);
                 Ok(())
             }
 
