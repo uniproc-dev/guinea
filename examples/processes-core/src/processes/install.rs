@@ -10,24 +10,20 @@ use guinea::prelude::*;
 use super::actor::ProcessActor;
 use super::contracts::{self, Refresh};
 
-pub struct ProcessesFeature {
-    /// Held, not dropped: a feature that a segment wired to another one is
-    /// reached through what `install` returned.
-    _listing: Bound<contracts::Processes>,
+feature! {
+    /// One reducer, and pages below may read it. Anything else this feature
+    /// claimed would stay its own.
+    pub ProcessesFeature {
+        exports { contracts::Processes }
+    }
 }
 
 #[installs]
-impl Feature for ProcessesFeature {
-    /// One reducer, and pages below may read it. Anything else this feature
-    /// claimed would stay its own.
-    type Exports = (contracts::Processes,);
+fn processes(cx: &FeatureInitContext, context: &str) -> anyhow::Result<ProcessesFeature> {
+    let (listing, _) = cx.state::<contracts::Processes>().driven_by(|push| {
+        ProcessActor::new(context.to_string(), push, cx.event_bus.clone())
+    });
 
-    fn install(cx: &FeatureInitContext, context: &str) -> anyhow::Result<Self> {
-        let (listing, _) = cx.state::<contracts::Processes>().driven_by(|push| {
-            ProcessActor::new(context.to_string(), push, cx.event_bus.clone())
-        });
-
-        listing.emit(Refresh);
-        Ok(Self { _listing: listing })
-    }
+    listing.emit(Refresh);
+    Ok(ProcessesFeature(listing))
 }

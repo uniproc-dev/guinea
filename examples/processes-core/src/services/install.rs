@@ -38,41 +38,36 @@ impl Catalogue {
     }
 }
 
-pub struct ServicesFeature {
-    /// The domain's own state, kept alive by the feature rather than by a
-    /// mailbox. `RefCell` and not a lock: this all happens on the one thread
-    /// that draws, which is the case the actor model is *an* answer to rather
-    /// than the answer.
-    _catalogue: Rc<RefCell<Catalogue>>,
+feature! {
+    pub ServicesFeature {
+        exports { contracts::Services }
+    }
 }
 
 #[installs]
-impl Feature for ServicesFeature {
-    type Exports = (contracts::Services,);
+fn services(cx: &FeatureInitContext) -> anyhow::Result<ServicesFeature> {
+    let services = cx.state::<contracts::Services>().plain();
 
-    fn install(cx: &FeatureInitContext, _params: &()) -> anyhow::Result<Self> {
-        let services = cx.state::<contracts::Services>().plain();
+    // The domain's own state, kept alive by what answers and what ticks -
+    // both belong to the scope - rather than by a mailbox. `RefCell` and not
+    // a lock: this all happens on the one thread that draws, which is the
+    // case the actor model is *an* answer to rather than the answer.
+    let catalogue = Rc::new(RefCell::new(Catalogue {
+        scans: 0,
+        push: services.port(),
+    }));
 
-        let catalogue = Rc::new(RefCell::new(Catalogue {
-            scans: 0,
-            push: services.port(),
-        }));
+    // Answering an action is a closure. `dispatch.emit(Refresh)` from any
+    // page reaches it exactly as it reaches an actor, because the scope is
+    // keyed by the action and never by whoever answers it.
+    let answering = catalogue.clone();
+    cx.answers::<Refresh>(move |_| answering.borrow_mut().scan());
 
-        // Answering an action is a closure. `dispatch.emit(Refresh)` from any
-        // page reaches it exactly as it reaches an actor, because the scope is
-        // keyed by the action and never by whoever answers it.
-        let answering = catalogue.clone();
-        cx.answers::<Refresh>(move |_| answering.borrow_mut().scan());
+    // And the domain runs on its own schedule, which is the part an actor
+    // is usually reached for. The timer belongs to the scope, so it stops
+    // when the page does.
+    cx.repeat(Duration::from_secs(5), move || catalogue.borrow_mut().scan());
 
-        // And the domain runs on its own schedule, which is the part an actor
-        // is usually reached for. The timer belongs to the scope, so it stops
-        // when the page does.
-        let ticking = catalogue.clone();
-        cx.repeat(Duration::from_secs(5), move || ticking.borrow_mut().scan());
-
-        services.emit(Refresh);
-        Ok(Self {
-            _catalogue: catalogue,
-        })
-    }
+    services.emit(Refresh);
+    Ok(ServicesFeature(services))
 }
