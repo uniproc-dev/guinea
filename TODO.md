@@ -1,30 +1,8 @@
 # TODO
 
-## Store plugin: amethystate 0.22.0: moved, not released
-
-The store plugin (now 0.22.0, following amethystate's minor) and
-`tools/devtools` are on amethystate 0.22.0; `Watching` holds the
-`StoreSubscription` guard and has no `Drop` of its own. One amethystate and
-one `notify` (`=9.0.0-rc.5`, amethystate's exact pin) per lock.
-
-uniproc's pin has to move in the same step as it takes the plugins release -
-two copies are two global stores.
-
 ## Devtools (guinea-plugins)
 
-### ogurpchik 0.5.1: moved, not released
-
-guinea-plugins is on `v0.5.1` in its working tree: the plugin, the protocol,
-the hub and the XAML tap together, one ogurpchik copy per build. The handshake
-names a `SchemaId`, generated in `devtools-protocol`'s build script as FNV-1a
-over `schema/devtools.capnp` with CRLF read as LF, and all three ends take it
-from `guinea_devtools_protocol::schema()`. Checked live: the WinUI example on
-the local plugin, the tap loading itself, and the hub all connected.
-
-What is left is the release. 0.4.x and 0.5.x refuse each other at the
-handshake, so the plugin and devtools go out in one plugins tag, and uniproc
-and the examples move onto it before anyone runs the pair; until then they
-keep speaking 0.4.0 from `v0.8.1`.
+### The schema id does not cover the JSON
 
 The schema id guards the capnp wrapper only. What actually crosses is JSON
 inside `Peer.send` - `Report` and `Command` in `devtools-protocol` - and a
@@ -140,20 +118,6 @@ screen readers and automated tests alike.
 Reactor offers `automation_name`, `automation_id` and `automation_heading_level`
 only - no control type, no selection pattern. Nothing to fix on the table's
 side until reactor has them.
-
-### Columns are marks: not released
-
-`ColumnSpec<T, C>` / `Table<T, C>`: a column is a variant of the application's
-`#[derive(guinea::Mark)]` enum, which is also its sort key (`SortState<C>`, the
-sort callback carries `C`) and is put as `AutomationId` on its header cell and
-its cell in every row. `ColumnWidths` and `Resized` stay by name, so saved
-widths remain strings - but the name is the variant's (`"Cpu"`), so an
-application whose ids were `"cpu"` loses its saved widths once.
-
-The widgets take `guinea-mark` by path. The order out: tag guinea with
-`guinea-mark`, move the plugins onto the tag, release the plugins, and only
-then tell uniproc - it is a breaking change there (`sort_column: String` and
-`Sort(String)` become its column enum).
 
 ### Smaller
 
@@ -299,16 +263,22 @@ reducers.
   item, realized as scrolling to it would) narrow where the next find looks,
   so one mark in every row still names one thing. Text is `find_text` /
   `click_text`, for reading back what was drawn.
-- Not started, and waiting on the ogurpchik and agent contract to settle: the
-  harness through devtools, for scripts and agents on a running application.
-  It needs a registry of actions built from data (`Deserialize` plus a
-  generated registration - the same registry the Tauri bridge needs), a way to
-  find the scope that answers an action among the open segments (the router
-  hands out scope keys, not scopes), `Act` / `Acted { cause }` in the devtools
-  protocol - which breaks anyway with the move to ogurpchik 0.5, so one
-  release for both - and in the hub `POST /act` plus a wait on the chain,
-  judged from the trace it already receives. Reducer state reaches devtools as
-  `Debug` text only; structured state needs the same opt-in as actions.
+- Driving a running application from devtools, and so from MCP, is in:
+  `#[derive(guinea::Remote)]` with `#[remote(action)]` / `#[remote(event)]`
+  registers a type in `guinea_core::remote`; `guinea::devtools::act` sends it
+  to the scope on the open page that answers it, page first and layouts
+  after. The hub's `send_action` / `publish_event` wait for the answer and
+  follow the cause through the trace until nothing under it runs and nothing
+  new comes of it for a moment; `find_element` / `click_element` /
+  `type_into_element` go through the XAML tap by mark, with the real pointer
+  or through UI Automation. Left:
+  - Reducer state reaches devtools as `Debug` text only; reading it back
+    structured needs the same opt-in as actions (`Serialize`).
+  - Only scopes under a router answer: an action for a feature installed on
+    the application itself has nowhere to go.
+  - Keystrokes are text only - no Enter, Tab or shortcuts yet.
+  - Input for the other backends: there is no tap for eframe, iced, Slint or
+    the terminal.
 - Backend harnesses other than WinUI: eframe through `egui_kittest`, ratatui
   through `TestBackend`'s cell buffer, Slint through its testing backend
   (pinned to the exact version), iced through `iced_test`.
