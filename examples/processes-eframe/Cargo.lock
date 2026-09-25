@@ -167,9 +167,9 @@ checksum = "683d7910e743518b0e34f1186f92494becacb047c7b6bf616c96772180fef923"
 
 [[package]]
 name = "amethystate"
-version = "0.22.0"
+version = "0.22.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "220bb2dd465e7e9100407316ca79a3717cf833e7e156836b5071f14131dd6e43"
+checksum = "66c1f51eb47d463ee97491ddfceb5d5043d738b8d81f117e726340e0b6f6e5f0"
 dependencies = [
  "amethystate-core",
  "amethystate-macros",
@@ -199,9 +199,9 @@ dependencies = [
 
 [[package]]
 name = "amethystate-core"
-version = "0.22.0"
+version = "0.22.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cb24139ccd850bd4bf1f50283b5dc075ffd6bd158a1dd4c7da08f64ae00f4e42"
+checksum = "6c3040285466d4fb852a77136bee5cd108710f18d67f8f8b2d91b17a66a56019"
 dependencies = [
  "arc-swap",
  "dashmap",
@@ -219,9 +219,9 @@ dependencies = [
 
 [[package]]
 name = "amethystate-macros"
-version = "0.22.0"
+version = "0.22.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "80173d01d00a69053e31712bbac9cf1ead96276afb0b77189a5b9423f73dec93"
+checksum = "3b3b01581f0ac82d068b84ef3c7a7be4a7c63d1bfa4e324c5fa8fae469ac4666"
 dependencies = [
  "amethystate-macros-core",
  "darling",
@@ -233,9 +233,9 @@ dependencies = [
 
 [[package]]
 name = "amethystate-macros-core"
-version = "0.22.0"
+version = "0.22.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "942e2f72c407d97746fa0e82c1a622d805f3c1296e73d1695575a08e9e766d83"
+checksum = "a231e3615b976a5653ac08b04dff9acf01ffdd9e3869af9138b99fb5e9764603"
 dependencies = [
  "darling",
  "proc-macro2",
@@ -1997,8 +1997,8 @@ dependencies = [
  "libc 0.2.189",
  "log",
  "rustversion",
- "windows-link 0.1.3",
- "windows-result 0.3.4",
+ "windows-link 0.2.1",
+ "windows-result 0.4.1",
 ]
 
 [[package]]
@@ -2184,7 +2184,7 @@ dependencies = [
  "log",
  "presser",
  "thiserror 2.0.20",
- "windows 0.61.3",
+ "windows 0.62.2",
 ]
 
 [[package]]
@@ -2198,7 +2198,7 @@ dependencies = [
 
 [[package]]
 name = "guinea"
-version = "0.9.0"
+version = "0.9.1"
 dependencies = [
  "guinea-app",
  "guinea-codegen",
@@ -2212,7 +2212,7 @@ dependencies = [
 
 [[package]]
 name = "guinea-app"
-version = "0.9.0"
+version = "0.9.1"
 dependencies = [
  "anyhow",
  "guinea-core",
@@ -2222,7 +2222,7 @@ dependencies = [
 
 [[package]]
 name = "guinea-codegen"
-version = "0.9.0"
+version = "0.9.1"
 dependencies = [
  "guinea-core",
  "guinea-meta-build",
@@ -2237,7 +2237,7 @@ dependencies = [
 
 [[package]]
 name = "guinea-core"
-version = "0.9.0"
+version = "0.9.1"
 dependencies = [
  "anyhow",
  "arc-swap",
@@ -2249,6 +2249,8 @@ dependencies = [
  "once_cell",
  "parking_lot",
  "puffin",
+ "serde",
+ "serde_json",
  "tokio",
  "tracing",
  "tracing-subscriber",
@@ -2257,8 +2259,8 @@ dependencies = [
 
 [[package]]
 name = "guinea-devtools-protocol"
-version = "0.9.0"
-source = "git+https://github.com/uniproc-dev/guinea-plugins?tag=v0.9.0#a5380c01fe61ff082942cf9a62a66e46b19339b3"
+version = "0.10.0"
+source = "git+https://github.com/uniproc-dev/guinea-plugins?tag=v0.10.0#06b00934433b52896ed348a44b57ae021382cc21"
 dependencies = [
  "capnp",
  "capnp-rpc",
@@ -2271,7 +2273,7 @@ dependencies = [
 
 [[package]]
 name = "guinea-eframe"
-version = "0.9.0"
+version = "0.9.1"
 dependencies = [
  "anyhow",
  "eframe",
@@ -2284,7 +2286,7 @@ dependencies = [
 
 [[package]]
 name = "guinea-macros"
-version = "0.9.0"
+version = "0.9.1"
 dependencies = [
  "guinea-codegen",
  "guinea-route-dsl",
@@ -2298,7 +2300,7 @@ dependencies = [
 
 [[package]]
 name = "guinea-mark"
-version = "0.9.0"
+version = "0.9.1"
 
 [[package]]
 name = "guinea-meta"
@@ -2317,8 +2319,8 @@ dependencies = [
 
 [[package]]
 name = "guinea-plugin-devtools"
-version = "0.9.0"
-source = "git+https://github.com/uniproc-dev/guinea-plugins?tag=v0.9.0#a5380c01fe61ff082942cf9a62a66e46b19339b3"
+version = "0.10.0"
+source = "git+https://github.com/uniproc-dev/guinea-plugins?tag=v0.10.0#06b00934433b52896ed348a44b57ae021382cc21"
 dependencies = [
  "anyhow",
  "capnp",
@@ -2334,8 +2336,8 @@ dependencies = [
 
 [[package]]
 name = "guinea-plugin-l10n"
-version = "0.9.0"
-source = "git+https://github.com/uniproc-dev/guinea-plugins?tag=v0.9.0#a5380c01fe61ff082942cf9a62a66e46b19339b3"
+version = "0.10.0"
+source = "git+https://github.com/uniproc-dev/guinea-plugins?tag=v0.10.0#06b00934433b52896ed348a44b57ae021382cc21"
 dependencies = [
  "anyhow",
  "fluent-bundle",
@@ -2349,8 +2351,8 @@ dependencies = [
 
 [[package]]
 name = "guinea-plugin-l10n-build"
-version = "0.9.0"
-source = "git+https://github.com/uniproc-dev/guinea-plugins?tag=v0.9.0#a5380c01fe61ff082942cf9a62a66e46b19339b3"
+version = "0.10.0"
+source = "git+https://github.com/uniproc-dev/guinea-plugins?tag=v0.10.0#06b00934433b52896ed348a44b57ae021382cc21"
 dependencies = [
  "fluent-syntax",
  "proc-macro2",
@@ -2362,7 +2364,7 @@ dependencies = [
 [[package]]
 name = "guinea-plugin-store"
 version = "0.22.0"
-source = "git+https://github.com/uniproc-dev/guinea-plugins?tag=v0.9.0#a5380c01fe61ff082942cf9a62a66e46b19339b3"
+source = "git+https://github.com/uniproc-dev/guinea-plugins?tag=v0.10.0#06b00934433b52896ed348a44b57ae021382cc21"
 dependencies = [
  "amethystate",
  "anyhow",
@@ -2373,8 +2375,8 @@ dependencies = [
 
 [[package]]
 name = "guinea-plugin-window-state"
-version = "0.9.0"
-source = "git+https://github.com/uniproc-dev/guinea-plugins?tag=v0.9.0#a5380c01fe61ff082942cf9a62a66e46b19339b3"
+version = "0.10.0"
+source = "git+https://github.com/uniproc-dev/guinea-plugins?tag=v0.10.0#06b00934433b52896ed348a44b57ae021382cc21"
 dependencies = [
  "anyhow",
  "guinea",
@@ -2385,7 +2387,7 @@ dependencies = [
 
 [[package]]
 name = "guinea-route-dsl"
-version = "0.9.0"
+version = "0.9.1"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -2395,7 +2397,7 @@ dependencies = [
 
 [[package]]
 name = "guinea-router"
-version = "0.9.0"
+version = "0.9.1"
 dependencies = [
  "anyhow",
  "guinea-app",
@@ -2407,7 +2409,7 @@ dependencies = [
 
 [[package]]
 name = "guinea-trace"
-version = "0.9.0"
+version = "0.9.1"
 dependencies = [
  "anyhow",
  "tracing",
@@ -2416,8 +2418,8 @@ dependencies = [
 
 [[package]]
 name = "guinea-widgets"
-version = "0.9.0"
-source = "git+https://github.com/uniproc-dev/guinea-plugins?tag=v0.9.0#a5380c01fe61ff082942cf9a62a66e46b19339b3"
+version = "0.10.0"
+source = "git+https://github.com/uniproc-dev/guinea-plugins?tag=v0.10.0#06b00934433b52896ed348a44b57ae021382cc21"
 dependencies = [
  "guinea-mark",
  "tracing",
@@ -2425,7 +2427,7 @@ dependencies = [
 
 [[package]]
 name = "guinea-winui"
-version = "0.9.0"
+version = "0.9.1"
 dependencies = [
  "anyhow",
  "guinea-app",
@@ -3910,6 +3912,7 @@ dependencies = [
  "guinea-plugin-l10n-build",
  "guinea-plugin-store",
  "guinea-widgets",
+ "serde",
  "tokio",
  "tracing",
 ]
