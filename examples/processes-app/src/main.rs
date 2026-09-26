@@ -29,11 +29,7 @@ fn main() -> anyhow::Result<()> {
             tracing_subscriber::EnvFilter::try_from_default_env()
                 .unwrap_or_else(|_| "info,guinea=debug,processes_core=debug".into()),
         )
-        .with(
-            tracing_subscriber::fmt::layer()
-                .with_writer(log)
-                .with_ansi(false),
-        )
+        .with(guinea_core::trace::json(log))
         .with(guinea_core::devtools::layer())
         .init();
 

@@ -22,6 +22,8 @@ use guinea::slint::run;
 use routes::Route;
 
 use processes_core::startup;
+use tracing_subscriber::layer::SubscriberExt;
+use tracing_subscriber::util::SubscriberInitExt;
 
 use crate::ui::AppWindow;
 
@@ -35,13 +37,12 @@ fn main() -> anyhow::Result<()> {
     // To a file, like the other two front ends: a windowed application has no
     // console to watch, and its stdout is block buffered.
     let log = std::fs::File::create("processes-slint.log")?;
-    tracing_subscriber::fmt()
-        .with_writer(log)
-        .with_ansi(false)
-        .with_env_filter(
+    tracing_subscriber::registry()
+        .with(
             tracing_subscriber::EnvFilter::try_from_default_env()
                 .unwrap_or_else(|_| "info,guinea=debug,processes_core=debug".into()),
         )
+        .with(guinea_core::trace::json(log))
         .init();
 
     let app = GuineaApp::new()

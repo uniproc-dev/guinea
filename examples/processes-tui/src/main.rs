@@ -19,6 +19,8 @@ use processes_core::processes::contracts::{Kill, Processes as Running};
 use processes_core::services::contracts::Services;
 use processes_core::tabs::contracts::Tabs;
 use processes_core::startup;
+use tracing_subscriber::layer::SubscriberExt;
+use tracing_subscriber::util::SubscriberInitExt;
 
 use cursor::{Cursor, Move};
 
@@ -67,13 +69,12 @@ fn main() -> anyhow::Result<()> {
     // To a file: stdout is the drawing surface, and a log line in the middle
     // of a frame corrupts it.
     let log = std::fs::File::create("processes-tui.log")?;
-    tracing_subscriber::fmt()
-        .with_writer(log)
-        .with_ansi(false)
-        .with_env_filter(
+    tracing_subscriber::registry()
+        .with(
             tracing_subscriber::EnvFilter::try_from_default_env()
                 .unwrap_or_else(|_| "info,guinea=debug,processes_core=debug".into()),
         )
+        .with(guinea_core::trace::json(log))
         .init();
 
     let app = GuineaApp::new()
