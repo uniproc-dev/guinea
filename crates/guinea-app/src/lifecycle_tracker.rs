@@ -86,14 +86,14 @@ impl AppLifecycle {
         let mut inner = self.inner.borrow_mut();
         for cleanup in inner.cleanups.drain(..).rev() {
             if let Err(e) = cleanup(ctx) {
-                tracing::error!("App cleanup error: {}", e);
+                tracing::error!(error = %e, "an application cleanup failed");
             }
         }
         let _ = token;
 
         let leaked = inner.core.shutdown();
         for (actor, refs) in &leaked {
-            tracing::error!("LEAK: Actor<{}> still alive (refs: {})", actor, refs);
+            tracing::error!(actor = %actor, refs, "an actor outlived the application");
         }
         leaked
     }

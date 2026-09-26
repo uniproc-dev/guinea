@@ -2284,7 +2284,7 @@ dependencies = [
 name = "guinea-trace"
 version = "0.10.0"
 dependencies = [
- "anyhow",
+ "serde_json",
  "tracing",
  "tracing-subscriber",
 ]

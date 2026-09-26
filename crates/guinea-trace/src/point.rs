@@ -133,6 +133,16 @@ impl fmt::Display for Bus {
     }
 }
 
+impl fmt::Display for StoreOp {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(match self {
+            StoreOp::Set => "set",
+            StoreOp::Delete => "delete",
+            StoreOp::DeletePrefix => "delete_prefix",
+        })
+    }
+}
+
 impl fmt::Display for Point {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {

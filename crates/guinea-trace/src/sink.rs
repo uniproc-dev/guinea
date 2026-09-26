@@ -5,12 +5,8 @@ use std::rc::Rc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 use tracing::Level;
-use tracing_subscriber::filter::Targets;
-use tracing_subscriber::fmt::MakeWriter;
-use tracing_subscriber::layer::SubscriberExt;
-use tracing_subscriber::util::SubscriberInitExt;
 
-use crate::Trace;
+use crate::{Cause, Point, Record, Trace};
 
 pub type Observer = Rc<dyn Fn(&Trace)>;
 
@@ -54,56 +50,118 @@ pub(crate) fn wanted() -> bool {
         || tracing::enabled!(target: "guinea", Level::DEBUG)
 }
 
+/// Whether `target` is one [`emit`] writes points under, so a layer that
+/// turns `tracing` events into points can leave them alone.
+pub fn is_point_target(target: &str) -> bool {
+    target.starts_with("guinea::")
+}
+
+macro_rules! point {
+    ($target:literal, $record:expr $(, $($field:tt)+)?) => {
+        tracing::debug!(
+            target: $target,
+            id = $record.id.get(),
+            parent = $record.parent.map(Cause::get)
+            $(, $($field)+)?
+        )
+    };
+}
+
+fn write(record: &Record) {
+    match &record.point {
+        Point::Action { message } => point!("guinea::action", record, action = %message),
+        Point::Send { actor, message } => {
+            point!("guinea::send", record, actor = %actor, msg = %message)
+        }
+        Point::Handle { actor, message } => {
+            point!("guinea::handle", record, actor = %actor, msg = %message)
+        }
+        Point::Spawn {
+            actor,
+            actor_id,
+            output,
+        } => point!(
+            "guinea::spawn",
+            record,
+            actor = %actor,
+            actor_id,
+            output = %output
+        ),
+        Point::Settled {
+            actor,
+            actor_id,
+            output,
+            took_us,
+        } => point!(
+            "guinea::settled",
+            record,
+            actor = %actor,
+            actor_id,
+            output = %output,
+            took_us
+        ),
+        Point::Cancelled {
+            actor,
+            actor_id,
+            output,
+            took_us,
+        } => point!(
+            "guinea::cancelled",
+            record,
+            actor = %actor,
+            actor_id,
+            output = %output,
+            took_us
+        ),
+        Point::Publish {
+            event,
+            bus,
+            subscribers,
+        } => point!(
+            "guinea::publish",
+            record,
+            event = %event,
+            bus = %bus,
+            subscribers
+        ),
+        Point::Deliver { event, bus } => {
+            point!("guinea::deliver", record, event = %event, bus = %bus)
+        }
+        Point::Push { reducer } => point!("guinea::push", record, reducer = %reducer),
+        Point::Navigate { root, to } => point!("guinea::navigate", record, root = %root, to = %to),
+        Point::Tick { timer } => point!("guinea::tick", record, timer),
+        Point::Store {
+            op,
+            path,
+            field,
+            outside,
+        } => point!(
+            "guinea::store",
+            record,
+            op = %op,
+            path = %path,
+            field = field.as_deref(),
+            outside
+        ),
+        Point::Render { segment, took_us } => {
+            point!("guinea::render", record, segment = %segment, took_us)
+        }
+        Point::Note(text) => point!("guinea::note", record, "{text}"),
+        Point::Log { .. } => {}
+    }
+}
+
 pub(crate) fn emit(trace: Trace) {
     match &trace {
-        Trace::Begin(record) | Trace::Mark(record) => match record.parent {
-            Some(parent) => tracing::debug!(
-                target: "guinea",
-                id = record.id.get(),
-                parent = parent.get(),
-                kind = record.point.kind(),
-                "{} ← {} {}",
-                record.id,
-                parent,
-                record.point
-            ),
-            None => tracing::debug!(
-                target: "guinea",
-                id = record.id.get(),
-                kind = record.point.kind(),
-                "{} {}",
-                record.id,
-                record.point
-            ),
-        },
+        Trace::Begin(record) | Trace::Mark(record) => write(record),
         Trace::End { id, took } => tracing::trace!(
-            target: "guinea",
+            target: "guinea::end",
             id = id.get(),
-            took_us = took.as_micros() as u64,
-            "{id} done in {took:?}"
+            took_us = took.as_micros() as u64
         ),
     }
 
     if let Some(observer) = observer() {
         observer(&trace);
     }
-}
-
-/// A plain subscriber: one line per event, no span nesting, writing to
-/// `writer` and filtered by `targets`.
-pub fn init_subscriber<W>(writer: W, targets: Targets) -> anyhow::Result<()>
-where
-    W: for<'w> MakeWriter<'w> + Send + Sync + 'static,
-{
-    tracing_subscriber::registry()
-        .with(targets)
-        .with(
-            tracing_subscriber::fmt::layer()
-                .with_writer(writer)
-                .with_ansi(false)
-                .with_target(true)
-                .compact(),
-        )
-        .try_init()
-        .map_err(|error| anyhow::anyhow!("installing the tracing subscriber: {error}"))
 }

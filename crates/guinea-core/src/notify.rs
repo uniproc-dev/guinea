@@ -139,7 +139,6 @@ pub fn drain() {
         rounds += 1;
         if rounds > SETTLE_ROUNDS {
             tracing::warn!(
-                target: "core.notify.drain",
                 rounds = SETTLE_ROUNDS,
                 "state did not settle - an observer is feeding itself"
             );
@@ -185,14 +184,13 @@ pub fn drain() {
     }
 
     tracing::debug!(
-        target: "core.notify.drain",
         cells,
         listeners,
         updates,
         rounds,
         gone,
         waited_us = opened.map(|at| at.elapsed().as_micros()).unwrap_or(0),
-        "notify.drain"
+        "drained"
     );
 }
 

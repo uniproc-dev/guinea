@@ -12,14 +12,20 @@
 //! task, a hop back onto the UI thread. [`Cause`] is `Copy + Send` for that.
 //!
 //! Records go to the observers on the thread that produced them (devtools),
-//! and to `tracing` as one readable line each under the `guinea` target.
+//! and to `tracing` as one event each: the target names the kind of point,
+//! `guinea::send`, and the fields carry `id`, `parent` and what the point
+//! holds. `guinea::tick=off` silences one kind. [`json`] writes them, and the
+//! application's own events with the point they happened under, as JSON
+//! lines.
 
+mod json;
 mod point;
 mod sink;
 
+pub use json::{Json, json};
 pub use point::{Bus, Point, StoreOp};
 pub use sink::{
-    Observer, init_subscriber, is_observed, is_observed_anywhere, observe, stop_observing,
+    Observer, is_observed, is_observed_anywhere, is_point_target, observe, stop_observing,
 };
 
 use std::cell::Cell;
@@ -357,6 +363,63 @@ mod tests {
             .collect();
         assert_eq!(pushes, [Some(spawn), None]);
         assert_eq!(parent_of(&seen, after), None);
+    }
+
+    type Event = (String, Vec<(String, String)>);
+
+    #[derive(Clone, Default)]
+    struct Written(std::sync::Arc<std::sync::Mutex<Vec<Event>>>);
+
+    struct Fields(Vec<(String, String)>);
+
+    impl tracing::field::Visit for Fields {
+        fn record_debug(&mut self, field: &tracing::field::Field, value: &dyn std::fmt::Debug) {
+            self.0.push((field.name().to_string(), format!("{value:?}")));
+        }
+    }
+
+    impl<S: tracing::Subscriber> tracing_subscriber::Layer<S> for Written {
+        fn on_event(&self, event: &tracing::Event<'_>, _: tracing_subscriber::layer::Context<'_, S>) {
+            let mut fields = Fields(Vec::new());
+            event.record(&mut fields);
+
+            let target = event.metadata().target().to_string();
+            self.0.lock().unwrap().push((target, fields.0));
+        }
+    }
+
+    #[test]
+    fn a_point_goes_to_tracing_as_its_kind_with_what_it_holds_as_fields() {
+        use tracing_subscriber::layer::SubscriberExt;
+
+        let written = Written::default();
+        let subscriber = tracing_subscriber::registry().with(written.clone());
+
+        tracing::subscriber::with_default(subscriber, || {
+            let send = mark(|| Point::Send {
+                actor: "ProcessActor",
+                message: "Kill",
+            });
+            mark_under(Some(send), || Point::Log {
+                level: tracing::Level::INFO,
+                target: "app",
+                text: "already written by whoever logged it".into(),
+            });
+        });
+
+        let written = written.0.lock().unwrap();
+        let fields: Vec<(&str, &str)> = written[0]
+            .1
+            .iter()
+            .map(|(name, value)| (name.as_str(), value.as_str()))
+            .collect();
+
+        assert_eq!(written.len(), 1, "a log point is not written back: {written:?}");
+        assert_eq!(written[0].0, "guinea::send");
+        assert!(fields.contains(&("actor", "ProcessActor")), "{fields:?}");
+        assert!(fields.contains(&("msg", "Kill")), "{fields:?}");
+        assert!(!fields.iter().any(|(name, _)| *name == "parent"), "no cause, no parent: {fields:?}");
+        assert!(!fields.iter().any(|(name, _)| *name == "message"), "no prose: {fields:?}");
     }
 
     #[test]

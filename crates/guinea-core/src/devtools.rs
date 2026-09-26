@@ -249,7 +249,8 @@ thread_local! {
 impl<S: tracing::Subscriber> tracing_subscriber::Layer<S> for LogLayer {
     fn on_event(&self, event: &tracing::Event<'_>, _: tracing_subscriber::layer::Context<'_, S>) {
         let meta = event.metadata();
-        if meta.target() == "guinea" || !trace::is_observed_anywhere() || LOGGING.get() {
+        if trace::is_point_target(meta.target()) || !trace::is_observed_anywhere() || LOGGING.get()
+        {
             return;
         }
         LOGGING.set(true);
@@ -388,7 +389,7 @@ mod tests {
         tracing::subscriber::with_default(subscriber, || {
             let _resumed = trace::resume(Some(action));
             tracing::info!(pid = 42, "process killed");
-            tracing::debug!(target: "guinea", "a guinea point, logged: not traced twice");
+            tracing::debug!(target: "guinea::note", "a guinea point, logged: not traced twice");
         });
         trace::stop_observing();
 
